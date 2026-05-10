@@ -1,11 +1,6 @@
-from turn_pattern_modeler import (
-    AircraftInventory,
-    DaySchedule,
-    HomestationData,
-    Scenario,
-    SimulationSummary,
-    compare_turn_patterns,
-)
+from model_config import build_scenario
+from optimizer import FLEET_FLEX_MODEL, SCHEDULED_SPARES_MODEL
+from simulation_engine import DaySchedule, Scenario, SimulationSummary, compare_turn_patterns
 
 
 SAMPLE_ROWS = (
@@ -31,29 +26,6 @@ SAMPLE_ROWS = (
     ("Available EOD", "available_eod"),
     ("Commit Limit", "commit_limit"),
 )
-
-
-def build_scenario(
-    schedule: dict[str, DaySchedule],
-    total_required_sorties: int,
-    use_uncommitted_aircraft_for_ga_recovery: bool,
-) -> Scenario:
-    return Scenario(
-        inventory=AircraftInventory(paa=11, pai=11),
-        homestation=HomestationData(
-            mc_rate=0.735,
-            ground_abort_rate=0.064,
-            break_rate=0.265,
-            fix_8hr_rate=0.496,
-            fix_12hr_rate=0.607,
-            fix_24hr_rate=0.803,
-            ttp_commit_rate=0.55,
-            afi_spare_rate=0,
-            use_uncommitted_aircraft_for_ga_recovery=use_uncommitted_aircraft_for_ga_recovery,
-        ),
-        schedule=schedule,
-        total_required_sorties=total_required_sorties,
-    )
 
 
 def print_sample_iteration_table(summary: SimulationSummary) -> None:
@@ -96,7 +68,17 @@ def print_summary(name: str, summary: SimulationSummary) -> None:
     print(f"Planned attrition allowance: {summary.planned_attrition}")
     print(f"Average actual attrition: {summary.average_actual_attrition:.2f}")
     print(f"Probability of overall success: {summary.probability_success:.2%}")
+    print(f"Success standard deviation: {summary.success_std_dev:.2%}")
+    print(
+        "Success p10/p50/p90: "
+        f"{summary.success_p10:.0%}/{summary.success_p50:.0%}/{summary.success_p90:.0%}"
+    )
+    print(
+        "Probability full planned schedule is flown: "
+        f"{summary.probability_full_schedule:.2%}"
+    )
     print(f"Probability sorties requirement is met: {summary.probability_meet_sorties:.2%}")
+    print(f"Probability daily schedule is met: {summary.probability_daily_schedule:.2%}")
     print(
         "Probability actual attrition stays within plan: "
         f"{summary.probability_within_planned_attrition:.2%}"
@@ -106,6 +88,11 @@ def print_summary(name: str, summary: SimulationSummary) -> None:
         f"{summary.probability_meet_aircraft_required:.2%}"
     )
     print(f"Probability TTP commit stays within limit: {summary.probability_within_ttp_commit:.2%}")
+    print(f"Probability next-Monday recovery succeeds: {summary.probability_recovery:.2%}")
+    print(f"Probability repair backlog stays within threshold: {summary.probability_backlog:.2%}")
+    print(f"Suppressed events: {summary.suppressed_events_count}")
+    if summary.low_confidence:
+        print(f"Confidence warnings: {summary.confidence_warnings}")
     print(f"Average next Monday available aircraft: {summary.average_next_monday_available:.1f}")
     print(f"Failure counts: {summary.failure_counts}")
     print(f"Failure mode counts: {summary.failure_mode_counts}")
@@ -208,18 +195,18 @@ def main() -> None:
     )
 
     print_comparison_table(
-        "Strict Model: Only Scheduled Spares Cover Ground Aborts",
+        f"{SCHEDULED_SPARES_MODEL}: only scheduled spares cover ground aborts",
         strict_summaries,
     )
     print_comparison_table(
-        "Non-Strict Model: Uncommitted MC Aircraft Can Cover Ground Aborts",
+        f"{FLEET_FLEX_MODEL}: uncommitted MC aircraft can cover ground aborts",
         non_strict_summaries,
     )
     print()
 
     for model_name, summaries in (
-        ("Strict", strict_summaries),
-        ("Non-Strict", non_strict_summaries),
+        (SCHEDULED_SPARES_MODEL, strict_summaries),
+        (FLEET_FLEX_MODEL, non_strict_summaries),
     ):
         for name, summary in summaries.items():
             print_summary(f"{model_name} - {name}", summary)

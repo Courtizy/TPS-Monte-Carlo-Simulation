@@ -2,472 +2,848 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import replace
-from html import escape
 from pathlib import Path
 
-from example_run import build_model_scenarios, get_turn_pattern_inputs
-from turn_pattern_modeler import FLYING_DAYS, DaySchedule, Scenario, SimulationSummary, compare_turn_patterns, simulate
+from optimizer import (
+    FLEET_FLEX_MODEL,
+    OptimizationConfig,
+    SCHEDULED_SPARES_MODEL,
+    base_optimizer_scenario,
+    best_by_family,
+    best_by_requirement,
+    family_rollup,
+    optimize_turn_patterns,
+)
+from input_validation import validate_optimizer_config
+from pattern_generator import PatternConstraints, capacity_points
+from recommendation_engine import add_recommendations
+from report_utils import bar_chart, cards, probability_class, table, write_report
+from surge_model import simulate_surge_duration
+from ttp_rules import DEFAULT_TTP_POLICY, risk_band
 
 
-OUTPUT_DIR = Path("analysis_output")
-REPORT_PATH = OUTPUT_DIR / "report.html"
-TARGET_UTE_RATE = 0.40
-ACCEPTABLE_UTE_MAX = 0.52
-FLEET_SWEEP_MIN = 1
-FLEET_SWEEP_MAX = 15
-FLEET_SWEEP_ITERATIONS = 1_000
-SUSTAINABLE_SUCCESS_THRESHOLD = 0.90
-SENSITIVITY_ITERATIONS = 2_500
-SENSITIVITY_SWING = 0.10
-SENSITIVITY_PARAMETERS = (
-    ("mc_rate", "MC Rate"),
-    ("ground_abort_rate", "Ground Abort Rate"),
-    ("break_rate", "Break Rate"),
-    ("fix_8hr_rate", "8 Hr Fix Rate"),
-    ("fix_12hr_rate", "12 Hr Fix Rate"),
-    ("fix_24hr_rate", "24 Hr Fix Rate"),
-    ("ttp_commit_rate", "TTP Commit Rate"),
-    ("afi_spare_rate", "AFI Spare Rate"),
+REPORT_PATH = Path("analysis_output/report.html")
+REPORT_POLICY = DEFAULT_TTP_POLICY
+SUCCESS_THRESHOLD = REPORT_POLICY.green_success_threshold
+REPORT_ITERATIONS = 25
+SURGE_ITERATIONS = 120
+MAX_SURGE_WEEKS = 6
+ATTRITION_SCENARIOS = (
+    ("Requirement Based", 0.0),
+    ("Low Attrition", 0.10),
+    ("Planning Attrition", 0.15),
+    ("High Attrition", 0.20),
 )
 
 
 def main() -> None:
-    turn_pattern_inputs = get_turn_pattern_inputs()
-    strict_scenarios = build_model_scenarios(
-        turn_pattern_inputs,
-        use_uncommitted_aircraft_for_ga_recovery=False,
+    config = OptimizationConfig(
+        policy=REPORT_POLICY,
+        iterations=REPORT_ITERATIONS,
+        success_threshold=SUCCESS_THRESHOLD,
+        required_weekly_sorties=None,
+        planned_attrition_rate=None,
+        attrition_scenarios=ATTRITION_SCENARIOS,
+        event_count_models=("Normal TTP", "Probabilistic Monte Carlo"),
+        fix_count_models=("Normal TTP", "Probabilistic Monte Carlo"),
+        max_patterns_per_requirement=80,
+        constraints=PatternConstraints.from_policy(
+            replace(REPORT_POLICY, max_daily_sorties=8, max_day_to_day_delta=2, max_second_go=3)
+        ),
     )
-    non_strict_scenarios = build_model_scenarios(
-        turn_pattern_inputs,
-        use_uncommitted_aircraft_for_ga_recovery=True,
+    rows = add_recommendations(optimize_turn_patterns(config), config.policy)
+    best_rows = add_recommendations(best_by_requirement(rows), config.policy)
+    family_rows = add_recommendations(best_by_family(rows), config.policy)
+    surge = _run_surge(best_rows)
+    write_report(
+        REPORT_PATH,
+        "Turn Pattern Optimization Report",
+        build_report(rows, best_rows, family_rows, surge, config),
     )
-
-    strict = compare_turn_patterns(strict_scenarios, iterations=10_000, seed=7)
-    non_strict = compare_turn_patterns(non_strict_scenarios, iterations=10_000, seed=7)
-    strict_sensitivity = run_sensitivity(strict_scenarios, seed=71)
-    non_strict_sensitivity = run_sensitivity(non_strict_scenarios, seed=72)
-    fleet_rows = build_fleet_ute_sweep(next(iter(strict_scenarios.values())))
-
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    REPORT_PATH.write_text(
-        build_report(strict, non_strict, strict_sensitivity, non_strict_sensitivity, fleet_rows),
-        encoding="utf-8",
-    )
-    print(f"Wrote analysis report to {REPORT_PATH}")
 
 
 def build_report(
-    strict: dict[str, SimulationSummary],
-    non_strict: dict[str, SimulationSummary],
-    strict_sensitivity: list[dict[str, object]],
-    non_strict_sensitivity: list[dict[str, object]],
-    fleet_rows: list[dict[str, object]],
-) -> str:
-    best_strict_name, best_strict = _best_summary(strict)
-    best_non_strict_name, best_non_strict = _best_summary(non_strict)
-    sections = [
-        "<h1>Turn Pattern Sustainability Analysis</h1>",
-        '<div class="note"><p>This report compares strict and non-strict ground-abort recovery models. Strict only uses scheduled spares. Non-strict also allows uncommitted MC aircraft to recover ground aborts.</p></div>',
-        _recommendation_block(best_strict_name, best_strict, best_non_strict_name, best_non_strict, strict_sensitivity, non_strict_sensitivity),
-        "<h2>UTE Planning Reference</h2>",
-        _ute_reference(best_strict),
-        "<h2>Fleet UTE Action Table</h2>",
-        _fleet_decision_summary(fleet_rows),
-        _fleet_action_table(fleet_rows),
-        "<h2>Named Pattern Comparison</h2>",
-        _paired_pattern_table(strict, non_strict),
-        _success_chart(strict, non_strict),
-        "<h2>Why Patterns Fail</h2>",
-        _failure_mode_chart(strict, "Strict Failure Modes"),
-        _failure_mode_chart(non_strict, "Non-Strict Failure Modes"),
-        "<h2>Sensitivity Drivers</h2>",
-        "<h3>Strict</h3>",
-        _sensitivity_table(strict_sensitivity),
-        "<h3>Non-Strict</h3>",
-        _sensitivity_table(non_strict_sensitivity),
-        "<h2>Diagnostics</h2>",
-        _summary_table(strict, "Strict Full Summary"),
-        _summary_table(non_strict, "Non-Strict Full Summary"),
-        _fleet_detail_table(fleet_rows),
-        "<h2>Methodology</h2>",
-        _methodology_box(),
+    rows: list[dict[str, object]],
+    best_rows: list[dict[str, object]],
+    family_rows: list[dict[str, object]],
+    surge,
+    config: OptimizationConfig,
+) -> list[str]:
+    planning_rows = _planning_rows(rows)
+    planning_best_rows = _planning_rows(best_rows)
+    planning_family_rows = _planning_rows(family_rows)
+    default_attrition = "Planning Attrition"
+    default_event_count_model = "Normal TTP"
+    default_fix_count_model = "Normal TTP"
+    default_planning_rows = [
+        row
+        for row in planning_rows
+        if row["attrition_scenario"] == default_attrition
+        and row["event_count_model"] == default_event_count_model
+        and row["fix_count_model"] == default_fix_count_model
     ]
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Turn Pattern Sustainability Analysis</title>
-<style>
-body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 32px; color: #172026; background: #f7f8fa; }}
-h1, h2, h3 {{ margin-bottom: 8px; }}
-p {{ max-width: 980px; line-height: 1.45; }}
-.note, .recommendation, .methodology {{ background: white; border-left: 5px solid #3a8f78; padding: 14px 18px; margin: 12px 0 24px; max-width: 1040px; }}
-.recommendation {{ border-left-color: #4d6f91; }}
-.ute-band {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; max-width: 1040px; margin: 12px 0 26px; }}
-.ute-box {{ background: white; border: 1px solid #d8dde3; padding: 12px; }}
-.ute-box strong {{ display: block; font-size: 22px; margin-top: 4px; }}
-table {{ border-collapse: collapse; background: white; margin: 12px 0 24px; min-width: 820px; }}
-th, td {{ border: 1px solid #d8dde3; padding: 8px 10px; text-align: right; }}
-th:first-child, td:first-child {{ text-align: left; }}
-th {{ background: #e8edf3; }}
-.green {{ background: #e1f2e8; }}
-.yellow {{ background: #fff2cc; }}
-.red {{ background: #f8d9d9; }}
-.chart {{ background: white; border: 1px solid #d8dde3; margin: 12px 0 28px; padding: 12px; width: fit-content; }}
-.caption {{ color: #52606d; font-size: 14px; }}
-</style>
-</head>
-<body>
-{''.join(sections)}
-</body>
-</html>
-"""
+    if not default_planning_rows:
+        default_planning_rows = planning_rows
+    successful = [
+        row
+        for row in planning_rows
+        if row["success"] >= config.success_threshold and row["sortie_margin"] >= 0
+    ]
+    best_overall = max(
+        default_planning_rows,
+        key=lambda row: (
+            row["success"],
+            row["sortie_margin"] >= 0,
+            row["composite_score"],
+            -row["recovery_debt"],
+        ),
+    )
+    highest_output = max(
+        (
+            row
+            for row in default_planning_rows
+            if row["risk_band"] in ("Green", "Yellow") and row["sortie_margin"] >= 0
+        ),
+        key=lambda row: (row["weekly_sorties"], row["success"]),
+        default=best_overall,
+    )
+    min_pai = min((row["pai"] for row in successful), default="None")
+
+    return [
+        "<h1>Turn Pattern Optimization Report</h1>",
+        '<div class="recommendation"><h2>Decision Flow</h2>'
+        "<p>This report starts with PAI/UTE capacity, then tests generated Monday-Friday "
+        "turn-pattern permutations inside the 0.40-0.52 UTE planning band. Weekly planned "
+        "sorties scale with PAI and UTE; required sortie success is based on actual sorties "
+        "flown versus the required weekly target. Attrition buffers are optional planning "
+        "assumptions and are reported separately. Max-commit is held separate for surge duration only.</p></div>",
+        _filters(config),
+        _assumption_quality(config),
+        _best_fit_callout(),
+        cards(
+            [
+                ("Planning Runs Tested", f"{len(planning_rows):,}", "0.40-0.52 UTE only, both event-count methods."),
+                ("Successful Runs", f"{len(successful):,}", f">= {config.success_threshold:.0%} success."),
+                ("Attrition Modes", str(len(config.attrition_scenarios)), "Requirement-based plus optional 10%, 15%, and 20% planning buffers."),
+                ("Event Count Methods", str(len(config.event_count_models)), "Normal TTP and probabilistic Monte Carlo."),
+                ("Fix Count Methods", str(len(config.fix_count_models)), "Normal TTP and probabilistic Monte Carlo."),
+                ("Best Planning Pattern", str(best_overall["pattern_signature"]), str(best_overall["pattern_name"])),
+                ("Highest Green/Yellow Output", f"{highest_output['weekly_sorties']} sorties", f"{highest_output['pai']} PAI, {highest_output['ute']:.2f} UTE."),
+            ]
+        ),
+        _collapsible_section("Capacity Sweep by PAI", _capacity_table(config)),
+        _collapsible_section(
+            "Primary Ranked Output",
+            "<p>One best-fit planning pattern is shown for each PAI, UTE point, and model type. Max-commit surge rows are intentionally excluded here. Success is shown as the average Monte Carlo success rate, with standard deviation and observed iteration range to show volatility.</p>",
+            '<div class="note"><strong>Thu/Fri human-factor preference:</strong> Best-fit scoring now penalizes backend-heavy patterns and rewards Friday-recovery patterns. Thursday and Friday load is still allowed when needed, but the optimizer will not prefer it solely because weekend recovery makes the math easier.</div>',
+            _best_fit_table(planning_best_rows),
+        ),
+        _collapsible_section(
+            "Best Sustainable UTE by PAI",
+            _best_sustainable_ute_table(planning_best_rows, config.success_threshold),
+        ),
+        _collapsible_section(
+            "Attrition Scenario Comparison",
+            _attrition_comparison_table(planning_best_rows, config.success_threshold),
+        ),
+        _collapsible_section("Recovery Model Comparison", _recovery_model_comparison_table(planning_best_rows)),
+        _collapsible_section(
+            "Pattern Family Discovery",
+            "<p>Pattern families are generated only from schedules that satisfy the TTP aircraft commit rule. A value like 8(6) means 8 total daily sorties using 6 front-line aircraft, with the additional sorties coming from turns.</p>",
+            _family_comparison_table(family_rollup(planning_rows)),
+            _family_success_chart(planning_rows),
+            _family_recovery_chart(planning_rows),
+        ),
+        _collapsible_section("Discovery Highlights", _discovery_tables(planning_rows)),
+        _collapsible_section(
+            "Max-Commit Surge Duration",
+            "<p>This section uses the 55% commit surge case. It estimates how long the selected surge pattern can continue before success probability degrades. Surge weeks accumulate deferred-maintenance debt, increase event pressure, and reduce fix effectiveness over time. The schedule is still forced to true max-commit front-line demand, but the recovery model allows available uncommitted MC aircraft to cover ground aborts when the fleet has enough aircraft.</p>",
+            _surge_table(surge),
+            _surge_chart(surge),
+        ),
+        _collapsible_section(
+            "Detailed Pattern Diagnostics",
+            "<h3>Best Pattern Per Family And Requirement</h3>",
+            _best_fit_table(planning_family_rows[:250]),
+            "<h3>All Best-Fit Requirement Rows</h3>",
+            _best_fit_table(planning_best_rows),
+        ),
+    ]
 
 
-def _recommendation_block(
-    best_strict_name: str,
-    best_strict: SimulationSummary,
-    best_non_strict_name: str,
-    best_non_strict: SimulationSummary,
-    strict_sensitivity: list[dict[str, object]],
-    non_strict_sensitivity: list[dict[str, object]],
-) -> str:
+def _planning_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [row for row in rows if row["capacity_label"] != REPORT_POLICY.surge_label]
+
+
+def _collapsible_section(title: str, *content: str, open_by_default: bool = False) -> str:
+    open_attr = " open" if open_by_default else ""
+    return f'<details{open_attr}><summary>{title}</summary>{"".join(content)}</details>'
+
+
+def _assumption_quality(config: OptimizationConfig) -> str:
+    result = validate_optimizer_config(config)
+    if result.is_valid and not result.warnings:
+        return '<div class="note"><strong>Assumption quality:</strong> No optimizer input warnings detected.</div>'
+    items = "".join(f"<li>{item}</li>" for item in (*result.errors, *result.warnings))
+    heading = "Input errors detected" if result.errors else "Assumption warnings"
+    return f'<div class="note"><strong>{heading}:</strong><ul>{items}</ul></div>'
+
+
+def _filters(config: OptimizationConfig) -> str:
+    options = '<option value="all">All PAI</option>' + "".join(
+        f'<option value="{pai}">{pai} PAI</option>' for pai in range(1, 16)
+    )
+    attrition_options = '<option value="all">All Attrition</option>' + "".join(
+        f'<option value="{name}">{name} ({rate:.0%})</option>'
+        for name, rate in config.attrition_scenarios
+    )
+    ute_options = '<option value="all">All UTE</option>' + "".join(
+        f'<option value="UTE {ute:.2f}">UTE {ute:.2f}</option>'
+        for ute in (config.ute_levels or config.policy.ute_levels)
+    )
+    event_count_options = '<option value="all">All Event Count Methods</option>' + "".join(
+        f'<option value="{model}">{model}</option>' for model in config.event_count_models
+    )
+    fix_count_options = '<option value="all">All Fix Count Methods</option>' + "".join(
+        f'<option value="{model}">{model}</option>' for model in config.fix_count_models
+    )
+    family_options = '<option value="all">All Families</option>' + "".join(
+        f'<option value="{family}">{family}</option>'
+        for family in (
+            "Flat Turns",
+            "Waterfall",
+            "Reverse Waterfall",
+            "Front-Loaded Push",
+            "Back-Loaded Push",
+            "Midweek Spike",
+            "Multi-Spike",
+            "Recovery Valley",
+            "Sawtooth",
+            "Step-Down",
+            "Step-Up",
+            "Compressed Surge",
+            "Balanced Push",
+        )
+    )
     return (
-        '<div class="recommendation">'
-        "<h2>Executive Recommendation</h2>"
-        f"<p><b>Strict best:</b> {escape(best_strict_name)} at {best_strict.probability_success:.2%}. <b>Read:</b> {escape(_why_pattern(best_strict))}</p>"
-        f"<p><b>Non-strict best:</b> {escape(best_non_strict_name)} at {best_non_strict.probability_success:.2%}. <b>Read:</b> {escape(_why_pattern(best_non_strict))}</p>"
-        f"<p><b>Top strict sensitivity:</b> {escape(_driver_text(strict_sensitivity[0] if strict_sensitivity else None))}. <b>Top non-strict sensitivity:</b> {escape(_driver_text(non_strict_sensitivity[0] if non_strict_sensitivity else None))}.</p>"
-        "<p><b>Planning interpretation:</b> use strict results for sustainability without pulling extra aircraft into the schedule. Use non-strict results to understand rescue capacity and operational nuance.</p>"
+        '<div class="filter-panel">'
+        '<label for="pai-filter">Filter tables by PAI</label>'
+        f'<select id="pai-filter">{options}</select>'
+        '<label for="attrition-filter" style="margin-top:10px;">Filter by attrition scenario</label>'
+        f'<select id="attrition-filter">{attrition_options}</select>'
+        '<label for="required-sorties-filter" style="margin-top:10px;">Minimum weekly sorties required</label>'
+        '<input id="required-sorties-filter" type="number" min="0" step="1" placeholder="Example: 24">'
+        '<label for="event-count-filter" style="margin-top:10px;">Filter by event-count method</label>'
+        f'<select id="event-count-filter">{event_count_options}</select>'
+        '<label for="fix-count-filter" style="margin-top:10px;">Filter by fix-count method</label>'
+        f'<select id="fix-count-filter">{fix_count_options}</select>'
+        '<label for="model-filter" style="margin-top:10px;">Filter by model</label>'
+        f'<select id="model-filter"><option value="all">All Models</option><option value="{FLEET_FLEX_MODEL}">{FLEET_FLEX_MODEL}</option><option value="{SCHEDULED_SPARES_MODEL}">{SCHEDULED_SPARES_MODEL}</option></select>'
+        '<label for="ute-filter" style="margin-top:10px;">Filter by UTE point</label>'
+        f'<select id="ute-filter">{ute_options}</select>'
+        '<label for="risk-filter" style="margin-top:10px;">Filter by risk</label>'
+        '<select id="risk-filter"><option value="all">All Risk</option><option value="Green">Green</option><option value="Yellow">Yellow</option><option value="Orange">Orange</option><option value="Red">Red</option></select>'
+        '<label for="family-filter" style="margin-top:10px;">Filter by pattern family</label>'
+        f'<select id="family-filter">{family_options}</select>'
+        '<p class="caption">This filters report tables after the simulation has already run. '
+        'Charts remain full-run summaries.</p>'
         "</div>"
     )
 
 
-def _ute_reference(summary: SimulationSummary) -> str:
-    pai = summary.sample_iteration.days[0].pai
-    target_sorties = round(pai * len(FLYING_DAYS) * TARGET_UTE_RATE)
-    required_ute = summary.required_weekly_sorties / (pai * len(FLYING_DAYS))
-    planned_ute = summary.planned_weekly_sorties / (pai * len(FLYING_DAYS))
-    commit_limit = summary.sample_iteration.days[0].commit_limit
-    max_commit_ute = commit_limit / pai
+def _best_fit_callout() -> str:
     return (
-        '<div class="ute-band">'
-        + _ute_box("PAI", str(pai), "Aircraft used in the UTE denominator.")
-        + _ute_box("0.4 UTE Sorties", str(target_sorties), "Weekly sorties at 0.4 UTE.")
-        + _ute_box("Required UTE", f"{required_ute:.2f}", f"{summary.required_weekly_sorties} required sorties.")
-        + _ute_box("Planned UTE", f"{planned_ute:.2f}", f"{summary.planned_weekly_sorties} planned sorties.")
-        + _ute_box("Max Commit Reference", f"{max_commit_ute:.2f}", f"{commit_limit} aircraft/day under the TTP commit rule.")
-        + "</div>"
+        '<div class="best-fit-callout">'
+        "<h2>Filtered Best-Fit Callout</h2>"
+        '<p id="best-fit-empty" class="caption">No Green/Yellow best-fit pattern is visible under the current filters.</p>'
+        '<div id="best-fit-detail">'
+        '<h3 id="callout-name">None</h3>'
+        '<div class="callout-grid">'
+        '<div><span>Pattern</span><strong id="callout-pattern">None</strong></div>'
+        '<div><span>PAI</span><strong id="callout-pai">None</strong></div>'
+        '<div><span>Attrition</span><strong id="callout-attrition">None</strong></div>'
+        '<div><span>Event Count</span><strong id="callout-event-count">None</strong></div>'
+        '<div><span>Fix Count</span><strong id="callout-fix-count">None</strong></div>'
+        '<div><span>UTE</span><strong id="callout-ute">None</strong></div>'
+        '<div><span>Planned / Required</span><strong><span id="callout-planned">None</span> / <span id="callout-required">None</span></strong></div>'
+        '<div><span>Peak Front-Lines</span><strong id="callout-frontlines">None</strong></div>'
+        '<div><span>Thu/Fri Front-Lines</span><strong id="callout-backend-frontlines">None</strong></div>'
+        '<div><span>Commit Aircraft</span><strong id="callout-commit">None</strong></div>'
+        '<div><span>Turn Sorties</span><strong id="callout-turns">None</strong></div>'
+        '<div><span>Thu/Fri Sorties</span><strong id="callout-backend">None</strong></div>'
+        '<div><span>Friday Sorties</span><strong id="callout-friday">None</strong></div>'
+        '<div><span>Success</span><strong id="callout-success">None</strong></div>'
+        '<div><span>Next Mon MC</span><strong id="callout-nextmon">None</strong></div>'
+        '<div><span>Recovery Debt</span><strong id="callout-debt">None</strong></div>'
+        "</div></div></div>"
     )
 
 
-def _ute_box(title: str, value: str, note: str) -> str:
-    return f'<div class="ute-box"><span>{escape(title)}</span><strong>{escape(value)}</strong><p>{escape(note)}</p></div>'
-
-
-def _paired_pattern_table(strict: dict[str, SimulationSummary], non_strict: dict[str, SimulationSummary]) -> str:
-    rows = []
-    for name in strict:
-        strict_summary = strict[name]
-        non_summary = non_strict[name]
-        rows.append(
-            "<tr>"
-            f"<td>{escape(name)}</td>"
-            f'<td class="{_threshold_class(strict_summary.probability_success)}">{strict_summary.probability_success:.2%}</td>'
-            f'<td class="{_threshold_class(non_summary.probability_success)}">{non_summary.probability_success:.2%}</td>'
-            f"<td>{strict_summary.planned_weekly_sorties}</td>"
-            f"<td>{strict_summary.required_weekly_sorties}</td>"
-            f"<td>{_weekly_ute(strict_summary):.2f}</td>"
-            f"<td>{strict_summary.planned_attrition}</td>"
-            f"<td>{strict_summary.average_actual_attrition:.2f}</td>"
-            f"<td>{non_summary.average_actual_attrition:.2f}</td>"
-            f"<td>{strict_summary.average_next_monday_available:.1f}</td>"
-            f"<td>{non_summary.average_next_monday_available:.1f}</td>"
-            f"<td>{escape(_top_failure_mode(strict_summary))}</td>"
-            f"<td>{escape(_top_failure_mode(non_summary))}</td>"
-            "</tr>"
+def _capacity_table(config: OptimizationConfig) -> str:
+    body = []
+    attrs = []
+    ute_levels = config.ute_levels or config.policy.ute_levels
+    ute_labels = [f"UTE {ute:.2f}" for ute in ute_levels]
+    for pai in range(config.pai_min, config.pai_max + 1):
+        points = capacity_points(
+            pai,
+            flying_days=config.flying_days,
+            ute_levels=config.ute_levels,
+            policy=config.policy,
         )
-    return (
-        "<table><tr><th>Pattern</th><th>Strict Success</th><th>Non-Strict Success</th><th>Planned</th><th>Required</th><th>UTE</th><th>Planned Attrition</th><th>Strict Avg Attrition</th><th>Non-Strict Avg Attrition</th><th>Strict Next Mon</th><th>Non-Strict Next Mon</th><th>Strict Top Failure</th><th>Non-Strict Top Failure</th></tr>"
-        + "".join(rows)
-        + "</table>"
+        by_label = {point["label"]: point for point in points}
+        body.append(
+            [
+                pai,
+                by_label[config.policy.surge_label]["commit_aircraft"],
+                *[by_label[label]["weekly_sorties"] for label in ute_labels],
+                by_label[config.policy.surge_label]["weekly_sorties"],
+                f"{by_label[config.policy.surge_label]['actual_ute']:.2f}",
+            ]
+        )
+        attrs.append({"pai": pai})
+    return table(
+        [
+            "PAI",
+            "55% Commit Acft",
+            *[f"{ute:.2f} UTE" for ute in ute_levels],
+            "Max-Commit Sorties",
+            "Max-Commit UTE",
+        ],
+        body,
+        row_attrs=attrs,
     )
 
 
-def build_fleet_ute_sweep(template: Scenario) -> list[dict[str, object]]:
-    rows = []
-    planned_attrition_allowance = max(0, sum(template.schedule[day].daily_sorties for day in FLYING_DAYS) - template.total_required_sorties)
-    for pai in range(FLEET_SWEEP_MIN, FLEET_SWEEP_MAX + 1):
-        commit_limit = max(1, round(pai * template.homestation.ttp_commit_rate))
-        target_sorties = int(pai * len(FLYING_DAYS) * TARGET_UTE_RATE)
-        acceptable_sorties = max(target_sorties, int(pai * len(FLYING_DAYS) * ACCEPTABLE_UTE_MAX))
-        max_commit_sorties = max(acceptable_sorties, commit_limit * len(FLYING_DAYS))
-        best_band_strict = _find_best_sustainable_pattern(template, pai, target_sorties, acceptable_sorties, commit_limit, planned_attrition_allowance, False, 50_000 + pai * 100)
-        best_band_non_strict = _find_best_sustainable_pattern(template, pai, target_sorties, acceptable_sorties, commit_limit, planned_attrition_allowance, True, 60_000 + pai * 100)
-        best_strict = _find_best_sustainable_pattern(template, pai, target_sorties, max_commit_sorties, commit_limit, planned_attrition_allowance, False, 70_000 + pai * 100)
-        best_non_strict = _find_best_sustainable_pattern(template, pai, target_sorties, max_commit_sorties, commit_limit, planned_attrition_allowance, True, 80_000 + pai * 100)
-        rows.append({
+def _best_fit_table(rows: list[dict[str, object]]) -> str:
+    body = []
+    classes = []
+    attrs = []
+    for row in rows:
+        body.append(
+            [
+                row["pai"],
+                row["attrition_scenario"],
+                row["event_count_model"],
+                row["fix_count_model"],
+                row["capacity_label"],
+                row["weekly_sorties"],
+                row["required_sorties"],
+                f"{row['sortie_margin']:+d}",
+                f"{row['ute']:.2f}",
+                row["model"],
+                row["pattern_with_frontlines"],
+                row["operational_assessment"],
+                row["limiting_factor"],
+                row["recommendation_confidence"],
+                row["pattern_name"],
+                row["pattern_family"],
+                row["peak_frontlines"],
+                row["frontline_backend"],
+                row["commit_aircraft"],
+                row["total_turn_sorties"],
+                row["backend_sorties"],
+                row["friday_sorties"],
+                f"{row['success']:.1%}",
+                f"{row['success_std_dev']:.1%}",
+                f"{row['success_min']:.0%}-{row['success_max']:.0%}",
+                f"{row['success_p10']:.0%}/{row['success_p50']:.0%}/{row['success_p90']:.0%}",
+                f"{row['success_ci95_low']:.1%}-{row['success_ci95_high']:.1%}",
+                f"{row['full_schedule_success']:.1%}",
+                f"{row['sortie_success']:.1%}",
+                f"{row['daily_schedule_success']:.1%}",
+                f"{row['planned_attrition_success']:.1%}",
+                f"{row['aircraft_success']:.1%}",
+                f"{row['commit_success']:.1%}",
+                f"{row['recovery_success']:.1%}",
+                f"{row['backlog_success']:.1%}",
+                f"{row['no_suppressed_events_success']:.1%}",
+                f"{row['planned_attrition_rate']:.1%}",
+                f"{row['avg_actual_attrition_rate']:.1%}",
+                f"{row['avg_attrition_delta']:+.1%}",
+                f"{row['avg_next_monday']:.1f}",
+                f"{row['avg_repair_backlog']:.2f}",
+                f"{row['recovery_debt']:.2f}",
+                row["confidence_warnings"],
+                row["risk_band"],
+                f"{row['composite_score']:.3f}",
+                row["failure_mode"],
+            ]
+        )
+        row_classes = [""] * 47
+        row_classes[22] = probability_class(float(row["success"]), SUCCESS_THRESHOLD)
+        row_classes[44] = _risk_class(str(row["risk_band"]))
+        classes.append(row_classes)
+        attrs.append(
+            {
+                "role": "best-fit",
+                "pai": row["pai"],
+                "attrition": row["attrition_scenario"],
+                "event-count": row["event_count_model"],
+                "fix-count": row["fix_count_model"],
+                "model": row["model"],
+                "ute": row["capacity_label"],
+                "risk": row["risk_band"],
+                "family": row["pattern_family"],
+                "score": f"{float(row['composite_score']):.6f}",
+                "success": f"{float(row['success']):.6f}",
+                "success-text": f"{row['success']:.1%}",
+                "pattern-display": row["pattern_with_frontlines"],
+                "name": row["pattern_name"],
+                "planned": row["weekly_sorties"],
+                "required": row["required_sorties"],
+                "frontlines": row["peak_frontlines"],
+                "backend-frontlines": f"{row['frontline_backend']:.0f}",
+                "commit": row["commit_aircraft"],
+                "turns": row["total_turn_sorties"],
+                "backend": row["backend_sorties"],
+                "friday": row["friday_sorties"],
+                "nextmon": f"{row['avg_next_monday']:.1f}",
+                "debt": f"{row['recovery_debt']:.2f}",
+            }
+        )
+    return table(
+        [
+            "PAI",
+            "Attrition",
+            "Event Count",
+            "Fix Count",
+            "Requirement",
+            "Sorties",
+            "Required",
+            "Margin",
+            "UTE",
+            "Model",
+                "Pattern Total(Front-Line)",
+            "Assessment",
+            "Limiting Factor",
+            "Confidence",
+            "Name",
+            "Family",
+            "Peak Front-Line",
+            "Thu/Fri Front-Line",
+            "Commit Acft",
+            "Turn Sorties",
+            "Thu/Fri Sorties",
+            "Fri Sorties",
+            "Avg Success",
+            "Success SD",
+            "Success Range",
+            "P10/P50/P90",
+            "95% CI",
+            "Full Schedule",
+            "Required Sortie",
+            "Daily Schedule",
+            "Attrition",
+            "Aircraft",
+            "Commit",
+            "Recovery",
+            "Backlog",
+            "No Suppression",
+            "Planned Attr %",
+            "Actual Attr %",
+            "Attr Delta",
+            "Next Mon",
+            "Repair Backlog",
+            "Recovery Debt",
+            "Confidence Warning",
+            "Risk",
+            "Score",
+            "Failure Mode",
+        ],
+        body,
+        classes,
+        row_attrs=attrs,
+    )
+
+
+def _best_sustainable_ute_table(rows: list[dict[str, object]], threshold: float) -> str:
+    body = []
+    attrs = []
+    keys = sorted({(row["pai"], row["attrition_scenario"], row["event_count_model"], row["fix_count_model"]) for row in rows})
+    for pai, attrition, event_count_model, fix_count_model in keys:
+        candidates = [
+            row
+            for row in rows
+            if row["pai"] == pai
+            and row["attrition_scenario"] == attrition
+            and row["event_count_model"] == event_count_model
+            and row["fix_count_model"] == fix_count_model
+            and row["model"] == FLEET_FLEX_MODEL
+            and row["success"] >= threshold
+            and row["sortie_margin"] >= 0
+        ]
+        row = max(candidates, key=lambda item: (item["ute"], item["weekly_sorties"], item["success"]), default=None)
+        if row is None:
+            body.append([pai, attrition, event_count_model, fix_count_model, "None", "None", "None", "None", "No fleet-flex pattern met threshold"])
+        else:
+            body.append(
+                [
+                    pai,
+                    attrition,
+                    event_count_model,
+                    fix_count_model,
+                    row["weekly_sorties"],
+                    f"{row['ute']:.2f}",
+                    row["pattern_with_frontlines"],
+                    f"{row['success']:.1%}",
+                    row["risk_band"],
+                ]
+            )
+        attrs.append({
             "pai": pai,
-            "target_sorties": target_sorties,
-            "acceptable_sorties": acceptable_sorties,
-            "required_sorties": template.total_required_sorties,
-            "commit_limit": commit_limit,
-            "commit_percent": commit_limit / pai,
-            "best_band_strict": best_band_strict,
-            "best_band_non_strict": best_band_non_strict,
-            "best_strict": best_strict,
-            "best_non_strict": best_non_strict,
+            "attrition": attrition,
+            "event-count": event_count_model,
+            "fix-count": fix_count_model,
+            "planned": row["weekly_sorties"] if row else 0,
+            "risk": row["risk_band"] if row else "Red",
         })
-    return rows
+    return table(["PAI", "Attrition", "Event Count", "Fix Count", "Best Sorties", "Best UTE", "Pattern", "Success", "Risk"], body, row_attrs=attrs)
 
 
-def _find_best_sustainable_pattern(template: Scenario, pai: int, min_sorties: int, max_sorties: int, commit_limit: int, planned_attrition_allowance: int, use_uncommitted_aircraft_for_ga_recovery: bool, seed: int) -> dict[str, object]:
-    best_row: dict[str, object] | None = None
-    best_success_row: dict[str, object] | None = None
-    for offset, sorties in enumerate(range(min_sorties, max_sorties + 1)):
-        schedule = _balanced_schedule(sorties, commit_limit)
-        summary = _evaluate_fleet_pattern(template, pai, schedule, planned_attrition_allowance, use_uncommitted_aircraft_for_ga_recovery, seed + offset)
-        row = {"sorties": sorties, "ute": _ute_for_sorties(sorties, pai), "pattern": _schedule_label(schedule), "success": summary.probability_success}
-        if best_success_row is None or row["success"] > best_success_row["success"]:
-            best_success_row = row
-        if row["success"] >= SUSTAINABLE_SUCCESS_THRESHOLD:
-            best_row = row
-    return best_row or best_success_row or {"sorties": 0, "ute": 0.0, "pattern": "No pattern", "success": 0.0}
+def _attrition_comparison_table(rows: list[dict[str, object]], threshold: float) -> str:
+    body = []
+    attrs = []
+    keys = sorted({(row["pai"], row["attrition_scenario"], row["event_count_model"], row["fix_count_model"]) for row in rows})
+    for pai, attrition, event_count_model, fix_count_model in keys:
+        candidates = [
+            row
+            for row in rows
+            if row["pai"] == pai
+            and row["attrition_scenario"] == attrition
+            and row["event_count_model"] == event_count_model
+            and row["fix_count_model"] == fix_count_model
+            and row["model"] == FLEET_FLEX_MODEL
+            and row["success"] >= threshold
+        ]
+        best = max(
+            candidates,
+            key=lambda row: (row["ute"], row["weekly_sorties"], row["success"]),
+            default=None,
+        )
+        if best is None:
+            body.append([pai, attrition, event_count_model, fix_count_model, "None", "None", "None", "None", "No green fleet-flex option"])
+        else:
+            body.append(
+                [
+                    pai,
+                    attrition,
+                    event_count_model,
+                    fix_count_model,
+                    best["weekly_sorties"],
+                    best["required_sorties"],
+                    f"{best['ute']:.2f}",
+                    f"{best['success']:.1%}",
+                    best["pattern_with_frontlines"],
+                ]
+            )
+        attrs.append({
+            "pai": pai,
+            "attrition": attrition,
+            "event-count": event_count_model,
+            "fix-count": fix_count_model,
+            "planned": best["weekly_sorties"] if best else 0,
+            "risk": best["risk_band"] if best else "Red",
+        })
+    return table(
+        ["PAI", "Attrition Scenario", "Event Count", "Fix Count", "Planned", "Required", "Best UTE", "Success", "Pattern"],
+        body,
+        row_attrs=attrs,
+    )
 
 
-def _evaluate_fleet_pattern(template: Scenario, pai: int, schedule: dict[str, DaySchedule], planned_attrition_allowance: int, use_uncommitted_aircraft_for_ga_recovery: bool, seed: int) -> SimulationSummary:
-    planned_sorties = sum(schedule[day].daily_sorties for day in FLYING_DAYS)
+def _recovery_model_comparison_table(rows: list[dict[str, object]]) -> str:
+    pairs: dict[tuple[int, int, str, str, str, str], dict[str, dict[str, object]]] = {}
+    for row in rows:
+        key = (
+            int(row["pai"]),
+            int(row["weekly_sorties"]),
+            str(row["capacity_label"]),
+            str(row["attrition_scenario"]),
+            str(row["event_count_model"]),
+            str(row["fix_count_model"]),
+        )
+        pairs.setdefault(key, {})[str(row["model"])] = row
+    body = []
+    attrs = []
+    for key, models in sorted(pairs.items()):
+        scheduled_spares = models.get(SCHEDULED_SPARES_MODEL)
+        fleet_flex = models.get(FLEET_FLEX_MODEL)
+        if not scheduled_spares or not fleet_flex:
+            continue
+        body.append(
+            [
+                key[0],
+                key[3],
+                key[4],
+                key[5],
+                key[2],
+                key[1],
+                f"{scheduled_spares['success']:.1%}",
+                f"{fleet_flex['success']:.1%}",
+                f"{float(fleet_flex['success']) - float(scheduled_spares['success']):+.1%}",
+                scheduled_spares["pattern_with_frontlines"],
+                fleet_flex["pattern_with_frontlines"],
+            ]
+        )
+        attrs.append({
+            "pai": key[0],
+            "attrition": key[3],
+            "event-count": key[4],
+            "fix-count": key[5],
+            "planned": key[1],
+            "ute": key[2],
+        })
+    return table(
+        ["PAI", "Attrition", "Event Count", "Fix Count", "Requirement", "Sorties", SCHEDULED_SPARES_MODEL, FLEET_FLEX_MODEL, "Delta", "Scheduled-Spares Pattern", "Fleet-Flex Pattern"],
+        body,
+        row_attrs=attrs,
+    )
+
+
+def _family_comparison_table(rows: list[dict[str, object]]) -> str:
+    return table(
+        [
+            "Family",
+            "Runs",
+            "Best Pattern Total(Front-Line)",
+            "Best Name",
+            "Peak Front-Line",
+            "Commit Acft",
+            "Best Success",
+            "Avg Success",
+            "Avg Recovery Debt",
+        ],
+        [
+            [
+                row["pattern_family"],
+                row["tested"],
+                row["best_pattern"],
+                row["best_name"],
+                row["best_peak_frontlines"],
+                row["best_commit_aircraft"],
+                f"{row['best_success']:.1%}",
+                f"{row['avg_success']:.1%}",
+                f"{row['avg_recovery_debt']:.2f}",
+            ]
+            for row in rows
+        ],
+    )
+
+
+def _discovery_tables(rows: list[dict[str, object]]) -> str:
+    unique = _unique_best_patterns(rows)
+    top_success = sorted(unique, key=lambda row: (-float(row["success"]), -float(row["weekly_sorties"])))[:10]
+    top_output = sorted(
+        [row for row in unique if row["risk_band"] in ("Green", "Yellow")],
+        key=lambda row: (-int(row["weekly_sorties"]), -float(row["success"])),
+    )[:10]
+    low_debt = sorted(unique, key=lambda row: (float(row["recovery_debt"]), -float(row["success"])))[:10]
+    efficient = sorted(unique, key=lambda row: -(float(row["success"]) / max(int(row["weekly_sorties"]), 1)))[:10]
+    return (
+        "<h3>Top 10 Unique Patterns By Success</h3>"
+        + _compact_pattern_table(top_success)
+        + "<h3>Top 10 Green/Yellow Patterns By Output</h3>"
+        + _compact_pattern_table(top_output)
+        + "<h3>Lowest Recovery-Debt Patterns</h3>"
+        + _compact_pattern_table(low_debt)
+        + "<h3>Most Efficient Patterns By Success Per Sortie</h3>"
+        + _compact_pattern_table(efficient)
+    )
+
+
+def _compact_pattern_table(rows: list[dict[str, object]]) -> str:
+    return table(
+        [
+            "PAI",
+            "Attrition",
+            "Event Count",
+            "Fix Count",
+            "Sorties",
+            "UTE",
+            "Model",
+            "Pattern Total(Front-Line)",
+            "Name",
+            "Family",
+            "Peak Front-Line",
+            "Commit Acft",
+            "Turn Sorties",
+            "Thu/Fri Sorties",
+            "Fri Sorties",
+            "Avg Success",
+            "Success SD",
+            "Success Range",
+            "95% CI",
+            "Recovery Debt",
+            "Risk",
+        ],
+        [
+            [
+                row["pai"],
+                row["attrition_scenario"],
+                row["event_count_model"],
+                row["fix_count_model"],
+                row["weekly_sorties"],
+                f"{row['ute']:.2f}",
+                row["model"],
+                row["pattern_with_frontlines"],
+                row["pattern_name"],
+                row["pattern_family"],
+                row["peak_frontlines"],
+                row["commit_aircraft"],
+                row["total_turn_sorties"],
+                row["backend_sorties"],
+                row["friday_sorties"],
+                f"{row['success']:.1%}",
+                f"{row['success_std_dev']:.1%}",
+                f"{row['success_min']:.0%}-{row['success_max']:.0%}",
+                f"{row['success_ci95_low']:.1%}-{row['success_ci95_high']:.1%}",
+                f"{row['recovery_debt']:.2f}",
+                row["risk_band"],
+            ]
+            for row in rows
+        ],
+        row_attrs=[
+            {
+                "pai": row["pai"],
+                "attrition": row["attrition_scenario"],
+                "event-count": row["event_count_model"],
+                "fix-count": row["fix_count_model"],
+                "planned": row["weekly_sorties"],
+                "model": row["model"],
+                "risk": row["risk_band"],
+                "family": row["pattern_family"],
+                "backend": row["backend_sorties"],
+            }
+            for row in rows
+        ],
+    )
+
+
+def _run_surge(best_rows: list[dict[str, object]]):
+    surge_candidates = [
+        row
+        for row in best_rows
+        if row["capacity_label"] == REPORT_POLICY.surge_label
+        and row["model"] == FLEET_FLEX_MODEL
+        and row["attrition_scenario"] == "Planning Attrition"
+        and row["event_count_model"] == "Normal TTP"
+        and row["fix_count_model"] == "Normal TTP"
+    ]
+    if not surge_candidates:
+        surge_candidates = [
+            row
+            for row in best_rows
+            if row["capacity_label"] == REPORT_POLICY.surge_label and row["model"] == FLEET_FLEX_MODEL
+        ]
+    if not surge_candidates:
+        surge_candidates = [
+            row
+            for row in best_rows
+            if row["capacity_label"] == REPORT_POLICY.surge_label
+        ]
+    surge_row = max(
+        surge_candidates,
+        key=lambda row: (row["success"], row["weekly_sorties"]),
+    )
+    template = base_optimizer_scenario(True, REPORT_POLICY)
+    from simulation_engine import DaySchedule
+
+    commit_aircraft = int(surge_row["commit_aircraft"])
+    surge_schedule = {
+        day: DaySchedule(first_go=commit_aircraft)
+        for day in REPORT_POLICY.flying_days
+    }
     scenario = replace(
         template,
-        inventory=replace(template.inventory, paa=pai, pai=pai),
-        homestation=replace(template.homestation, use_uncommitted_aircraft_for_ga_recovery=use_uncommitted_aircraft_for_ga_recovery),
-        schedule=schedule,
-        total_required_sorties=max(1, planned_sorties - planned_attrition_allowance),
+        inventory=replace(template.inventory, paa=int(surge_row["pai"]), pai=int(surge_row["pai"])),
+        homestation=replace(
+            template.homestation,
+            event_count_model=str(surge_row["event_count_model"]),
+            fix_count_model=str(surge_row["fix_count_model"]),
+            use_uncommitted_aircraft_for_ga_recovery=True,
+        ),
+        schedule=surge_schedule,
+        total_required_sorties=max(1, int(surge_row["weekly_sorties"]) - int(surge_row["planned_attrition"])),
     )
-    return simulate(scenario, iterations=FLEET_SWEEP_ITERATIONS, seed=seed)
-
-
-def _fleet_decision_summary(rows: list[dict[str, object]]) -> str:
-    return (
-        '<div class="ute-band">'
-        + _ute_box("Strict In Band", _minimum_pai_text(_minimum_pai_for(rows, "best_band_strict")), "Meets requirement inside the acceptable UTE band using strict sustainability.")
-        + _ute_box("Non-Strict In Band", _minimum_pai_text(_minimum_pai_for(rows, "best_band_non_strict")), "Meets requirement inside the acceptable UTE band using non-strict recovery.")
-        + _ute_box("Strict To Max", _minimum_pai_text(_minimum_pai_for(rows, "best_strict")), "Meets requirement up to the max-commit reference using strict sustainability.")
-        + _ute_box("Non-Strict To Max", _minimum_pai_text(_minimum_pai_for(rows, "best_non_strict")), "Most permissive planning view.")
-        + "</div>"
+    return simulate_surge_duration(
+        scenario,
+        max_surge_weeks=MAX_SURGE_WEEKS,
+        iterations=SURGE_ITERATIONS,
+        seed=900,
+        success_threshold=SUCCESS_THRESHOLD,
     )
 
 
-def _fleet_action_table(rows: list[dict[str, object]]) -> str:
-    body = []
+def _surge_table(surge) -> str:
+    return table(
+        ["Week", "Success", "Commit Capacity", "Ending MC", "Next-Mon MC", "Repair Backlog", "Surge Debt", "Risk"],
+        [
+            [
+                week.week,
+                f"{week.probability_success:.1%}",
+                f"{week.probability_commit_capacity:.1%}",
+                f"{week.average_ending_mc:.1f}",
+                f"{week.average_next_monday_mc:.1f}",
+                f"{week.average_repair_backlog:.2f}",
+                f"{week.average_surge_debt:.2f}",
+                week.risk_band,
+            ]
+            for week in surge.weeks
+        ],
+    )
+
+
+def _surge_chart(surge) -> str:
+    return bar_chart(
+        [f"Wk {week.week}" for week in surge.weeks],
+        [week.probability_success * 100 for week in surge.weeks],
+        "55% Commit Surge Duration",
+        "% success",
+    )
+
+
+def _family_success_chart(rows: list[dict[str, object]]) -> str:
+    rollup = family_rollup(rows)[:12]
+    return bar_chart(
+        [str(row["pattern_family"]) for row in rollup],
+        [float(row["avg_success"]) * 100 for row in rollup],
+        "Success Rate by Pattern Family",
+        "% success",
+    )
+
+
+def _family_recovery_chart(rows: list[dict[str, object]]) -> str:
+    rollup = family_rollup(rows)[:12]
+    return bar_chart(
+        [str(row["pattern_family"]) for row in rollup],
+        [float(row["avg_recovery_debt"]) for row in rollup],
+        "Recovery Debt by Pattern Family",
+        "aircraft",
+    )
+
+
+def _unique_best_patterns(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    best: dict[tuple[str, str, str], dict[str, object]] = {}
     for row in rows:
-        action = _fleet_action(row)
-        body.append(
-            "<tr>"
-            f"<td>{row['pai']}</td><td>{row['target_sorties']}</td><td>{row['acceptable_sorties']}</td><td>{row['required_sorties']}</td>"
-            f"<td>{action['sorties']}</td><td>{action['ute']:.2f}</td>"
-            f'<td class="{_threshold_class(action["success"])}">{action["success"]:.0%}</td>'
-            f"<td>{action['margin']:+d}</td><td>{escape(action['model'])}</td><td>{escape(action['recommendation'])}</td><td>{escape(action['risk'])}</td>"
-            "</tr>"
+        key = (
+            str(row["attrition_scenario"]),
+            str(row["model"]),
+            str(row["pattern_signature"]),
         )
-    return "<table><tr><th>PAI</th><th>0.4 Sorties</th><th>0.52 Sorties</th><th>Required</th><th>Recommended Sorties</th><th>UTE</th><th>Success</th><th>Margin</th><th>Model Basis</th><th>Recommendation</th><th>Risk</th></tr>" + "".join(body) + "</table>"
+        current = best.get(key)
+        if current is None or (row["success"], row["weekly_sorties"]) > (current["success"], current["weekly_sorties"]):
+            best[key] = row
+    return list(best.values())
 
 
-def _fleet_detail_table(rows: list[dict[str, object]]) -> str:
-    body = []
-    for row in rows:
-        body.append(
-            "<tr>"
-            f"<td>{row['pai']}</td><td>{row['commit_limit']}</td><td>{row['commit_percent']:.0%}</td>"
-            f"<td>{escape(str(row['best_band_strict']['pattern']))}</td><td>{row['best_band_strict']['success']:.0%}</td>"
-            f"<td>{escape(str(row['best_band_non_strict']['pattern']))}</td><td>{row['best_band_non_strict']['success']:.0%}</td>"
-            f"<td>{escape(str(row['best_strict']['pattern']))}</td><td>{row['best_strict']['success']:.0%}</td>"
-            f"<td>{escape(str(row['best_non_strict']['pattern']))}</td><td>{row['best_non_strict']['success']:.0%}</td>"
-            "</tr>"
-        )
-    return "<table><tr><th>PAI</th><th>Commit Acft</th><th>Commit %</th><th>Best Strict Band Pattern</th><th>Success</th><th>Best Non-Strict Band Pattern</th><th>Success</th><th>Best Strict To Max Pattern</th><th>Success</th><th>Best Non-Strict To Max Pattern</th><th>Success</th></tr>" + "".join(body) + "</table>"
-
-
-def _fleet_action(row: dict[str, object]) -> dict[str, object]:
-    required = int(row["required_sorties"])
-    options = [
-        ("Strict, in UTE band", row["best_band_strict"], "Plan in acceptable UTE band using strict sustainability."),
-        ("Non-strict, in UTE band", row["best_band_non_strict"], "Plan in acceptable UTE band, but depends on uncommitted MC aircraft recovery."),
-        ("Strict, to max commit", row["best_strict"], "Requirement may require operating above the acceptable UTE band."),
-        ("Non-strict, to max commit", row["best_non_strict"], "Requirement may require above-band UTE and non-strict recovery."),
-    ]
-    for model, candidate, recommendation in options:
-        if candidate["success"] >= SUSTAINABLE_SUCCESS_THRESHOLD and candidate["sorties"] >= required:
-            return {"sorties": candidate["sorties"], "ute": candidate["ute"], "success": candidate["success"], "margin": candidate["sorties"] - required, "model": model, "recommendation": recommendation, "risk": _fleet_risk_note(candidate, required)}
-    model, candidate, _recommendation = max(options, key=lambda option: (option[1]["success"], option[1]["sorties"]))
-    return {"sorties": candidate["sorties"], "ute": candidate["ute"], "success": candidate["success"], "margin": candidate["sorties"] - required, "model": model, "recommendation": "Does not meet the current requirement at the sustainability threshold.", "risk": _fleet_risk_note(candidate, required)}
-
-
-def _fleet_risk_note(candidate: dict[str, object], required: int) -> str:
-    if candidate["sorties"] < required:
-        return "Insufficient weekly sortie capacity."
-    if candidate["success"] < SUSTAINABLE_SUCCESS_THRESHOLD:
-        return "Below success threshold."
-    if candidate["ute"] > ACCEPTABLE_UTE_MAX:
-        return "Above acceptable UTE band."
-    return "Inside acceptable UTE band."
-
-
-def _minimum_pai_for(rows: list[dict[str, object]], key: str) -> dict[str, object] | None:
-    for row in rows:
-        candidate = row[key]
-        if candidate["sorties"] >= row["required_sorties"] and candidate["success"] >= SUSTAINABLE_SUCCESS_THRESHOLD:
-            return {"pai": row["pai"], "sorties": candidate["sorties"], "ute": candidate["ute"], "success": candidate["success"]}
-    return None
-
-
-def _minimum_pai_text(row: dict[str, object] | None) -> str:
-    if row is None:
-        return "None"
-    return f"{row['pai']} PAI, {row['sorties']} sorties, {row['ute']:.2f} UTE, {row['success']:.0%}"
-
-
-def _balanced_schedule(weekly_sorties: int, commit_limit: int) -> dict[str, DaySchedule]:
-    daily_totals = _balanced_daily_totals(weekly_sorties)
-    return {day: DaySchedule(first_go=min(total, commit_limit), second_go=max(0, total - min(total, commit_limit))) for day, total in zip(FLYING_DAYS, daily_totals)}
-
-
-def _balanced_daily_totals(weekly_sorties: int) -> list[int]:
-    base = weekly_sorties // len(FLYING_DAYS)
-    extra = weekly_sorties % len(FLYING_DAYS)
-    return [base + (1 if index < extra else 0) for index in range(len(FLYING_DAYS))]
-
-
-def _schedule_label(schedule: dict[str, DaySchedule]) -> str:
-    return "-".join(f"{schedule[day].daily_sorties}({schedule[day].first_go})" for day in FLYING_DAYS)
-
-
-def _ute_for_sorties(sorties: int, pai: int) -> float:
-    return sorties / (pai * len(FLYING_DAYS)) if pai else 0.0
-
-
-def run_sensitivity(scenarios: dict[str, Scenario], seed: int) -> list[dict[str, object]]:
-    rows = []
-    for scenario_index, (pattern_name, scenario) in enumerate(scenarios.items()):
-        baseline = simulate(scenario, iterations=SENSITIVITY_ITERATIONS, seed=seed + scenario_index * 1000)
-        for parameter_index, (field_name, label) in enumerate(SENSITIVITY_PARAMETERS):
-            low = simulate(_perturb_scenario(scenario, field_name, 1 - SENSITIVITY_SWING), iterations=SENSITIVITY_ITERATIONS, seed=seed + scenario_index * 1000 + parameter_index * 20 + 1)
-            high = simulate(_perturb_scenario(scenario, field_name, 1 + SENSITIVITY_SWING), iterations=SENSITIVITY_ITERATIONS, seed=seed + scenario_index * 1000 + parameter_index * 20 + 2)
-            low_delta = low.probability_success - baseline.probability_success
-            high_delta = high.probability_success - baseline.probability_success
-            rows.append({"pattern": pattern_name, "parameter": label, "baseline": baseline.probability_success, "low": low.probability_success, "high": high.probability_success, "low_delta": low_delta, "high_delta": high_delta, "swing": max(abs(low_delta), abs(high_delta))})
-    return sorted(rows, key=lambda row: row["swing"], reverse=True)
-
-
-def _perturb_scenario(scenario: Scenario, field_name: str, multiplier: float) -> Scenario:
-    current_value = getattr(scenario.homestation, field_name)
-    new_value = min(1.0, max(0.0, current_value * multiplier))
-    return replace(scenario, homestation=replace(scenario.homestation, **{field_name: new_value}))
-
-
-def _sensitivity_table(rows: list[dict[str, object]]) -> str:
-    body = []
-    for row in rows[:12]:
-        body.append(f"<tr><td>{escape(str(row['pattern']))}</td><td>{escape(str(row['parameter']))}</td><td>{row['baseline']:.2%}</td><td>{row['low']:.2%}</td><td>{row['high']:.2%}</td><td>{row['low_delta']:+.2%}</td><td>{row['high_delta']:+.2%}</td></tr>")
-    return "<table><tr><th>Pattern</th><th>Input</th><th>Baseline</th><th>-10%</th><th>+10%</th><th>-10% Delta</th><th>+10% Delta</th></tr>" + "".join(body) + "</table>"
-
-
-def _summary_table(summaries: dict[str, SimulationSummary], title: str) -> str:
-    rows = []
-    for name, summary in sorted(summaries.items(), key=lambda item: item[1].probability_success, reverse=True):
-        rows.append(
-            f"<tr><td>{escape(name)}</td><td class='{_threshold_class(summary.probability_success)}'>{summary.probability_success:.2%}</td><td>{summary.probability_meet_sorties:.2%}</td><td>{summary.probability_meet_aircraft_required:.2%}</td><td>{summary.probability_within_ttp_commit:.2%}</td><td>{_weekly_ute(summary):.2f}</td><td>{summary.planned_weekly_sorties}</td><td>{summary.required_weekly_sorties}</td><td>{summary.planned_attrition}</td><td>{summary.average_actual_attrition:.2f}</td><td>{summary.average_next_monday_available:.1f}</td><td>{escape(_top_failure_mode(summary))}</td></tr>"
-        )
-    return f"<h3>{escape(title)}</h3><table><tr><th>Pattern</th><th>Success</th><th>Sorties</th><th>Aircraft</th><th>Commit</th><th>UTE</th><th>Planned</th><th>Required</th><th>Planned Attrition</th><th>Avg Attrition</th><th>Avg Next Mon</th><th>Top Failure</th></tr>{''.join(rows)}</table>"
-
-
-def _success_chart(strict: dict[str, SimulationSummary], non_strict: dict[str, SimulationSummary]) -> str:
-    labels = []
-    values = []
-    for name in strict:
-        labels.extend([f"{name} Strict", f"{name} Non-Strict"])
-        values.extend([strict[name].probability_success * 100, non_strict[name].probability_success * 100])
-    return _bar_chart(labels, values, "Overall Success Probability", "%")
-
-
-def _failure_mode_chart(summaries: dict[str, SimulationSummary], title: str) -> str:
-    counts: Counter[str] = Counter()
-    for summary in summaries.values():
-        counts.update(summary.failure_mode_counts)
-    labels = list(counts.keys()) or ["No Failures"]
-    values = [counts[label] for label in labels] or [0]
-    return _bar_chart(labels, values, title, "iterations")
-
-
-def _bar_chart(labels: list[str], values: list[float], title: str, unit: str) -> str:
-    width = 980
-    height = 360
-    margin_left = 56
-    margin_bottom = 120
-    margin_top = 42
-    plot_width = width - margin_left - 24
-    plot_height = height - margin_top - margin_bottom
-    max_value = max(max(values), 1) if values else 1
-    bar_gap = 8
-    bar_width = max(12, (plot_width - bar_gap * (len(values) - 1)) / max(len(values), 1))
-    bars = []
-    for index, value in enumerate(values):
-        x = margin_left + index * (bar_width + bar_gap)
-        bar_height = (value / max_value) * plot_height if max_value else 0
-        y = margin_top + plot_height - bar_height
-        label = escape(labels[index])
-        value_label = f"{value:.1f}" if isinstance(value, float) and value % 1 else f"{int(value)}"
-        bars.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width:.1f}" height="{bar_height:.1f}" fill="#4d6f91"></rect><text x="{x + bar_width / 2:.1f}" y="{y - 5:.1f}" text-anchor="middle" font-size="11">{value_label}</text><text transform="translate({x + bar_width / 2:.1f},{height - margin_bottom + 18}) rotate(55)" text-anchor="start" font-size="11">{label}</text>')
-    return f'<div class="chart"><svg width="{width}" height="{height}" role="img" aria-label="{escape(title)}"><text x="{width / 2:.1f}" y="22" text-anchor="middle" font-size="16" font-weight="700">{escape(title)}</text><text x="8" y="{margin_top + plot_height / 2:.1f}" transform="rotate(-90 8,{margin_top + plot_height / 2:.1f})" text-anchor="middle" font-size="12">{escape(unit)}</text><line x1="{margin_left}" y1="{margin_top + plot_height}" x2="{width - 16}" y2="{margin_top + plot_height}" stroke="#6f7a85"></line><line x1="{margin_left}" y1="{margin_top}" x2="{margin_left}" y2="{margin_top + plot_height}" stroke="#6f7a85"></line>{''.join(bars)}</svg></div>'
-
-
-def _methodology_box() -> str:
-    return '<div class="methodology"><p><b>Simulation setup:</b> named-pattern comparisons use 10,000 Monte Carlo iterations. Sensitivity analysis uses 2,500 iterations per input swing. Fleet sweep uses 1,000 iterations per candidate.</p><p><b>Strict model:</b> only scheduled spares can recover ground aborts. <b>Non-strict model:</b> scheduled spares plus uncommitted MC aircraft can recover ground aborts.</p><p><b>Current limitations:</b> this is a day-level model. It does not yet include crews, fuels, weapons, phase inspections, parts, or maintenance shift capacity.</p></div>'
-
-
-def _best_summary(summaries: dict[str, SimulationSummary]) -> tuple[str, SimulationSummary]:
-    return max(summaries.items(), key=lambda item: item[1].probability_success)
-
-
-def _weekly_ute(summary: SimulationSummary) -> float:
-    pai = summary.sample_iteration.days[0].pai if summary.sample_iteration.days else 0
-    return summary.planned_weekly_sorties / (pai * len(FLYING_DAYS)) if pai else 0.0
-
-
-def _top_failure_mode(summary: SimulationSummary) -> str:
-    if not summary.failure_mode_counts:
-        return "No Failures"
-    mode, count = max(summary.failure_mode_counts.items(), key=lambda item: item[1])
-    return f"{mode} ({count})"
-
-
-def _threshold_class(probability: float) -> str:
-    if probability >= 0.90:
-        return "green"
-    if probability >= 0.70:
-        return "yellow"
-    return "red"
-
-
-def _why_pattern(summary: SimulationSummary) -> str:
-    if summary.probability_success >= 0.90:
-        return "Actual attrition usually stays inside the planned attrition allowance, so the pattern meets the required weekly sorties."
-    top_mode = _top_failure_mode(summary)
-    if "Sortie Shortfall" in top_mode:
-        return "The pattern fails primarily because actual sortie attrition exceeds the planned attrition allowance."
-    if "Aircraft Availability" in top_mode:
-        return "The pattern fails primarily because available MC aircraft fall below the committed daily requirement."
-    if "TTP Commit" in top_mode:
-        return "The pattern fails primarily because committed aircraft exceed the TTP commit limit."
-    if "Repair Backlog" in top_mode:
-        return "The pattern fails primarily because aircraft do not recover fast enough by the end of the week."
-    return "The pattern has mixed failure behavior and should be reviewed against the detailed distributions."
-
-
-def _driver_text(row: dict[str, object] | None) -> str:
-    if not row:
-        return "No sensitivity driver"
-    return f"{row['pattern']} / {row['parameter']} (max swing {row['swing']:.2%})"
+def _risk_class(risk: str) -> str:
+    return {
+        "Green": "green",
+        "Yellow": "yellow",
+        "Orange": "yellow",
+        "Red": "red",
+    }.get(risk, "")
 
 
 if __name__ == "__main__":
