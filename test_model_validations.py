@@ -1,6 +1,7 @@
 import unittest
 from dataclasses import replace
 
+from gui_controller import build_gui_config, display_rows, run_gui_model
 from input_validation import validate_scenario
 from optimizer import planned_attrition_allowance
 from pattern_generator import capacity_points, generate_turn_pattern_permutations, PatternConstraints
@@ -211,6 +212,60 @@ class ModelValidationTests(unittest.TestCase):
         self.assertEqual(metadata.policy_version, DEFAULT_TTP_POLICY.policy_version)
         self.assertEqual(metadata.random_seed, 42)
         self.assertEqual(len(metadata.input_fingerprint), 16)
+
+    def test_gui_controller_runs_thin_dashboard_flow(self):
+        config = build_gui_config(
+            pai_min=11,
+            pai_max=11,
+            required_weekly_sorties=24,
+            iterations=2,
+            random_seed=42,
+            mc_rate=0.735,
+            ground_abort_rate=0.064,
+            break_rate=0.265,
+            fix_8hr_rate=0.496,
+            fix_12hr_rate=0.607,
+            fix_24hr_rate=0.803,
+            event_count_model="Normal TTP",
+            fix_count_model="Normal TTP",
+            max_patterns=2,
+            max_daily_sorties=8,
+            max_second_go=3,
+            max_day_to_day_delta=2,
+            ute_levels=(0.40,),
+            attrition_scenarios=(("Requirement Based", 0.0),),
+        )
+        result = run_gui_model(config, include_surge=True)
+        self.assertTrue(result.best_rows)
+        self.assertIsNotNone(result.recommendation)
+        self.assertTrue(display_rows(result.best_rows))
+        self.assertIsNotNone(result.surge)
+
+    def test_optimizer_config_rates_feed_model_template(self):
+        config = build_gui_config(
+            pai_min=11,
+            pai_max=11,
+            required_weekly_sorties=24,
+            iterations=1,
+            random_seed=7,
+            mc_rate=0.50,
+            ground_abort_rate=0.0,
+            break_rate=0.0,
+            fix_8hr_rate=0.0,
+            fix_12hr_rate=0.0,
+            fix_24hr_rate=0.0,
+            event_count_model="Normal TTP",
+            fix_count_model="Normal TTP",
+            max_patterns=1,
+            max_daily_sorties=5,
+            max_second_go=1,
+            max_day_to_day_delta=2,
+            ute_levels=(0.40,),
+            attrition_scenarios=(("Requirement Based", 0.0),),
+        )
+        result = run_gui_model(config, include_surge=False)
+        self.assertTrue(result.rows)
+        self.assertLessEqual(max(row["avg_next_monday"] for row in result.rows), 5)
 
     def test_fractional_aircraft_counts_round_down(self):
         scn = scenario(

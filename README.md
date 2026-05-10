@@ -1,4 +1,4 @@
-# Turn Pattern Sustainability Modeler
+# Air Force Turn Pattern Sustainability Modeler
 
 This project models whether a weekly flying turn pattern is sustainable for a given PAI, UTE target, sortie requirement, maintenance break rate, ground-abort rate, and repair profile. It keeps the spreadsheet-style logic, but runs it repeatedly through Monte Carlo iterations so the output is a probability of success rather than a single deterministic answer.
 
@@ -459,6 +459,31 @@ The report now evaluates requirement-based planning plus three optional planned 
 For each generated PAI/UTE case, required sorties are either the selected required target or planned sorties minus the selected optional attrition allowance. Attrition is reported as planned allowance, actual attrition count, actual attrition percentage, and attrition delta; it is not a standalone gate for overall success.
 
 The current report defaults are tuned for practical local runtime. The optimizer module can still run all valid generated permutations under its configured constraints. Increase `REPORT_ITERATIONS`, remove `max_patterns_per_requirement`, or loosen `PatternConstraints` in `analysis_report.py` when you want a deeper overnight-style search.
+
+## Run The Streamlit GUI
+
+Install the GUI dependency once:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+Then launch the dashboard:
+
+```bash
+streamlit run gui_app.py
+```
+
+The GUI is intentionally a thin layer over the model. It collects inputs, builds an `OptimizationConfig`, runs the optimizer/surge model, and displays:
+
+- Executive recommendation.
+- Capacity sweep.
+- Ranked best patterns.
+- Pattern detail table.
+- Max-commit surge duration.
+- Validation warnings and run metadata.
+
+The GUI does not contain model math. Core logic remains in the policy, simulation, optimizer, surge, validation, and recommendation modules.
 
 UTE is calculated as `weekly sorties / (PAI * flying days)`. The default flying-day count is 5, but the optimizer accepts a configurable `flying_days` value.
 

@@ -29,6 +29,7 @@ class OptimizationConfig:
     flying_days: int | None = None
     ute_levels: tuple[float, ...] | None = None
     iterations: int = 250
+    random_seed: int | None = 55
     success_threshold: float | None = None
     required_weekly_sorties: int | None = None
     planned_attrition_rate: float | None = None
@@ -38,24 +39,43 @@ class OptimizationConfig:
     fix_count_models: tuple[str, ...] = ("Probabilistic Monte Carlo",)
     max_patterns_per_requirement: int | None = None
     constraints: PatternConstraints = PatternConstraints()
+    mc_rate: float = 0.735
+    ground_abort_rate: float = 0.064
+    break_rate: float = 0.265
+    fix_8hr_rate: float = 0.496
+    fix_12hr_rate: float = 0.607
+    fix_24hr_rate: float = 0.803
 
 
 def base_optimizer_scenario(
     use_uncommitted_aircraft_for_ga_recovery: bool = False,
     policy: TtpPolicy = DEFAULT_TTP_POLICY,
+    *,
+    mc_rate: float = 0.735,
+    ground_abort_rate: float = 0.064,
+    break_rate: float = 0.265,
+    fix_8hr_rate: float = 0.496,
+    fix_12hr_rate: float = 0.607,
+    fix_24hr_rate: float = 0.803,
 ) -> Scenario:
     return build_scenario(
         schedule={},
         total_required_sorties=1,
         use_uncommitted_aircraft_for_ga_recovery=use_uncommitted_aircraft_for_ga_recovery,
         policy=policy,
+        mc_rate=mc_rate,
+        ground_abort_rate=ground_abort_rate,
+        break_rate=break_rate,
+        fix_8hr_rate=fix_8hr_rate,
+        fix_12hr_rate=fix_12hr_rate,
+        fix_24hr_rate=fix_24hr_rate,
     )
 
 
 def optimize_turn_patterns(config: OptimizationConfig | None = None) -> list[dict[str, object]]:
     config = config or OptimizationConfig()
-    template = base_optimizer_scenario(False, config.policy)
-    rng = Random(55)
+    template = _template_from_config(config)
+    rng = Random(config.random_seed)
     rows = []
     pattern_cache: dict[tuple[int, int, PatternConstraints], list[dict[str, object]]] = {}
     for pai in range(config.pai_min, config.pai_max + 1):
@@ -133,6 +153,19 @@ def optimize_turn_patterns(config: OptimizationConfig | None = None) -> list[dic
             row["pattern_signature"],
             row["schedule_signature"],
         ),
+    )
+
+
+def _template_from_config(config: OptimizationConfig) -> Scenario:
+    return base_optimizer_scenario(
+        False,
+        config.policy,
+        mc_rate=config.mc_rate,
+        ground_abort_rate=config.ground_abort_rate,
+        break_rate=config.break_rate,
+        fix_8hr_rate=config.fix_8hr_rate,
+        fix_12hr_rate=config.fix_12hr_rate,
+        fix_24hr_rate=config.fix_24hr_rate,
     )
 
 
