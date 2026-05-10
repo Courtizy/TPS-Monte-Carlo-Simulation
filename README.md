@@ -1,4 +1,4 @@
-# Air Force Turn Pattern Sustainability Modeler
+# Turn Pattern Sustainability Modeler
 
 This project models whether a weekly flying turn pattern is sustainable for a given PAI, UTE target, sortie requirement, maintenance break rate, ground-abort rate, and repair profile. It keeps the spreadsheet-style logic, but runs it repeatedly through Monte Carlo iterations so the output is a probability of success rather than a single deterministic answer.
 
