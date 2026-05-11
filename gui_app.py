@@ -482,6 +482,7 @@ result = st.session_state.get("best_fit_result")
 if not result:
     st.info("Set inputs in the sidebar and run the model.")
     st.stop()
+    raise SystemExit
 
 summary, capacity, patterns, detail = st.tabs(["Summary", "Capacity Sweep", "Best Patterns", "Pattern Detail"])
 rows = result["rows"]
