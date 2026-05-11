@@ -5,7 +5,7 @@ from functools import lru_cache
 from itertools import product
 from statistics import mean, pstdev
 
-from simulation_engine import DaySchedule, Scenario
+from simulation import DaySchedule, Scenario
 from ttp_rules import DEFAULT_TTP_POLICY, TtpPolicy, commit_aircraft, floor_count
 
 
@@ -83,21 +83,12 @@ def _capacity_points_for_ute_band(
     commit_rate: float,
     policy: TtpPolicy,
 ) -> list[dict[str, float | int | str]]:
-    if pai <= 0 or flying_days <= 0:
-        return []
-    denominator = pai * flying_days
-    min_sorties = floor_count(denominator * policy.ute_min)
-    max_sorties = floor_count(denominator * policy.ute_max)
-    return [
-        {
-            "label": f"UTE {weekly_sorties / denominator:.2f}",
-            "target_ute": weekly_sorties / denominator,
-            "weekly_sorties": weekly_sorties,
-            "actual_ute": weekly_sorties / denominator,
-            "commit_aircraft": floor_count(pai * commit_rate),
-        }
-        for weekly_sorties in range(min_sorties, max_sorties + 1)
-    ]
+    return _capacity_points_for_ute_levels(
+        pai,
+        flying_days,
+        commit_rate,
+        planning_ute_levels(policy),
+    )
 
 
 def _capacity_points_for_ute_levels(
@@ -107,23 +98,46 @@ def _capacity_points_for_ute_levels(
     ute_levels: tuple[float, ...],
 ) -> list[dict[str, float | int | str]]:
     points: list[dict[str, float | int | str]] = []
-    seen_sorties: set[int] = set()
     for ute in ute_levels:
         weekly_sorties = floor_count(pai * flying_days * ute)
-        if weekly_sorties in seen_sorties:
-            continue
         actual_ute = weekly_sorties / (pai * flying_days) if pai else 0
         points.append(
             {
-                "label": f"UTE {actual_ute:.2f}",
+                "label": f"UTE {ute:.2f}",
                 "target_ute": ute,
                 "weekly_sorties": weekly_sorties,
                 "actual_ute": actual_ute,
                 "commit_aircraft": floor_count(pai * commit_rate),
             }
         )
-        seen_sorties.add(weekly_sorties)
     return points
+
+
+def deployed_ute_calculation(
+    *,
+    om_days: int,
+    deployment_days: int,
+    aircraft: int,
+    expected_sorties: int,
+) -> dict[str, float | int]:
+    deployed_ute = expected_sorties / (aircraft * deployment_days) if aircraft > 0 and deployment_days > 0 else 0
+    equivalent_homestation_monthly_sorties = floor_count(aircraft * om_days * deployed_ute)
+    homestation_weeks = om_days / len(DEFAULT_TTP_POLICY.flying_days) if om_days else 0
+    equivalent_homestation_weekly_sorties = (
+        equivalent_homestation_monthly_sorties / homestation_weeks if homestation_weeks else 0
+    )
+    return {
+        "om_days": om_days,
+        "deployment_days": deployment_days,
+        "aircraft": aircraft,
+        "expected_sorties": expected_sorties,
+        "deployed_ute": deployed_ute,
+        "equivalent_homestation_monthly_sorties": equivalent_homestation_monthly_sorties,
+        "equivalent_homestation_weekly_sorties": equivalent_homestation_weekly_sorties,
+        "within_planning_band": DEFAULT_TTP_POLICY.ute_min <= deployed_ute <= DEFAULT_TTP_POLICY.ute_max,
+        "below_planning_band": deployed_ute < DEFAULT_TTP_POLICY.ute_min,
+        "above_planning_band": deployed_ute > DEFAULT_TTP_POLICY.ute_max,
+    }
 
 
 def generate_turn_pattern_permutations(
