@@ -505,7 +505,7 @@ with st.sidebar:
 
 if page == "Deployed UTE Calculator":
     st.header("DSUTE Calculator")
-    st.caption("DSUTE is calculated on the sortie side only: Deployed Sorties / (Deployed Possessed aircraft x O&M days)."
+    st.caption("DSUTE is calculated on the sortie side only: Deployed Sorties / (Deployed Possessed aircraft x O&M days).")
     col1, col2, col3 = st.columns(3)
     om_days = int(col1.number_input("O&M Days", min_value=1, value=7, step=1))
     offutt_aircraft = int(col2.number_input("Offutt Possessed Aircraft", min_value=1, value=11, step=1))
