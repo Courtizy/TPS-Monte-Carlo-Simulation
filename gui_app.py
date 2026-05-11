@@ -116,7 +116,6 @@ if result is None:
 if result.validation_errors:
     st.error("Input errors must be fixed before running.")
     st.write(result.validation_errors)
-    st.stop()
 
 if result.validation_warnings:
     st.warning("Assumption warnings")
@@ -183,6 +182,20 @@ with surge:
             st.warning(f"Surge falls to Red in week {first_red['week']}.")
 
 with validation:
+    st.subheader("Validation Status")
+    status_cols = st.columns(4)
+    status_cols[0].metric("Errors", len(result.validation_errors))
+    status_cols[1].metric("Warnings", len(result.validation_warnings))
+    status_cols[2].metric("Rows Tested", len(result.rows))
+    status_cols[3].metric("Best Rows", len(result.best_rows))
+
+    if result.validation_errors:
+        st.error("This run has blocking input errors. Fix the items below before trusting the output.")
+    elif result.validation_warnings:
+        st.warning("This run completed, but some assumptions should be reviewed.")
+    else:
+        st.success("All optimizer-level validation checks passed.")
+
     st.subheader("Run Metadata")
     st.write(
         {
@@ -194,6 +207,60 @@ with validation:
             "fix_model": result.config.fix_count_models[0],
         }
     )
+
+    st.subheader("Model Scope")
+    st.dataframe(
+        [
+            {"Item": "PAI Range", "Value": f"{result.config.pai_min}-{result.config.pai_max}"},
+            {"Item": "Required Weekly Sorties", "Value": result.config.required_weekly_sorties or "Calculated by attrition mode"},
+            {"Item": "UTE Search", "Value": "Full 0.40-0.52 band" if result.config.ute_levels is None else ", ".join(f"{ute:.2f}" for ute in result.config.ute_levels)},
+            {"Item": "Attrition Scenarios", "Value": ", ".join(name for name, _ in result.config.attrition_scenarios)},
+            {"Item": "Max Patterns Per Requirement", "Value": result.config.max_patterns_per_requirement},
+            {"Item": "Surge Case", "Value": result.config.policy.surge_label},
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.subheader("Policy Assumptions")
+    st.dataframe(
+        [
+            {"Rule": "Commit Rate", "Value": f"{result.config.policy.commit_rate:.0%}"},
+            {"Rule": "UTE Band", "Value": f"{result.config.policy.ute_min:.2f}-{result.config.policy.ute_max:.2f}"},
+            {"Rule": "UTE Step", "Value": f"{result.config.policy.ute_step:.2f}"},
+            {"Rule": "Flying Days", "Value": ", ".join(result.config.policy.flying_days)},
+            {"Rule": "Long Fix Start Day", "Value": result.config.policy.long_fix_start_day},
+            {"Rule": "Max Second-Go", "Value": result.config.policy.max_second_go},
+            {"Rule": "Max Third-Go", "Value": result.config.policy.max_third_go},
+            {"Rule": "Max Fourth-Go", "Value": result.config.policy.max_fourth_go},
+            {"Rule": "Friday Recovery Weight", "Value": result.config.policy.human_factor_weights.friday_recovery_score},
+            {"Rule": "Backend Load Penalty", "Value": result.config.policy.human_factor_weights.optimizer_backend_penalty},
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.subheader("Validation Checks")
+    st.dataframe(
+        [
+            {"Check": "PAI bounds are positive and ordered", "Status": "Pass" if result.config.pai_min > 0 and result.config.pai_min <= result.config.pai_max else "Error"},
+            {"Check": "Iteration count supports stable output", "Status": "Pass" if result.config.iterations >= 100 else "Warning"},
+            {"Check": "Attrition rates are between 0% and 100%", "Status": "Pass" if all(0 <= rate <= 1 for _, rate in result.config.attrition_scenarios) else "Error"},
+            {"Check": "Success threshold is valid", "Status": "Pass" if result.config.success_threshold is None or 0 <= result.config.success_threshold <= 1 else "Error"},
+            {"Check": "Planning capacity rows were generated", "Status": "Pass" if result.capacity_rows else "Warning"},
+            {"Check": "Simulation rows were generated", "Status": "Pass" if result.rows else "Warning"},
+            {"Check": "Best-fit candidates were generated", "Status": "Pass" if result.best_rows else "Warning"},
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.subheader("Errors")
+    if result.validation_errors:
+        st.write(result.validation_errors)
+    else:
+        st.success("No blocking validation errors.")
+
     st.subheader("Assumption Warnings")
     if result.validation_warnings:
         st.write(result.validation_warnings)
