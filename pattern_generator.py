@@ -116,11 +116,18 @@ def _capacity_points_for_ute_levels(
 def deployed_ute_calculation(
     *,
     om_days: int,
-    offutt_possessed_aircraft: int,
-    offutt_sorties: int,
+    offutt_possessed_aircraft: int | None = None,
+    offutt_sorties: int | None = None,
     include_ol_sorties: bool = False,
     ol_sorties: int = 0,
+    aircraft: int | None = None,
+    expected_sorties: int | None = None,
+    deployment_days: int | None = None,
 ) -> dict[str, float | int]:
+    if offutt_possessed_aircraft is None:
+        offutt_possessed_aircraft = aircraft or 0
+    if offutt_sorties is None:
+        offutt_sorties = expected_sorties or 0
     included_ol_sorties = ol_sorties if include_ol_sorties else 0
     modeled_sorties = offutt_sorties + included_ol_sorties
     possessed_aircraft_days = offutt_possessed_aircraft * om_days

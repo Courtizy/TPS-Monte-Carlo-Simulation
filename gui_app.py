@@ -8,7 +8,6 @@ import streamlit as st
 from pattern_generator import (
     PatternConstraints,
     capacity_points,
-    deployed_ute_calculation,
     generate_turn_pattern_permutations,
 )
 from ttp_rules import (
@@ -438,6 +437,35 @@ def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     return [{field: row.get(field) for field in fields} for row in rows]
 
 
+def _dsute_calculation(
+    *,
+    om_days: int,
+    offutt_possessed_aircraft: int,
+    offutt_sorties: int,
+    include_ol_sorties: bool = False,
+    ol_sorties: int = 0,
+) -> dict[str, float | int | bool]:
+    included_ol_sorties = ol_sorties if include_ol_sorties else 0
+    modeled_sorties = offutt_sorties + included_ol_sorties
+    possessed_aircraft_days = offutt_possessed_aircraft * om_days
+    dsute = modeled_sorties / possessed_aircraft_days if possessed_aircraft_days > 0 else 0
+    return {
+        "om_days": om_days,
+        "offutt_possessed_aircraft": offutt_possessed_aircraft,
+        "offutt_sorties": offutt_sorties,
+        "include_ol_sorties": include_ol_sorties,
+        "ol_sorties_included": included_ol_sorties,
+        "modeled_sorties": modeled_sorties,
+        "possessed_aircraft_days": possessed_aircraft_days,
+        "dsute": dsute,
+        "sorties_per_day": modeled_sorties / om_days if om_days > 0 else 0,
+        "sorties_per_aircraft": modeled_sorties / offutt_possessed_aircraft if offutt_possessed_aircraft > 0 else 0,
+        "within_planning_band": DEFAULT_TTP_POLICY.ute_min <= dsute <= DEFAULT_TTP_POLICY.ute_max,
+        "below_planning_band": dsute < DEFAULT_TTP_POLICY.ute_min,
+        "above_planning_band": dsute > DEFAULT_TTP_POLICY.ute_max,
+    }
+
+
 st.title("Turn Pattern Sustainability Modeler")
 st.caption("Monte Carlo turn-pattern planning dashboard")
 
@@ -486,7 +514,7 @@ if page == "Deployed UTE Calculator":
     ol_sorties = 0
     if include_ol_sorties:
         ol_sorties = int(st.number_input("Downrange / OL Sorties to Include", min_value=0, value=0, step=1))
-    deployed = deployed_ute_calculation(
+    deployed = _dsute_calculation(
         om_days=om_days,
         offutt_possessed_aircraft=offutt_aircraft,
         offutt_sorties=offutt_sorties,
