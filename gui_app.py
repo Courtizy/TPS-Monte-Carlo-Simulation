@@ -476,23 +476,38 @@ with st.sidebar:
     max_day_delta = st.slider("Max Day-to-Day Delta", 0, 8, 2)
 
 if page == "Deployed UTE Calculator":
-    st.header("Deployed UTE Calculator")
-    col1, col2, col3, col4 = st.columns(4)
-    om_days = int(col1.number_input("Monthly O&M Days", min_value=1, value=20, step=1))
-    deployment_days = int(col2.number_input("Monthly Deployment Days", min_value=1, value=30, step=1))
-    deployed_aircraft = int(col3.number_input("Aircraft", min_value=1, value=11, step=1))
-    expected_sorties = int(col4.number_input("Expected Monthly Sorties", min_value=0, value=120, step=1))
+    st.header("DSUTE Calculator")
+    st.caption("DSUTE is calculated on the sortie side only: Offutt sorties / (Offutt possessed aircraft x O&M days).")
+    col1, col2, col3 = st.columns(3)
+    om_days = int(col1.number_input("O&M Days", min_value=1, value=7, step=1))
+    offutt_aircraft = int(col2.number_input("Offutt Possessed Aircraft", min_value=1, value=11, step=1))
+    offutt_sorties = int(col3.number_input("Offutt Sorties", min_value=0, value=31, step=1))
+    include_ol_sorties = st.checkbox("Include downrange / OL sorties in Offutt requirement", value=False)
+    ol_sorties = 0
+    if include_ol_sorties:
+        ol_sorties = int(st.number_input("Downrange / OL Sorties to Include", min_value=0, value=0, step=1))
     deployed = deployed_ute_calculation(
         om_days=om_days,
-        deployment_days=deployment_days,
-        aircraft=deployed_aircraft,
-        expected_sorties=expected_sorties,
+        offutt_possessed_aircraft=offutt_aircraft,
+        offutt_sorties=offutt_sorties,
+        include_ol_sorties=include_ol_sorties,
+        ol_sorties=ol_sorties,
     )
     metric_cols = st.columns(4)
-    metric_cols[0].metric("Deployed UTE", f"{float(deployed['deployed_ute']):.2f}")
-    metric_cols[1].metric("Homestation Monthly Equivalent", int(deployed["equivalent_homestation_monthly_sorties"]))
-    metric_cols[2].metric("Homestation Weekly Equivalent", f"{float(deployed['equivalent_homestation_weekly_sorties']):.1f}")
+    metric_cols[0].metric("DSUTE", f"{float(deployed['dsute']):.2f}")
+    metric_cols[1].metric("Possessed Aircraft Days", int(deployed["possessed_aircraft_days"]))
+    metric_cols[2].metric("Sorties / O&M Day", f"{float(deployed['sorties_per_day']):.1f}")
     metric_cols[3].metric("Planning Band", "Inside" if deployed["within_planning_band"] else "Outside")
+    if deployed["above_planning_band"]:
+        st.warning("This DSUTE is above the 0.40-0.52 homestation planning band.")
+    elif deployed["below_planning_band"]:
+        st.info("This DSUTE is below the 0.40-0.52 homestation planning band.")
+    else:
+        st.success("This DSUTE is inside the 0.40-0.52 homestation planning band.")
+    st.write(
+        f"Interpretation: {float(deployed['dsute']):.2f} DSUTE means Offutt is generating "
+        f"about {float(deployed['dsute']):.2f} sorties per possessed aircraft per O&M day."
+    )
     st.dataframe([deployed], use_container_width=True)
     st.stop()
 

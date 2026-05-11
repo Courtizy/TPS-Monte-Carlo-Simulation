@@ -116,27 +116,31 @@ def _capacity_points_for_ute_levels(
 def deployed_ute_calculation(
     *,
     om_days: int,
-    deployment_days: int,
-    aircraft: int,
-    expected_sorties: int,
+    offutt_possessed_aircraft: int,
+    offutt_sorties: int,
+    include_ol_sorties: bool = False,
+    ol_sorties: int = 0,
 ) -> dict[str, float | int]:
-    deployed_ute = expected_sorties / (aircraft * deployment_days) if aircraft > 0 and deployment_days > 0 else 0
-    equivalent_homestation_monthly_sorties = floor_count(aircraft * om_days * deployed_ute)
-    homestation_weeks = om_days / len(DEFAULT_TTP_POLICY.flying_days) if om_days else 0
-    equivalent_homestation_weekly_sorties = (
-        equivalent_homestation_monthly_sorties / homestation_weeks if homestation_weeks else 0
-    )
+    included_ol_sorties = ol_sorties if include_ol_sorties else 0
+    modeled_sorties = offutt_sorties + included_ol_sorties
+    possessed_aircraft_days = offutt_possessed_aircraft * om_days
+    dsute = modeled_sorties / possessed_aircraft_days if possessed_aircraft_days > 0 else 0
+    sorties_per_day = modeled_sorties / om_days if om_days > 0 else 0
+    sorties_per_aircraft = modeled_sorties / offutt_possessed_aircraft if offutt_possessed_aircraft > 0 else 0
     return {
         "om_days": om_days,
-        "deployment_days": deployment_days,
-        "aircraft": aircraft,
-        "expected_sorties": expected_sorties,
-        "deployed_ute": deployed_ute,
-        "equivalent_homestation_monthly_sorties": equivalent_homestation_monthly_sorties,
-        "equivalent_homestation_weekly_sorties": equivalent_homestation_weekly_sorties,
-        "within_planning_band": DEFAULT_TTP_POLICY.ute_min <= deployed_ute <= DEFAULT_TTP_POLICY.ute_max,
-        "below_planning_band": deployed_ute < DEFAULT_TTP_POLICY.ute_min,
-        "above_planning_band": deployed_ute > DEFAULT_TTP_POLICY.ute_max,
+        "offutt_possessed_aircraft": offutt_possessed_aircraft,
+        "offutt_sorties": offutt_sorties,
+        "include_ol_sorties": include_ol_sorties,
+        "ol_sorties_included": included_ol_sorties,
+        "modeled_sorties": modeled_sorties,
+        "possessed_aircraft_days": possessed_aircraft_days,
+        "dsute": dsute,
+        "sorties_per_day": sorties_per_day,
+        "sorties_per_aircraft": sorties_per_aircraft,
+        "within_planning_band": DEFAULT_TTP_POLICY.ute_min <= dsute <= DEFAULT_TTP_POLICY.ute_max,
+        "below_planning_band": dsute < DEFAULT_TTP_POLICY.ute_min,
+        "above_planning_band": dsute > DEFAULT_TTP_POLICY.ute_max,
     }
 
 

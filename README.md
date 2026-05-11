@@ -52,22 +52,26 @@ The page runs that pattern against both recovery models:
 - `Scheduled-Spares Only`
 - `Fleet-Flex Recovery`
 
-### Deployed UTE Calculator
+### DSUTE Calculator
 
-Converts monthly deployed flying assumptions into a comparable homestation UTE reference.
+Calculates homestation DSUTE on the sortie side only. Flying hours, average sortie duration, and downrange/OL flying hours are not used.
 
 Inputs:
 
-- Monthly O&M days.
-- Monthly deployment days.
-- Aircraft.
-- Expected monthly sorties.
+- Offutt sorties.
+- Offutt possessed aircraft.
+- O&M days.
+- Optional downrange / OL sorties only when intentionally toggled into the Offutt requirement.
 
 Calculations:
 
-- `deployed UTE = expected monthly sorties / (aircraft x deployment days)`
-- `homestation monthly equivalent = floor(aircraft x O&M days x deployed UTE)`
-- `homestation weekly equivalent = monthly equivalent / (O&M days / 5 flying days)`
+- `DSUTE = Offutt sorties / (Offutt possessed aircraft x O&M days)`
+
+Example:
+
+- `31 / (11 x 7) = 0.40 DSUTE`
+- `32 / (11 x 7) = 0.42 DSUTE`
+- `40 / (11 x 7) = 0.52 DSUTE`
 
 ## Model Flow
 
