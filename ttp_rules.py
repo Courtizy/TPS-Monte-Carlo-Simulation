@@ -47,7 +47,10 @@ class TtpPolicy:
     policy_name: str = "Default TTP Policy"
     policy_version: str = "1.0"
     commit_rate: float = 0.55
-    ute_levels: tuple[float, ...] = (0.40, 0.45, 0.50, 0.52)
+    ute_levels: tuple[float, ...] = ()
+    ute_min: float = 0.40
+    ute_max: float = 0.52
+    ute_step: float = 0.01
     flying_days: tuple[str, ...] = ("Mon", "Tue", "Wed", "Thu", "Fri")
     recovery_days: tuple[str, ...] = ("Sat", "Sun", "Next Mon")
     spare_rate: float = 0.0

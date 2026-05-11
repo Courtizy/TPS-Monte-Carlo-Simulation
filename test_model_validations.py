@@ -4,7 +4,7 @@ from dataclasses import replace
 from gui_controller import build_gui_config, display_rows, run_gui_model
 from input_validation import validate_scenario
 from optimizer import planned_attrition_allowance
-from pattern_generator import capacity_points, generate_turn_pattern_permutations, PatternConstraints
+from pattern_generator import capacity_points, generate_turn_pattern_permutations, PatternConstraints, planning_ute_levels
 from recommendation_engine import compare_baseline_candidate, recommendation_fields
 from scenario_metadata import build_run_metadata
 from simulation_engine import (
@@ -60,7 +60,12 @@ class ModelValidationTests(unittest.TestCase):
     def test_ute_and_commit_rounding(self):
         point = {item["label"]: item for item in capacity_points(11)}
         self.assertEqual(point["UTE 0.40"]["weekly_sorties"], 22)
-        self.assertEqual(point["UTE 0.45"]["weekly_sorties"], 24)
+        self.assertEqual(point["UTE 0.42"]["weekly_sorties"], 23)
+        self.assertEqual(point["UTE 0.44"]["weekly_sorties"], 24)
+        self.assertEqual(point["UTE 0.45"]["weekly_sorties"], 25)
+        self.assertEqual(point["UTE 0.47"]["weekly_sorties"], 26)
+        self.assertEqual(point["UTE 0.49"]["weekly_sorties"], 27)
+        self.assertEqual(point["UTE 0.51"]["weekly_sorties"], 28)
         self.assertEqual(point["55% Commit Surge"]["commit_aircraft"], 6)
         self.assertEqual(point["55% Commit Surge"]["weekly_sorties"], 30)
         nine_pai = {item["label"]: item for item in capacity_points(9)}
@@ -125,6 +130,17 @@ class ModelValidationTests(unittest.TestCase):
         self.assertEqual(point["UTE 0.50"]["weekly_sorties"], 25)
         self.assertEqual(point[policy.surge_label]["commit_aircraft"], 4)
         self.assertEqual(point[policy.surge_label]["weekly_sorties"], 20)
+
+    def test_default_policy_generates_continuous_ute_band(self):
+        self.assertIn(0.41, planning_ute_levels())
+        self.assertIn(0.47, planning_ute_levels())
+        sortie_counts = [
+            point["weekly_sorties"]
+            for point in capacity_points(11)
+            if point["label"] != DEFAULT_TTP_POLICY.surge_label
+        ]
+        self.assertEqual(sortie_counts, list(range(22, 29)))
+        self.assertEqual(len(sortie_counts), len(set(sortie_counts)))
 
     def test_policy_go_structure_limits_generated_patterns(self):
         policy = replace(DEFAULT_TTP_POLICY, max_second_go=1)

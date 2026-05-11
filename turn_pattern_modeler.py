@@ -508,6 +508,10 @@ def simulate(
     rng = Random(seed)
     iteration_results = [run_iteration(scenario, rng) for _ in range(iterations)]
     policy = scenario.policy
+    day_maps = [
+        {day_result.day: day_result for day_result in result.days}
+        for result in iteration_results
+    ]
     success_values = [1.0 if result.succeeds else 0.0 for result in iteration_results]
     success_mean = mean(success_values)
     success_std_dev = pstdev(success_values) if len(success_values) > 1 else 0.0
@@ -618,19 +622,15 @@ def simulate(
         ],
         daily_lost_sorties={
             day: [
-                next(day_result.lost_sorties for day_result in result.days if day_result.day == day)
-            for result in iteration_results
+                day_map[day].lost_sorties
+            for day_map in day_maps
             ]
             for day in policy.flying_days
         },
         daily_available_eod={
             day: [
-                next(
-                    day_result.available_eod
-                    for day_result in result.days
-                    if day_result.day == day
-                )
-                for result in iteration_results
+                day_map[day].available_eod
+                for day_map in day_maps
             ]
             for day in policy.all_days
         },

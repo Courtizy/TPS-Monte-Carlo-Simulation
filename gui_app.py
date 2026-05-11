@@ -21,6 +21,12 @@ st.set_page_config(
 st.title("Turn Pattern Sustainability Modeler")
 st.caption("Monte Carlo turn-pattern planning dashboard")
 
+
+@st.cache_data(show_spinner=False)
+def _cached_run(config, include_surge: bool):
+    return run_gui_model(config, include_surge=include_surge)
+
+
 with st.sidebar:
     st.header("Scenario")
     pai_mode = st.radio("PAI Mode", ["Single PAI", "PAI Sweep"], horizontal=True)
@@ -61,10 +67,8 @@ with st.sidebar:
         "Planning Attrition": 0.15,
         "High Attrition": 0.20,
     }
-    ute_levels = tuple(
-        level for level in DEFAULT_TTP_POLICY.ute_levels
-        if st.checkbox(f"Include {level:.2f} UTE", value=True)
-    )
+    ute_mode = st.radio("UTE Search", ["Full 0.40-0.52 Band", "Key Points Only"], horizontal=False)
+    ute_levels = () if ute_mode == "Full 0.40-0.52 Band" else (0.40, 0.45, 0.50, 0.52)
     max_patterns = st.number_input("Max Patterns Per Requirement", min_value=1, value=60, step=10)
 
     st.header("Pattern Rules")
@@ -98,10 +102,10 @@ if run:
             max_daily_sorties=int(max_daily_sorties),
             max_second_go=int(max_second_go),
             max_day_to_day_delta=int(max_day_delta),
-            ute_levels=ute_levels or DEFAULT_TTP_POLICY.ute_levels,
+            ute_levels=ute_levels,
             attrition_scenarios=((attrition_mode, attrition_lookup[attrition_mode]),),
         )
-        st.session_state.gui_result = run_gui_model(config, include_surge=include_surge)
+        st.session_state.gui_result = _cached_run(config, include_surge=include_surge)
 
 result = st.session_state.gui_result
 

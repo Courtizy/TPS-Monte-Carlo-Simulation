@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import product
 from statistics import mean, pstdev
 
@@ -40,24 +41,11 @@ def capacity_points(
 ) -> list[dict[str, float | int | str]]:
     commit_rate = policy.commit_rate if commit_rate is None else commit_rate
     flying_days = len(policy.flying_days) if flying_days is None else flying_days
-    ute_levels = policy.ute_levels if ute_levels is None else ute_levels
     points: list[dict[str, float | int | str]] = []
-    seen: set[tuple[int, str]] = set()
-    for ute in ute_levels:
-        weekly_sorties = floor_count(pai * flying_days * ute)
-        actual_ute = weekly_sorties / (pai * flying_days) if pai else 0
-        key = (weekly_sorties, f"UTE {ute:.2f}")
-        if key not in seen:
-            points.append(
-                {
-                    "label": f"UTE {ute:.2f}",
-                    "target_ute": ute,
-                    "weekly_sorties": weekly_sorties,
-                    "actual_ute": actual_ute,
-                    "commit_aircraft": floor_count(pai * commit_rate),
-                }
-            )
-            seen.add(key)
+    if ute_levels is None:
+        points.extend(_capacity_points_for_ute_band(pai, flying_days, commit_rate, policy))
+    else:
+        points.extend(_capacity_points_for_ute_levels(pai, flying_days, commit_rate, ute_levels))
 
     commit_aircraft_count = floor_count(pai * commit_rate)
     max_commit_weekly_sorties = commit_aircraft_count * flying_days
@@ -74,6 +62,70 @@ def capacity_points(
     return points
 
 
+def planning_ute_levels(policy: TtpPolicy = DEFAULT_TTP_POLICY) -> tuple[float, ...]:
+    if policy.ute_levels:
+        return policy.ute_levels
+    if policy.ute_step <= 0:
+        return (policy.ute_min, policy.ute_max)
+    levels = []
+    level = policy.ute_min
+    while level <= policy.ute_max + 1e-9:
+        levels.append(round(level, 2))
+        level += policy.ute_step
+    if levels[-1] != round(policy.ute_max, 2):
+        levels.append(round(policy.ute_max, 2))
+    return tuple(dict.fromkeys(levels))
+
+
+def _capacity_points_for_ute_band(
+    pai: int,
+    flying_days: int,
+    commit_rate: float,
+    policy: TtpPolicy,
+) -> list[dict[str, float | int | str]]:
+    if pai <= 0 or flying_days <= 0:
+        return []
+    denominator = pai * flying_days
+    min_sorties = floor_count(denominator * policy.ute_min)
+    max_sorties = floor_count(denominator * policy.ute_max)
+    return [
+        {
+            "label": f"UTE {weekly_sorties / denominator:.2f}",
+            "target_ute": weekly_sorties / denominator,
+            "weekly_sorties": weekly_sorties,
+            "actual_ute": weekly_sorties / denominator,
+            "commit_aircraft": floor_count(pai * commit_rate),
+        }
+        for weekly_sorties in range(min_sorties, max_sorties + 1)
+    ]
+
+
+def _capacity_points_for_ute_levels(
+    pai: int,
+    flying_days: int,
+    commit_rate: float,
+    ute_levels: tuple[float, ...],
+) -> list[dict[str, float | int | str]]:
+    points: list[dict[str, float | int | str]] = []
+    seen_sorties: set[int] = set()
+    for ute in ute_levels:
+        weekly_sorties = floor_count(pai * flying_days * ute)
+        if weekly_sorties in seen_sorties:
+            continue
+        actual_ute = weekly_sorties / (pai * flying_days) if pai else 0
+        points.append(
+            {
+                "label": f"UTE {actual_ute:.2f}",
+                "target_ute": ute,
+                "weekly_sorties": weekly_sorties,
+                "actual_ute": actual_ute,
+                "commit_aircraft": floor_count(pai * commit_rate),
+            }
+        )
+        seen_sorties.add(weekly_sorties)
+    return points
+
+
 def generate_turn_pattern_permutations(
     weekly_sorties: int,
     pai: int,
@@ -87,13 +139,27 @@ def generate_turn_pattern_permutations(
     daily_cap = min(constraints.max_daily_sorties, commit_aircraft_count + constraints.max_second_go)
     patterns = []
 
-    total_patterns = sorted(
-        _daily_total_patterns(weekly_sorties, constraints.flying_days, daily_cap, constraints),
-        key=lambda totals: _classification_sort_key(classify_turn_pattern(list(totals), commit_aircraft=commit_aircraft_count, policy=policy)),
+    classified_totals = sorted(
+        (
+            (
+                totals,
+                classify_turn_pattern(
+                    list(totals),
+                    commit_aircraft=commit_aircraft_count,
+                    policy=policy,
+                ),
+            )
+            for totals in _daily_total_patterns(
+                weekly_sorties,
+                constraints.flying_days,
+                daily_cap,
+                constraints,
+            )
+        ),
+        key=lambda item: _classification_sort_key(item[1], policy),
     )
 
-    for totals in total_patterns:
-        classification = classify_turn_pattern(list(totals), commit_aircraft=commit_aircraft_count, policy=policy)
+    for totals, classification in classified_totals:
         schedule_options = sorted(
             _schedule_options_from_daily_totals(totals, commit_aircraft_count, constraints, policy),
             key=lambda schedule: _schedule_pressure_sort_key(schedule, policy),
@@ -119,9 +185,12 @@ def generate_turn_pattern_permutations(
     return sorted(patterns, key=_pattern_sort_key)
 
 
-def _classification_sort_key(classification: dict[str, object]) -> tuple[object, ...]:
+def _classification_sort_key(
+    classification: dict[str, object],
+    policy: TtpPolicy = DEFAULT_TTP_POLICY,
+) -> tuple[object, ...]:
     return (
-        -_human_factor_shape_score(classification["daily_sequence"]),
+        -_human_factor_shape_score(classification["daily_sequence"], policy),
         classification["compression_score"],
         classification["friday_penalty"],
         classification["backend_penalty"],
@@ -167,7 +236,7 @@ def _schedule_pressure_sort_key(
         max(first_go_sequence, default=0),
         sum(deltas),
         total_frontlines,
-        _schedule_signature(schedule),
+        _schedule_signature(schedule, policy),
     )
 
 
@@ -303,7 +372,10 @@ def _schedule_options_from_daily_totals(
     constraints: PatternConstraints,
     policy: TtpPolicy = DEFAULT_TTP_POLICY,
 ) -> list[dict[str, DaySchedule]]:
-    day_options = [_day_schedule_options(total, commit_aircraft, constraints) for total in totals]
+    day_options = [
+        _day_schedule_options(total, commit_aircraft, constraints)
+        for total in totals
+    ]
     if any(not options for options in day_options):
         return []
     return [
@@ -316,9 +388,18 @@ def _day_schedule_options(
     total: int,
     commit_aircraft: int,
     constraints: PatternConstraints,
-) -> list[DaySchedule]:
+) -> tuple[DaySchedule, ...]:
+    return _day_schedule_options_cached(total, commit_aircraft, constraints)
+
+
+@lru_cache(maxsize=512)
+def _day_schedule_options_cached(
+    total: int,
+    commit_aircraft: int,
+    constraints: PatternConstraints,
+) -> tuple[DaySchedule, ...]:
     if total == 0:
-        return [DaySchedule()]
+        return (DaySchedule(),)
 
     options = []
     min_first_go = max(1, total - constraints.max_second_go)
@@ -330,13 +411,13 @@ def _day_schedule_options(
         if second_go > first_go:
             continue
         options.append(DaySchedule(first_go=first_go, second_go=second_go))
-    return sorted(
+    return tuple(sorted(
         options,
         key=lambda schedule: (
             schedule.first_go,
             -schedule.second_go,
         ),
-    )
+    ))
 
 
 def _daily_total_patterns(

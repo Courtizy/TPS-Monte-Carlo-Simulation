@@ -1,4 +1,4 @@
-# Turn Pattern Sustainability Modeler
+# Air Force Turn Pattern Sustainability Modeler
 
 This project models whether a weekly flying turn pattern is sustainable for a given PAI, UTE target, sortie requirement, maintenance break rate, ground-abort rate, and repair profile. It keeps the spreadsheet-style logic, but runs it repeatedly through Monte Carlo iterations so the output is a probability of success rather than a single deterministic answer.
 
@@ -46,7 +46,7 @@ The policy defaults live in `ttp_rules.py` as `TtpPolicy`. Changing that policy 
 It defines:
 
 - TTP commit rate, currently 55%.
-- UTE planning points, currently 0.40, 0.45, 0.50, and 0.52.
+- UTE planning band, currently 0.40 through 0.52 in 0.01 increments, plus a separate 55% max-commit surge case.
 - Spare calculation policy.
 - Recovery model:
   - `Scheduled-Spares Only`: only scheduled spares cover ground aborts.
@@ -206,7 +206,7 @@ flowchart TD
     A1 --> B["Capacity Sweep"]
     A5 --> B
     P --> B
-    B --> B1["For each PAI, calculate weekly sorties at 0.40, 0.45, 0.50, 0.52 UTE and round down to stay within the UTE target"]
+    B --> B1["For each PAI, calculate every unique weekly sortie count inside the 0.40-0.52 UTE band and round down to stay within each UTE target"]
     B --> B2["For surge only, calculate max commit aircraft = floor(PAI x 55%)"]
     B2 --> B3["Max surge sorties = commit aircraft x flying days"]
 
@@ -419,7 +419,7 @@ This creates `analysis_output/report.html` with the optimization workflow:
 - Input validation for out-of-range assumptions, suspicious fix-rate sequencing, commit-cap violations, low iteration counts, and unusually high attrition assumptions.
 - Recommendation fields that label each row as feasible, executable, sustainable, or not recommended, with a limiting factor and confidence level.
 - Scenario run metadata support for timestamp, model version, policy version, seed, iterations, recovery model, event/fix mode, and input fingerprint.
-- Capacity sweep by PAI for 0.40, 0.45, 0.50, 0.52 UTE, and 55% max-commit surge.
+- Capacity sweep by PAI for every unique weekly sortie count inside the 0.40-0.52 UTE band, with 0.40/0.45/0.50/0.52 shown as reference points and 55% max-commit kept as a separate surge case.
 - Generated Monday-Friday turn-pattern permutations that preserve unique daily flows and unique first/second-go splits.
 - Planned sorties scale by PAI and UTE. Required sortie success is based on actual flown sorties versus the required weekly target; optional attrition buffers calculate a planning requirement only when a direct required sortie target is not entered.
 - Automatic pattern family/name classification, such as Flat Turns, Waterfall, Recovery Valley, Sawtooth, and Compressed Surge.

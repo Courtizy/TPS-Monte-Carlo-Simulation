@@ -15,11 +15,11 @@ from optimizer import (
     optimize_turn_patterns,
 )
 from input_validation import validate_optimizer_config
-from pattern_generator import PatternConstraints, capacity_points
+from pattern_generator import PatternConstraints, capacity_points, planning_ute_levels
 from recommendation_engine import add_recommendations
 from report_utils import bar_chart, cards, probability_class, table, write_report
 from surge_model import simulate_surge_duration
-from ttp_rules import DEFAULT_TTP_POLICY, risk_band
+from ttp_rules import DEFAULT_TTP_POLICY, floor_count, risk_band
 
 
 REPORT_PATH = Path("analysis_output/report.html")
@@ -199,7 +199,7 @@ def _filters(config: OptimizationConfig) -> str:
     )
     ute_options = '<option value="all">All UTE</option>' + "".join(
         f'<option value="UTE {ute:.2f}">UTE {ute:.2f}</option>'
-        for ute in (config.ute_levels or config.policy.ute_levels)
+        for ute in (config.ute_levels or planning_ute_levels(config.policy))
     )
     event_count_options = '<option value="all">All Event Count Methods</option>' + "".join(
         f'<option value="{model}">{model}</option>' for model in config.event_count_models
@@ -282,8 +282,11 @@ def _best_fit_callout() -> str:
 def _capacity_table(config: OptimizationConfig) -> str:
     body = []
     attrs = []
-    ute_levels = config.ute_levels or config.policy.ute_levels
-    ute_labels = [f"UTE {ute:.2f}" for ute in ute_levels]
+    ute_levels = config.ute_levels or planning_ute_levels(config.policy)
+    reference_ute_levels = tuple(
+        ute for ute in (0.40, 0.45, 0.50, 0.52)
+        if min(ute_levels) <= ute <= max(ute_levels)
+    )
     for pai in range(config.pai_min, config.pai_max + 1):
         points = capacity_points(
             pai,
@@ -296,7 +299,11 @@ def _capacity_table(config: OptimizationConfig) -> str:
             [
                 pai,
                 by_label[config.policy.surge_label]["commit_aircraft"],
-                *[by_label[label]["weekly_sorties"] for label in ute_labels],
+                *[
+                    floor_count(pai * len(config.policy.flying_days) * ute)
+                    for ute in reference_ute_levels
+                ],
+                len([point for point in points if point["label"] != config.policy.surge_label]),
                 by_label[config.policy.surge_label]["weekly_sorties"],
                 f"{by_label[config.policy.surge_label]['actual_ute']:.2f}",
             ]
@@ -306,7 +313,8 @@ def _capacity_table(config: OptimizationConfig) -> str:
         [
             "PAI",
             "55% Commit Acft",
-            *[f"{ute:.2f} UTE" for ute in ute_levels],
+            *[f"{ute:.2f} UTE" for ute in reference_ute_levels],
+            "Band Patterns",
             "Max-Commit Sorties",
             "Max-Commit UTE",
         ],
