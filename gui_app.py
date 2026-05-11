@@ -454,7 +454,7 @@ def _dsute_calculation(
          "offutt_possessed_aircraft": offutt_possessed_aircraft,
         "offutt_sorties": offutt_sorties,
         "include_ol_sorties": include_ol_sorties,
-        "ol_sorties_included": included_ol_sorties,ies,
+        "ol_sorties_included": included_ol_sorties,
         "modeled_sorties": modeled_sorties,
         "possessed_aircraft_days": possessed_aircraft_days,
         "dsute": dsute,
