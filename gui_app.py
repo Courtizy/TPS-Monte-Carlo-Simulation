@@ -329,7 +329,7 @@ def _excel_iteration_table(summary: SimulationSummary) -> list[dict[str, object]
     rows = []
     for label, attr in row_specs:
         row = {"Metric": label}
-        row.update({day.day: getattr(day, attr) for day in days})
+        row.update({day.day: str(getattr(day, attr)) for day in days})
         rows.append(row)
     for label, attr in (
         ("Meets Acft Req", "meets_aircraft_required"),
@@ -536,7 +536,7 @@ if page == "Deployed UTE Calculator":
         f"Interpretation: {float(deployed['dsute']):.2f} DSUTE means Offutt is generating "
         f"about {float(deployed['dsute']):.2f} sorties per possessed aircraft per O&M day."
     )
-    st.dataframe([deployed], use_container_width=True)
+    st.dataframe([deployed], width="stretch")
     st.stop()
 
 if page == "Manual Turn Pattern":
@@ -577,14 +577,14 @@ if page == "Manual Turn Pattern":
         if result["warnings"]:
             st.warning(result["warnings"])
         st.subheader("Results")
-        st.dataframe(_summary_rows(result["summaries"]), use_container_width=True)
+        st.dataframe(_summary_rows(result["summaries"]), width="stretch")
         st.subheader("Interpretation")
-        st.dataframe(_manual_interpretation_rows(result["summaries"]), use_container_width=True, hide_index=True)
+        st.dataframe(_manual_interpretation_rows(result["summaries"]), width="stretch", hide_index=True)
         st.subheader("Sample Iteration Table")
         selected_model = st.selectbox("Sample Iteration Model", list(result["summaries"]))
         st.dataframe(
             _excel_iteration_table(result["summaries"][selected_model]),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
         st.caption(
@@ -642,10 +642,10 @@ with summary:
         st.write(f"Primary failure mode: {best['failure_mode']}")
 
 with capacity:
-    st.dataframe(result["capacity_rows"], use_container_width=True)
+    st.dataframe(result["capacity_rows"], width="stretch")
 
 with patterns:
-    st.dataframe(_display_rows(rows), use_container_width=True)
+    st.dataframe(_display_rows(rows), width="stretch")
 
 with detail:
     if rows:
