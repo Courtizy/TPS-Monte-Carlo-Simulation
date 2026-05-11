@@ -440,21 +440,21 @@ def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
 def _dsute_calculation(
     *,
     om_days: int,
-    offutt_possessed_aircraft: int,
-    offutt_sorties: int,
-    include_ol_sorties: bool = False,
-    ol_sorties: int = 0,
+    deployed_possessed_aircraft: int,
+    deployed_sorties: int,
+    include_deployed_sorties: bool = False,
+    deployed_sorties: int = 0,
 ) -> dict[str, float | int | bool]:
-    included_ol_sorties = ol_sorties if include_ol_sorties else 0
-    modeled_sorties = offutt_sorties + included_ol_sorties
-    possessed_aircraft_days = offutt_possessed_aircraft * om_days
+    included_deployed_sorties = deployed_sorties if include_deployed_sorties else 0
+    modeled_sorties = deployed_sorties + included_deployed_sorties
+    possessed_aircraft_days = deployed_possessed_aircraft * om_days
     dsute = modeled_sorties / possessed_aircraft_days if possessed_aircraft_days > 0 else 0
     return {
         "om_days": om_days,
-        "offutt_possessed_aircraft": offutt_possessed_aircraft,
-        "offutt_sorties": offutt_sorties,
-        "include_ol_sorties": include_ol_sorties,
-        "ol_sorties_included": included_ol_sorties,
+        "deployed_possessed_aircraft": deployed_possessed_aircraft,
+        "deployed_sorties": deployed_sorties,
+        "include_deployed_sorties": include_deployed_sorties,
+        "deployed_sorties_included": included_deployed_sorties,
         "modeled_sorties": modeled_sorties,
         "possessed_aircraft_days": possessed_aircraft_days,
         "dsute": dsute,
@@ -505,21 +505,21 @@ with st.sidebar:
 
 if page == "Deployed UTE Calculator":
     st.header("DSUTE Calculator")
-    st.caption("DSUTE is calculated on the sortie side only: Offutt sorties / (Offutt possessed aircraft x O&M days).")
+    st.caption("DSUTE is calculated on the sortie side only: Sorties / (Possessed aircraft x O&M days).")
     col1, col2, col3 = st.columns(3)
     om_days = int(col1.number_input("O&M Days", min_value=1, value=7, step=1))
-    offutt_aircraft = int(col2.number_input("Offutt Possessed Aircraft", min_value=1, value=11, step=1))
-    offutt_sorties = int(col3.number_input("Offutt Sorties", min_value=0, value=31, step=1))
-    include_ol_sorties = st.checkbox("Include downrange / OL sorties in Offutt requirement", value=False)
-    ol_sorties = 0
-    if include_ol_sorties:
-        ol_sorties = int(st.number_input("Downrange / OL Sorties to Include", min_value=0, value=0, step=1))
+    deployed_aircraft = int(col2.number_input("Possessed Aircraft", min_value=1, value=11, step=1))
+    deployed_sorties = int(col3.number_input("Sorties", min_value=0, value=31, step=1))
+    include_ol_sorties = st.checkbox("Include downrange / Deployed sorties in requirement", value=False)
+    deployed_sorties = 0
+    if include_deployed_sorties:
+        deployed_sorties = int(st.number_input("Downrange / Deployed Sorties to Include", min_value=0, value=0, step=1))
     deployed = _dsute_calculation(
         om_days=om_days,
-        offutt_possessed_aircraft=offutt_aircraft,
-        offutt_sorties=offutt_sorties,
-        include_ol_sorties=include_ol_sorties,
-        ol_sorties=ol_sorties,
+        deployed_possessed_aircraft=deployed_aircraft,
+        deployed_sorties=deployed_sorties,
+        include_deployed_sorties=include_deployed_sorties,
+        deployed_sorties=deployed_sorties,
     )
     metric_cols = st.columns(4)
     metric_cols[0].metric("DSUTE", f"{float(deployed['dsute']):.2f}")
@@ -533,7 +533,7 @@ if page == "Deployed UTE Calculator":
     else:
         st.success("This DSUTE is inside the 0.40-0.52 homestation planning band.")
     st.write(
-        f"Interpretation: {float(deployed['dsute']):.2f} DSUTE means Offutt is generating "
+        f"Interpretation: {float(deployed['dsute']):.2f} DSUTE means deployed is generating "
         f"about {float(deployed['dsute']):.2f} sorties per possessed aircraft per O&M day."
     )
     st.dataframe([deployed], width="stretch")
