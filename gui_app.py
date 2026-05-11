@@ -302,16 +302,42 @@ def _top_count(counts: dict[str, int]) -> str:
     return f"{key} ({value})"
 
 
-def _pattern_detail(schedule: dict[str, DaySchedule], policy: TtpPolicy) -> list[dict[str, object]]:
+def _excel_iteration_table(summary: SimulationSummary) -> list[dict[str, object]]:
+    days = summary.sample_iteration.days
+    row_specs = (
+        ("1st Go", "first_go"),
+        ("2nd Go", "second_go"),
+        ("3rd Go", "third_go"),
+        ("4th Go", "fourth_go"),
+        ("Spares", "spares"),
+        ("Acft Req'd", "aircraft_required"),
+        ("Daily Sorties", "planned_sorties"),
+        ("Sorties Flown", "sorties_flown"),
+        ("PAI", "pai"),
+        ("Total MC Acft", "total_mc_aircraft"),
+        ("MC Acft for Flying", "mc_aircraft_for_flying"),
+        ("Code 3", "code_3"),
+        ("GA", "ground_abort"),
+        ("GA Covered", "covered_ground_abort"),
+        ("Sortie Loss", "lost_sorties"),
+        ("GA+Code 3", "ga_plus_code_3"),
+        ("8 Hr Fix", "fixed_8hr"),
+        ("12 Hr Fix", "fixed_12hr"),
+        ("24 Hr Fix", "fixed_24hr"),
+        ("Available EOD", "available_eod"),
+        ("Commit Limit", "commit_limit"),
+    )
     rows = []
-    for label, values in (
-        ("1st Go", [schedule[day].first_go for day in policy.flying_days]),
-        ("2nd Go", [schedule[day].second_go for day in policy.flying_days]),
-        ("Aircraft Required", [schedule[day].aircraft_required(policy=policy) for day in policy.flying_days]),
-        ("Daily Sorties", [schedule[day].daily_sorties for day in policy.flying_days]),
+    for label, attr in row_specs:
+        row = {"Metric": label}
+        row.update({day.day: getattr(day, attr) for day in days})
+        rows.append(row)
+    for label, attr in (
+        ("Meets Acft Req", "meets_aircraft_required"),
+        ("Within TTP Commit", "within_ttp_commit"),
     ):
         row = {"Metric": label}
-        row.update({day: values[index] for index, day in enumerate(policy.flying_days)})
+        row.update({day.day: "Yes" if getattr(day, attr) else "No" for day in days})
         rows.append(row)
     return rows
 
@@ -319,18 +345,79 @@ def _pattern_detail(schedule: dict[str, DaySchedule], policy: TtpPolicy) -> list
 def _summary_rows(summaries: dict[str, SimulationSummary]) -> list[dict[str, object]]:
     return [
         {
-            "model": name,
-            "success": summary.probability_success,
-            "sortie_success": summary.probability_meet_sorties,
-            "aircraft_success": summary.probability_meet_aircraft_required,
-            "commit_success": summary.probability_within_ttp_commit,
-            "recovery_success": summary.probability_recovery,
-            "avg_next_monday": summary.average_next_monday_available,
-            "avg_backlog": summary.average_repair_backlog,
-            "failure_modes": summary.failure_mode_counts,
+            "Model": name,
+            "Iterations": f"{summary.iterations:,}",
+            "Overall Success": _pct(summary.probability_success),
+            "Sortie Target Met": _pct(summary.probability_meet_sorties),
+            "Daily Schedule Met": _pct(summary.probability_daily_schedule),
+            "Aircraft Available": _pct(summary.probability_meet_aircraft_required),
+            "Within Commit": _pct(summary.probability_within_ttp_commit),
+            "Next-Monday Recovery": _pct(summary.probability_recovery),
+            "Avg Next-Monday MC": f"{summary.average_next_monday_available:.1f}",
+            "Avg Backlog": f"{summary.average_repair_backlog:.1f}",
+            "Primary Failure": _primary_failure(summary),
         }
         for name, summary in summaries.items()
     ]
+
+
+def _manual_interpretation_rows(summaries: dict[str, SimulationSummary]) -> list[dict[str, object]]:
+    return [
+        {
+            "Model": name,
+            "Assessment": _manual_assessment(summary),
+            "Interpretation": _manual_interpretation(name, summary),
+            "Failure Detail": _failure_detail(summary),
+        }
+        for name, summary in summaries.items()
+    ]
+
+
+def _pct(value: float) -> str:
+    return f"{value:.1%}"
+
+
+def _primary_failure(summary: SimulationSummary) -> str:
+    if not summary.failure_mode_counts:
+        return "None"
+    failure, count = max(summary.failure_mode_counts.items(), key=lambda item: item[1])
+    return f"{failure} in {count:,} of {summary.iterations:,} iterations"
+
+
+def _failure_detail(summary: SimulationSummary) -> str:
+    if not summary.failure_mode_counts:
+        return "No modeled failures across the run."
+    return "; ".join(
+        f"{failure}: {count:,}/{summary.iterations:,} ({count / summary.iterations:.1%})"
+        for failure, count in sorted(summary.failure_mode_counts.items())
+    )
+
+
+def _manual_assessment(summary: SimulationSummary) -> str:
+    if summary.probability_success >= 0.85:
+        return "Sustainable"
+    if summary.probability_meet_sorties >= 0.85 and summary.probability_recovery >= 0.70:
+        return "Executable with risk"
+    if summary.probability_meet_sorties >= 0.85:
+        return "Sorties feasible, not operationally sustainable"
+    return "Not recommended"
+
+
+def _manual_interpretation(model_name: str, summary: SimulationSummary) -> str:
+    if summary.probability_success >= 0.85:
+        return (
+            f"{model_name} made the full operational success standard in "
+            f"{summary.probability_success:.1%} of {summary.iterations:,} iterations."
+        )
+    if summary.probability_meet_sorties >= 0.85 and summary.probability_success < 0.85:
+        return (
+            "The sortie target is usually met, but another dimension is failing. "
+            "Review daily schedule, aircraft availability, commit compliance, and recovery."
+        )
+    return (
+        "The pattern does not reliably meet the modeled requirement under this recovery assumption. "
+        "The failure detail column shows the dominant reason."
+    )
 
 
 def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -446,10 +533,22 @@ if page == "Manual Turn Pattern":
         )
         if result["warnings"]:
             st.warning(result["warnings"])
-        st.subheader("Pattern")
-        st.dataframe(_pattern_detail(result["schedule"], result["policy"]), use_container_width=True, hide_index=True)
         st.subheader("Results")
         st.dataframe(_summary_rows(result["summaries"]), use_container_width=True)
+        st.subheader("Interpretation")
+        st.dataframe(_manual_interpretation_rows(result["summaries"]), use_container_width=True, hide_index=True)
+        st.subheader("Sample Iteration Table")
+        selected_model = st.selectbox("Sample Iteration Model", list(result["summaries"]))
+        st.dataframe(
+            _excel_iteration_table(result["summaries"][selected_model]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(
+            "Overall success is stricter than sortie success. A run can meet the weekly sortie target "
+            "but still fail if the daily schedule is missed, aircraft are unavailable, commit limits are "
+            "exceeded, next-Monday recovery fails, backlog remains open, or events are suppressed."
+        )
     else:
         st.info("Enter the manual pattern and run it.")
     st.stop()
