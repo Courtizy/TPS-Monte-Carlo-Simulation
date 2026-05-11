@@ -6,7 +6,7 @@ from typing import Any
 from input_validation import validate_optimizer_config
 from model_config import build_scenario
 from optimizer import OptimizationConfig, best_by_requirement, optimize_turn_patterns
-from pattern_generator import PatternConstraints, capacity_points, planning_ute_levels
+from pattern_generator import PatternConstraints, capacity_points
 from recommendation_engine import add_recommendations, best_recommendation
 from simulation_engine import DaySchedule
 from surge_model import SurgeSummary, simulate_surge_duration
@@ -48,6 +48,7 @@ def build_gui_config(
     attrition_scenarios: tuple[tuple[str, float], ...] = (("Requirement Based", 0.0),),
     policy: TtpPolicy = DEFAULT_TTP_POLICY,
 ) -> OptimizationConfig:
+    explicit_ute_levels = ute_levels or None
     tuned_policy = replace(
         policy,
         ute_levels=ute_levels,
@@ -65,6 +66,7 @@ def build_gui_config(
         attrition_scenarios=attrition_scenarios,
         event_count_models=(event_count_model,),
         fix_count_models=(fix_count_model,),
+        ute_levels=explicit_ute_levels,
         max_patterns_per_requirement=max_patterns,
         constraints=PatternConstraints.from_policy(tuned_policy),
         mc_rate=mc_rate,
@@ -176,7 +178,7 @@ def _capacity_rows(config: OptimizationConfig) -> list[dict[str, object]]:
         for point in capacity_points(
             pai,
             flying_days=config.flying_days,
-            ute_levels=config.ute_levels or planning_ute_levels(config.policy),
+            ute_levels=config.ute_levels,
             policy=config.policy,
         )
     ]

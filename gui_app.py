@@ -13,6 +13,9 @@ from gui_controller import (
 from ttp_rules import DEFAULT_TTP_POLICY
 
 
+APP_UI_VERSION = "2026-05-10-validation-v2"
+
+
 st.set_page_config(
     page_title="Turn Pattern Sustainability Modeler",
     layout="wide",
@@ -29,6 +32,7 @@ def _cached_run(config, include_surge: bool):
 
 with st.sidebar:
     st.header("Scenario")
+    st.caption(f"UI version: {APP_UI_VERSION}")
     pai_mode = st.radio("PAI Mode", ["Single PAI", "PAI Sweep"], horizontal=True)
     if pai_mode == "Single PAI":
         pai = st.slider("PAI", 1, 15, 11)
@@ -201,6 +205,7 @@ with validation:
         {
             "policy": result.config.policy.policy_name,
             "policy_version": result.config.policy.policy_version,
+            "ui_version": APP_UI_VERSION,
             "iterations": result.config.iterations,
             "random_seed": result.config.random_seed,
             "event_model": result.config.event_count_models[0],
