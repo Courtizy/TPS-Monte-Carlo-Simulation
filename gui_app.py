@@ -669,6 +669,23 @@ def _dsute_calculation(
     }
 
 
+def _planning_band_from_dsute(
+    dsute: float,
+    upper_spread: float,
+    floor_value: float,
+    ceiling_value: float,
+) -> dict[str, float]:
+    lower = max(floor_value, dsute)
+    upper = min(ceiling_value, dsute + upper_spread)
+    if upper < lower:
+        upper = lower
+    return {
+        "lower": lower,
+        "upper": upper,
+        "spread": upper - lower,
+    }
+
+
 def _show_about_page() -> None:
     st.header("About / Model Logic")
     st.caption("A plain-language guide to what the model is doing and how to read it.")
@@ -857,6 +874,30 @@ if page == "DSUTE Calculator":
     st.write(
         f"Interpretation: {float(deployed['dsute']):.2f} DSUTE means this location is generating "
         f"about {float(deployed['dsute']):.2f} sorties per possessed aircraft per O&M day."
+    )
+    st.subheader("Suggested Model UTE Band")
+    st.caption(
+        "Use this to translate the observed DSUTE into a planning range for the model. "
+        "The lower bound starts at the calculated DSUTE; the upper bound adds a planning buffer."
+    )
+    band_cols = st.columns(3)
+    band_floor = float(band_cols[0].number_input("Minimum Allowed UTE", min_value=0.0, max_value=1.0, value=0.0, step=0.01))
+    band_ceiling = float(band_cols[1].number_input("Maximum Allowed UTE", min_value=0.0, max_value=1.0, value=0.52, step=0.01))
+    upper_spread = float(band_cols[2].number_input("Upper Planning Spread", min_value=0.0, max_value=1.0, value=0.12, step=0.01))
+    suggested_band = _planning_band_from_dsute(
+        float(deployed["dsute"]),
+        upper_spread=upper_spread,
+        floor_value=band_floor,
+        ceiling_value=band_ceiling,
+    )
+    band_metric_cols = st.columns(3)
+    band_metric_cols[0].metric("Suggested UTE Lower", f"{suggested_band['lower']:.2f}")
+    band_metric_cols[1].metric("Suggested UTE Upper", f"{suggested_band['upper']:.2f}")
+    band_metric_cols[2].metric("Band Width", f"{suggested_band['spread']:.2f}")
+    st.info(
+        f"Recommended sidebar setting: set UTE Planning Range to "
+        f"{suggested_band['lower']:.2f}-{suggested_band['upper']:.2f} if you want the model "
+        "to evaluate patterns near the observed deployed/location sortie tempo."
     )
     st.stop()
 
