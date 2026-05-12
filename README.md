@@ -73,6 +73,11 @@ Example:
 - `32 / (11 x 7) = 0.42 DSUTE`
 - `40 / (11 x 7) = 0.52 DSUTE`
 
+### About / Model Logic
+
+Provides the README-level explanation inside the web app, including model purpose,
+logic flow, success rules, recovery models, DSUTE logic, and tab interpretation.
+
 ## Model Flow
 
 ```mermaid
@@ -102,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.5`
+Current model version: `0.6`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -112,3 +117,5 @@ and selected-pattern recovery model comparison.
 
 Version `0.5` removes organization- and location-specific wording from user-facing
 documentation and helper naming.
+
+Version `0.6` adds an About / Model Logic page to the web app.

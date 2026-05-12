@@ -664,6 +664,95 @@ def _dsute_calculation(
     }
 
 
+def _show_about_page() -> None:
+    st.header("About / Model Logic")
+    st.caption("A plain-language guide to what the model is doing and how to read it.")
+
+    st.subheader("Purpose")
+    st.write(
+        "This app tests whether a weekly turn pattern is likely to meet a required sortie target "
+        "while staying within commit limits, aircraft availability, recovery, and repair-backlog constraints."
+    )
+
+    st.subheader("How The Model Flows")
+    st.code(
+        "\n".join(
+            [
+                "User inputs",
+                "  -> Policy layer: commit rate, UTE range, go limits, recovery rules",
+                "  -> Capacity sweep: sortie output by PAI and UTE",
+                "  -> Pattern generator: first-go / second-go daily splits",
+                "  -> Monte Carlo simulation: GA, Code 3, fixes, daily carry-forward",
+                "  -> Success scoring: sorties, daily schedule, aircraft, commit, recovery, backlog",
+                "  -> GUI outputs: recommendations, diagnostics, comparisons",
+            ]
+        ),
+        language="text",
+    )
+
+    with st.expander("Inputs And Policy Rules", expanded=True):
+        st.markdown(
+            """
+            - **PAI**: possessed aircraft used by the scenario.
+            - **UTE planning range**: sortie output band used to generate candidate weekly sortie counts.
+            - **Required weekly sorties**: the sortie target the pattern must meet.
+            - **Commit rate**: maximum aircraft committed to the flying schedule.
+            - **Max daily sorties / second-go limit**: controls which patterns are considered realistic.
+            - **Maintenance rates**: MC rate, ground-abort rate, break rate, and 8/12/24-hour fix rates.
+            """
+        )
+
+    with st.expander("What Counts As Success"):
+        st.markdown(
+            """
+            Overall success is stricter than sortie success. A run must meet the required weekly sorties,
+            make the daily schedule, have enough aircraft available, stay within commit limits, recover
+            by next Monday, avoid unacceptable backlog, and avoid suppressed events.
+
+            A pattern that meets the sortie target but leaves the fleet unrecovered is treated as risky
+            or unsustainable rather than a clean success.
+            """
+        )
+
+    with st.expander("Recovery Models"):
+        st.markdown(
+            """
+            - **Scheduled-Spares Only**: ground aborts can only be absorbed by scheduled spares.
+            - **Fleet-Flex Recovery**: uncommitted MC aircraft can also absorb a ground abort if available.
+
+            Comparing both models helps separate strict scheduling sustainability from practical fleet-flex
+            execution.
+            """
+        )
+
+    with st.expander("DSUTE Calculator"):
+        st.markdown(
+            """
+            DSUTE is calculated on the sortie side only:
+
+            `DSUTE = scheduled or required sorties / (possessed aircraft x O&M days)`
+
+            Flying hours, average sortie duration, and deployed or operating-location hours are not used.
+            Deployed or operating-location sorties are only included if intentionally toggled into the requirement.
+            """
+        )
+
+    with st.expander("How To Read The Tabs"):
+        st.markdown(
+            """
+            - **Summary**: decision brief by PAI, operating envelope, viable options, and failure readout.
+            - **Capacity Sweep**: sortie math across the selected UTE range and max-commit capacity point.
+            - **Best Patterns**: sustainable/recommendable candidates only, including best pattern by UTE.
+            - **Diagnostics**: all tested best candidates, including failed patterns.
+            - **Pattern Detail**: selected pattern details and recovery-model comparison.
+            - **Manual Turn Pattern**: test a specific first-go / second-go schedule.
+            """
+        )
+
+    st.subheader("Version")
+    st.write(f"Current model version: {MODEL_VERSION}")
+
+
 st.title("Turn Pattern Sustainability Modeler")
 st.caption("Monte Carlo turn-pattern planning dashboard")
 
@@ -672,17 +761,18 @@ with st.sidebar:
     st.caption(f"Version: {MODEL_VERSION}")
     page = st.radio(
         "Page",
-        ["Optimization Dashboard", "Manual Turn Pattern", "DSUTE Calculator"],
+        ["Optimization Dashboard", "Manual Turn Pattern", "DSUTE Calculator", "About / Model Logic"],
     )
-    ute_min, ute_max = st.slider(
-        "UTE Planning Range",
-        min_value=0.00,
-        max_value=0.80,
-        value=(DEFAULT_TTP_POLICY.ute_min, DEFAULT_TTP_POLICY.ute_max),
-        step=0.01,
-    )
+    if page != "About / Model Logic":
+        ute_min, ute_max = st.slider(
+            "UTE Planning Range",
+            min_value=0.00,
+            max_value=0.80,
+            value=(DEFAULT_TTP_POLICY.ute_min, DEFAULT_TTP_POLICY.ute_max),
+            step=0.01,
+        )
 
-    if page != "DSUTE Calculator":
+    if page not in ("DSUTE Calculator", "About / Model Logic"):
         pai_mode = st.radio("PAI Mode", ["Single PAI", "PAI Sweep"], horizontal=True)
         if pai_mode == "Single PAI":
             pai = st.slider("PAI", 1, 15, 11)
@@ -717,6 +807,10 @@ with st.sidebar:
             max_day_delta = DEFAULT_TTP_POLICY.max_day_to_day_delta or 0
             include_surge = False
 
+if page == "About / Model Logic":
+    _show_about_page()
+    st.stop()
+
 if page == "DSUTE Calculator":
     st.header("DSUTE Calculator")
     st.caption(
@@ -745,11 +839,12 @@ if page == "DSUTE Calculator":
         include_operating_location_sorties=include_operating_location_sorties,
         operating_location_sorties=operating_location_sorties,
     )
-    metric_cols = st.columns(4)
+    metric_cols = st.columns(5)
     metric_cols[0].metric("DSUTE", f"{float(deployed['dsute']):.2f}")
     metric_cols[1].metric("Possessed Aircraft Days", int(deployed["possessed_aircraft_days"]))
     metric_cols[2].metric("Sorties / O&M Day", f"{float(deployed['sorties_per_day']):.1f}")
-    metric_cols[3].metric("Planning Band", "Inside" if deployed["within_planning_band"] else "Outside")
+    metric_cols[3].metric("Avg Sorties / Aircraft", f"{float(deployed['sorties_per_aircraft']):.1f}")
+    metric_cols[4].metric("Planning Band", "Inside" if deployed["within_planning_band"] else "Outside")
     if deployed["above_planning_band"]:
         st.warning(f"This DSUTE is above the {float(ute_min):.2f}-{float(ute_max):.2f} planning band.")
     elif deployed["below_planning_band"]:
