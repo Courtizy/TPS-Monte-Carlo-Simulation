@@ -54,18 +54,18 @@ The page runs that pattern against both recovery models:
 
 ### DSUTE Calculator
 
-Calculates homestation DSUTE on the sortie side only. Flying hours, average sortie duration, and downrange/OL flying hours are not used.
+Calculates location DSUTE on the sortie side only. Flying hours, average sortie duration, and deployed or operating-location flying hours are not used.
 
 Inputs:
 
-- Required Sorties.
+- Scheduled or required sorties.
 - Possessed aircraft.
 - O&M days.
-- Optional downrange / OL sorties only when intentionally toggled into the requirement.
+- Optional deployed or operating-location sorties only when intentionally toggled into the requirement.
 
 Calculations:
 
-- `DSUTE = Sorties / (Possessed aircraft x O&M days)`
+- `DSUTE = scheduled or required sorties / (possessed aircraft x O&M days)`
 
 Example:
 
@@ -102,10 +102,13 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.4`
+Current model version: `0.5`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
 
 Version `0.4` adds embedded comparison views: best sustainable pattern by UTE
 and selected-pattern recovery model comparison.
+
+Version `0.5` removes organization- and location-specific wording from user-facing
+documentation and helper naming.

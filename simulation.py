@@ -28,7 +28,7 @@ class HomestationData:
     fix_12hr_rate: float
     fix_24hr_rate: float
     ttp_commit_rate: float = DEFAULT_TTP_POLICY.commit_rate
-    afi_spare_rate: float = DEFAULT_TTP_POLICY.spare_rate
+    spare_rate: float = DEFAULT_TTP_POLICY.spare_rate
     use_uncommitted_aircraft_for_ga_recovery: bool = True
     event_count_model: str = "Normal TTP"
     fix_count_model: str = "Probabilistic Monte Carlo"

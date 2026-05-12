@@ -221,7 +221,7 @@ def _scenario(
             fix_12hr_rate=fix_12hr_rate,
             fix_24hr_rate=fix_24hr_rate,
             ttp_commit_rate=policy.commit_rate,
-            afi_spare_rate=policy.spare_rate,
+            spare_rate=policy.spare_rate,
             use_uncommitted_aircraft_for_ga_recovery=use_uncommitted_aircraft_for_ga_recovery,
             event_count_model=event_count_model,
             fix_count_model=fix_count_model,

@@ -113,33 +113,35 @@ def _capacity_points_for_ute_levels(
     return points
 
 
-def deployed_ute_calculation(
+def sortie_ute_calculation(
     *,
     om_days: int,
-    offutt_possessed_aircraft: int | None = None,
-    offutt_sorties: int | None = None,
-    include_ol_sorties: bool = False,
-    ol_sorties: int = 0,
+    possessed_aircraft: int | None = None,
+    scheduled_sorties: int | None = None,
+    include_operating_location_sorties: bool = False,
+    operating_location_sorties: int = 0,
     aircraft: int | None = None,
     expected_sorties: int | None = None,
     deployment_days: int | None = None,
 ) -> dict[str, float | int]:
-    if offutt_possessed_aircraft is None:
-        offutt_possessed_aircraft = aircraft or 0
-    if offutt_sorties is None:
-        offutt_sorties = expected_sorties or 0
-    included_ol_sorties = ol_sorties if include_ol_sorties else 0
-    modeled_sorties = offutt_sorties + included_ol_sorties
-    possessed_aircraft_days = offutt_possessed_aircraft * om_days
+    if possessed_aircraft is None:
+        possessed_aircraft = aircraft or 0
+    if scheduled_sorties is None:
+        scheduled_sorties = expected_sorties or 0
+    included_operating_location_sorties = (
+        operating_location_sorties if include_operating_location_sorties else 0
+    )
+    modeled_sorties = scheduled_sorties + included_operating_location_sorties
+    possessed_aircraft_days = possessed_aircraft * om_days
     dsute = modeled_sorties / possessed_aircraft_days if possessed_aircraft_days > 0 else 0
     sorties_per_day = modeled_sorties / om_days if om_days > 0 else 0
-    sorties_per_aircraft = modeled_sorties / offutt_possessed_aircraft if offutt_possessed_aircraft > 0 else 0
+    sorties_per_aircraft = modeled_sorties / possessed_aircraft if possessed_aircraft > 0 else 0
     return {
         "om_days": om_days,
-        "offutt_possessed_aircraft": offutt_possessed_aircraft,
-        "offutt_sorties": offutt_sorties,
-        "include_ol_sorties": include_ol_sorties,
-        "ol_sorties_included": included_ol_sorties,
+        "possessed_aircraft": possessed_aircraft,
+        "scheduled_sorties": scheduled_sorties,
+        "include_operating_location_sorties": include_operating_location_sorties,
+        "operating_location_sorties_included": included_operating_location_sorties,
         "modeled_sorties": modeled_sorties,
         "possessed_aircraft_days": possessed_aircraft_days,
         "dsute": dsute,
