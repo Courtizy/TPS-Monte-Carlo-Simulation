@@ -12,11 +12,8 @@ from pattern_generator import (
 )
 from ttp_rules import (
     DEFAULT_TTP_POLICY,
-    FLEET_FLEX_MODEL,
     MODEL_VERSION,
-    SCHEDULED_SPARES_MODEL,
     TtpPolicy,
-    commit_aircraft,
     recovery_model_options,
     risk_band,
     validate_scenario,
@@ -47,6 +44,7 @@ def run_best_fit(
     max_daily_sorties: int,
     max_second_go: int,
     max_day_delta: int,
+    include_surge: bool,
 ) -> dict[str, object]:
     policy = replace(
         DEFAULT_TTP_POLICY,
@@ -58,7 +56,7 @@ def run_best_fit(
     rng = Random(random_seed)
     rows: list[dict[str, object]] = []
     capacity_rows = [
-        point
+        {"pai": pai, **point}
         for pai in range(pai_min, pai_max + 1)
         for point in capacity_points(pai, policy=policy)
     ]
@@ -80,6 +78,8 @@ def run_best_fit(
             fix_count_model=fix_count_model,
         )
         for point in capacity_points(pai, policy=policy):
+            if point["label"] == policy.surge_label and not include_surge:
+                continue
             patterns = generate_turn_pattern_permutations(
                 int(point["weekly_sorties"]),
                 pai,
@@ -420,46 +420,185 @@ def _manual_interpretation(model_name: str, summary: SimulationSummary) -> str:
 
 
 def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    fields = [
-        "pai",
-        "capacity_label",
-        "weekly_sorties",
-        "required_sorties",
-        "model",
-        "pattern_with_frontlines",
-        "pattern_name",
-        "success",
-        "sortie_success",
-        "avg_next_monday",
-        "recovery_debt",
-        "risk_band",
+    return [
+        {
+            "PAI": row["pai"],
+            "Capacity Point": row["capacity_label"],
+            "Planned Sorties": row["weekly_sorties"],
+            "Required Sorties": row["required_sorties"],
+            "Recovery Model": row["model"],
+            "Pattern Total(Frontline)": row["pattern_with_frontlines"],
+            "Pattern Family": row["pattern_name"],
+            "Overall Success": _pct(float(row["success"])),
+            "Sortie Target Met": _pct(float(row["sortie_success"])),
+            "Avg Next-Monday MC": f"{float(row['avg_next_monday']):.1f}",
+            "Recovery Debt": f"{float(row['recovery_debt']):.1f}",
+            "Risk": row["risk_band"],
+        }
+        for row in rows
     ]
-    return [{field: row.get(field) for field in fields} for row in rows]
+
+
+def _is_recommendable(row: dict[str, object], policy: TtpPolicy = DEFAULT_TTP_POLICY) -> bool:
+    return (
+        int(row["weekly_sorties"]) >= int(row["required_sorties"])
+        and float(row["success"]) >= policy.yellow_success_threshold
+        and float(row["recovery_success"]) >= policy.yellow_success_threshold
+        and float(row["backlog_success"]) >= policy.yellow_success_threshold
+    )
+
+
+def _recommendable_rows(
+    rows: list[dict[str, object]],
+    policy: TtpPolicy = DEFAULT_TTP_POLICY,
+) -> list[dict[str, object]]:
+    return [row for row in rows if _is_recommendable(row, policy)]
+
+
+def _pai_values(rows: list[dict[str, object]]) -> list[int]:
+    return sorted({int(row["pai"]) for row in rows})
+
+
+def _rows_for_pai(rows: list[dict[str, object]], pai: int) -> list[dict[str, object]]:
+    return [row for row in rows if int(row["pai"]) == pai]
+
+
+def _top_pattern_rows(rows: list[dict[str, object]], limit: int = 5) -> list[dict[str, object]]:
+    return sorted(rows, key=_rank, reverse=True)[:limit]
+
+
+def _operating_envelope_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, str]]:
+    output = []
+    for pai in _pai_values(rows):
+        pai_rows = _rows_for_pai(rows, pai)
+        viable = _recommendable_rows(pai_rows, policy)
+        if viable:
+            min_ute = min(float(row["ute"]) for row in viable)
+            max_ute = max(float(row["ute"]) for row in viable)
+            max_sorties = max(int(row["weekly_sorties"]) for row in viable)
+            best = max(viable, key=_rank)
+            status = str(best["risk_band"])
+        else:
+            min_ute = max_ute = None
+            max_sorties = 0
+            best = max(pai_rows, key=_rank) if pai_rows else None
+            status = f"No sustainable pattern; best failed risk {best['risk_band']}" if best else "No valid patterns"
+        output.append(
+            {
+                "PAI": str(pai),
+                "Sustainable UTE Min": f"{min_ute:.2f}" if min_ute is not None else "None",
+                "Sustainable UTE Max": f"{max_ute:.2f}" if max_ute is not None else "None",
+                "Max Sustainable Sorties": str(max_sorties) if max_sorties else "None",
+                "Status": status,
+            }
+        )
+    return output
+
+
+def _failure_readout_rows(rows: list[dict[str, object]]) -> list[dict[str, str]]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        if _is_recommendable(row):
+            continue
+        failure = str(row["failure_mode"])
+        counts[failure] = counts.get(failure, 0) + 1
+    if not counts:
+        return [{"Failure Mode": "None", "Patterns": "0", "Share": "0.0%"}]
+    total = sum(counts.values())
+    return [
+        {
+            "Failure Mode": failure,
+            "Patterns": str(count),
+            "Share": _pct(count / total),
+        }
+        for failure, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)
+    ]
+
+
+def _decision_guidance(pai: int, rows: list[dict[str, object]], policy: TtpPolicy) -> str:
+    viable = _recommendable_rows(rows, policy)
+    if viable:
+        best = max(viable, key=_rank)
+        return (
+            f"{pai} PAI has recommendable patterns under the current assumptions. "
+            f"The strongest option plans {best['weekly_sorties']} sorties at {float(best['ute']):.2f} UTE "
+            f"with {best['pattern_with_frontlines']} and {best['risk_band']} risk."
+        )
+    if not rows:
+        return f"{pai} PAI did not generate valid patterns under the current constraints."
+    best_failed = max(rows, key=_rank)
+    return (
+        f"{pai} PAI has no sustainable pattern under the current assumptions. "
+        f"The best failed candidate is {best_failed['pattern_with_frontlines']} at "
+        f"{best_failed['capacity_label']}, failing primarily from {best_failed['failure_mode']}."
+    )
+
+
+def _capacity_display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [
+        {
+            "PAI": row.get("pai", ""),
+            "Capacity Point": row["label"],
+            "Target UTE": f"{float(row['target_ute']):.2f}",
+            "Weekly Sorties": row["weekly_sorties"],
+            "Actual UTE": f"{float(row['actual_ute']):.2f}",
+            "Commit Aircraft": row["commit_aircraft"],
+        }
+        for row in rows
+    ]
+
+
+def _detail_rows(row: dict[str, object]) -> list[dict[str, str]]:
+    return [
+        {"Metric": "PAI", "Value": str(row["pai"])},
+        {"Metric": "Capacity Point", "Value": str(row["capacity_label"])},
+        {"Metric": "Planned Sorties", "Value": str(row["weekly_sorties"])},
+        {"Metric": "Required Sorties", "Value": str(row["required_sorties"])},
+        {"Metric": "UTE", "Value": f"{float(row['ute']):.2f}"},
+        {"Metric": "Commit Aircraft", "Value": str(row["commit_aircraft"])},
+        {"Metric": "Recovery Model", "Value": str(row["model"])},
+        {"Metric": "Pattern Total(Frontline)", "Value": str(row["pattern_with_frontlines"])},
+        {"Metric": "1st Go Sequence", "Value": "-".join(str(value) for value in row["first_go_sequence"])},
+        {"Metric": "2nd Go Sequence", "Value": "-".join(str(value) for value in row["turn_sequence"])},
+        {"Metric": "Pattern Family", "Value": str(row["pattern_name"])},
+        {"Metric": "Overall Success", "Value": _pct(float(row["success"]))},
+        {"Metric": "Sortie Target Met", "Value": _pct(float(row["sortie_success"]))},
+        {"Metric": "Aircraft Available", "Value": _pct(float(row["aircraft_success"]))},
+        {"Metric": "Commit Compliance", "Value": _pct(float(row["commit_success"]))},
+        {"Metric": "Next-Monday Recovery", "Value": _pct(float(row["recovery_success"]))},
+        {"Metric": "Backlog Success", "Value": _pct(float(row["backlog_success"]))},
+        {"Metric": "Avg Next-Monday MC", "Value": f"{float(row['avg_next_monday']):.1f}"},
+        {"Metric": "Recovery Debt", "Value": f"{float(row['recovery_debt']):.1f}"},
+        {"Metric": "Primary Failure", "Value": str(row["failure_mode"])},
+        {"Metric": "Risk", "Value": str(row["risk_band"])},
+    ]
 
 
 def _dsute_calculation(
     *,
     om_days: int,
-    offutt_possessed_aircraft: int,
-    offutt_sorties: int,
-    include_ol_sorties: bool = False,
-    ol_sorties: int = 0,
+    possessed_aircraft: int,
+    base_sorties: int,
+    include_operating_location_sorties: bool = False,
+    operating_location_sorties: int = 0,
 ) -> dict[str, float | int | bool]:
-    included_ol_sorties = ol_sorties if include_ol_sorties else 0
-    modeled_sorties = offutt_sorties + included_ol_sorties
-    possessed_aircraft_days = offutt_possessed_aircraft * om_days
+    included_operating_location_sorties = (
+        operating_location_sorties if include_operating_location_sorties else 0
+    )
+    modeled_sorties = base_sorties + included_operating_location_sorties
+    possessed_aircraft_days = possessed_aircraft * om_days
     dsute = modeled_sorties / possessed_aircraft_days if possessed_aircraft_days > 0 else 0
     return {
         "om_days": om_days,
-         "offutt_possessed_aircraft": offutt_possessed_aircraft,
-        "offutt_sorties": offutt_sorties,
-        "include_ol_sorties": include_ol_sorties,
-        "ol_sorties_included": included_ol_sorties,
+        "possessed_aircraft": possessed_aircraft,
+        "base_sorties": base_sorties,
+        "include_operating_location_sorties": include_operating_location_sorties,
+        "operating_location_sorties_included": included_operating_location_sorties,
         "modeled_sorties": modeled_sorties,
         "possessed_aircraft_days": possessed_aircraft_days,
         "dsute": dsute,
         "sorties_per_day": modeled_sorties / om_days if om_days > 0 else 0,
-        "sorties_per_aircraft": modeled_sorties / offutt_possessed_aircraft if offutt_possessed_aircraft > 0 else 0,
+        "sorties_per_aircraft": modeled_sorties / possessed_aircraft if possessed_aircraft > 0 else 0,
         "within_planning_band": DEFAULT_TTP_POLICY.ute_min <= dsute <= DEFAULT_TTP_POLICY.ute_max,
         "below_planning_band": dsute < DEFAULT_TTP_POLICY.ute_min,
         "above_planning_band": dsute > DEFAULT_TTP_POLICY.ute_max,
@@ -474,52 +613,69 @@ with st.sidebar:
     st.caption(f"Version: {MODEL_VERSION}")
     page = st.radio(
         "Page",
-        ["Optimization Dashboard", "Manual Turn Pattern", "Deployed UTE Calculator"],
+        ["Optimization Dashboard", "Manual Turn Pattern", "DSUTE Calculator"],
     )
-    pai_mode = st.radio("PAI Mode", ["Single PAI", "PAI Sweep"], horizontal=True)
-    if pai_mode == "Single PAI":
-        pai = st.slider("PAI", 1, 15, 11)
-        pai_min = pai_max = pai
-    else:
-        pai_min, pai_max = st.slider("PAI Range", 1, 15, (9, 12))
 
-    required_sorties = st.number_input("Required Weekly Sorties", min_value=0, value=24)
-    iterations = st.number_input("Iterations", min_value=50, value=500, step=50)
-    random_seed = st.number_input("Random Seed", min_value=0, value=42, step=1)
+    if page != "DSUTE Calculator":
+        pai_mode = st.radio("PAI Mode", ["Single PAI", "PAI Sweep"], horizontal=True)
+        if pai_mode == "Single PAI":
+            pai = st.slider("PAI", 1, 15, 11)
+            pai_min = pai_max = pai
+        else:
+            pai_min, pai_max = st.slider("PAI Range", 1, 15, (9, 12))
 
-    st.header("Maintenance Rates")
-    mc_rate = st.number_input("MC Rate", min_value=0.0, max_value=1.0, value=0.735, step=0.005)
-    ground_abort_rate = st.number_input("Ground Abort Rate", min_value=0.0, max_value=1.0, value=0.064, step=0.005)
-    break_rate = st.number_input("Break / Code 3 Rate", min_value=0.0, max_value=1.0, value=0.265, step=0.005)
-    fix_8hr_rate = st.number_input("8-Hour Fix Rate", min_value=0.0, max_value=1.0, value=0.496, step=0.005)
-    fix_12hr_rate = st.number_input("12-Hour Fix Rate", min_value=0.0, max_value=1.0, value=0.607, step=0.005)
-    fix_24hr_rate = st.number_input("24-Hour Fix Rate", min_value=0.0, max_value=1.0, value=0.803, step=0.005)
+        required_sorties = st.number_input("Required Weekly Sorties", min_value=0, value=24)
+        iterations = st.number_input("Iterations", min_value=50, value=500, step=50)
+        random_seed = st.number_input("Random Seed", min_value=0, value=42, step=1)
 
-    st.header("Model Options")
-    event_count_model = st.selectbox("Event Count Model", ["Normal TTP", "Probabilistic Monte Carlo"])
-    fix_count_model = st.selectbox("Fix Count Model", ["Normal TTP", "Probabilistic Monte Carlo"])
-    max_patterns = st.number_input("Max Patterns Per UTE Point", min_value=1, value=60, step=10)
-    max_daily_sorties = st.slider("Max Daily Sorties", 1, 12, 8)
-    max_second_go = st.slider("Max Second-Go Sorties", 0, 6, 3)
-    max_day_delta = st.slider("Max Day-to-Day Delta", 0, 8, 2)
+        st.header("Maintenance Rates")
+        mc_rate = st.number_input("MC Rate", min_value=0.0, max_value=1.0, value=0.735, step=0.005)
+        ground_abort_rate = st.number_input("Ground Abort Rate", min_value=0.0, max_value=1.0, value=0.064, step=0.005)
+        break_rate = st.number_input("Break / Code 3 Rate", min_value=0.0, max_value=1.0, value=0.265, step=0.005)
+        fix_8hr_rate = st.number_input("8-Hour Fix Rate", min_value=0.0, max_value=1.0, value=0.496, step=0.005)
+        fix_12hr_rate = st.number_input("12-Hour Fix Rate", min_value=0.0, max_value=1.0, value=0.607, step=0.005)
+        fix_24hr_rate = st.number_input("24-Hour Fix Rate", min_value=0.0, max_value=1.0, value=0.803, step=0.005)
 
-if page == "Deployed UTE Calculator":
+        st.header("Model Options")
+        event_count_model = st.selectbox("Event Count Model", ["Normal TTP", "Probabilistic Monte Carlo"])
+        fix_count_model = st.selectbox("Fix Count Model", ["Normal TTP", "Probabilistic Monte Carlo"])
+        max_daily_sorties = st.slider("Max Daily Sorties", 1, 12, 7)
+        max_second_go = st.slider("Max Second-Go Sorties", 0, 6, 2)
+
+        if page == "Optimization Dashboard":
+            max_patterns = st.number_input("Max Patterns Per UTE Point", min_value=1, value=30, step=10)
+            max_day_delta = st.slider("Max Day-to-Day Delta", 0, 8, 2)
+            include_surge = st.checkbox("Include max-commit surge in optimization", value=False)
+        else:
+            max_patterns = 40
+            max_day_delta = DEFAULT_TTP_POLICY.max_day_to_day_delta or 0
+            include_surge = False
+
+if page == "DSUTE Calculator":
     st.header("DSUTE Calculator")
-    st.caption("DSUTE is calculated on the sortie side only: Deployed Sorties / (Deployed Possessed aircraft x O&M days).")
+    st.caption(
+        "DSUTE is calculated on the sortie side only: scheduled or required sorties / "
+        "(possessed aircraft x operating and maintenance days)."
+    )
     col1, col2, col3 = st.columns(3)
     om_days = int(col1.number_input("O&M Days", min_value=1, value=7, step=1))
-    offutt_aircraft = int(col2.number_input("Offutt Possessed Aircraft", min_value=1, value=11, step=1))
-    offutt_sorties = int(col3.number_input("Offutt Sorties", min_value=0, value=31, step=1))
-    include_ol_sorties = st.checkbox("Include downrange / OL sorties in Offutt requirement", value=False)
-    ol_sorties = 0
-    if include_ol_sorties:
-        ol_sorties = int(st.number_input("Downrange / OL Sorties to Include", min_value=0, value=0, step=1))
+    possessed_aircraft = int(col2.number_input("Possessed Aircraft", min_value=1, value=11, step=1))
+    base_sorties = int(col3.number_input("Scheduled / Required Sorties", min_value=0, value=31, step=1))
+    include_operating_location_sorties = st.checkbox(
+        "Include deployed / operating-location sorties in the requirement",
+        value=False,
+    )
+    operating_location_sorties = 0
+    if include_operating_location_sorties:
+        operating_location_sorties = int(
+            st.number_input("Deployed / Operating-Location Sorties to Include", min_value=0, value=0, step=1)
+        )
     deployed = _dsute_calculation(
         om_days=om_days,
-       offutt_possessed_aircraft=offutt_aircraft,
-        offutt_sorties=offutt_sorties,
-        include_ol_sorties=include_ol_sorties,
-        ol_sorties=ol_sorties,
+        possessed_aircraft=possessed_aircraft,
+        base_sorties=base_sorties,
+        include_operating_location_sorties=include_operating_location_sorties,
+        operating_location_sorties=operating_location_sorties,
     )
     metric_cols = st.columns(4)
     metric_cols[0].metric("DSUTE", f"{float(deployed['dsute']):.2f}")
@@ -533,10 +689,9 @@ if page == "Deployed UTE Calculator":
     else:
         st.success("This DSUTE is inside the 0.40-0.52 homestation planning band.")
     st.write(
-        f"Interpretation: {float(deployed['dsute']):.2f} DSUTE means deployed is generating "
+        f"Interpretation: {float(deployed['dsute']):.2f} DSUTE means this location is generating "
         f"about {float(deployed['dsute']):.2f} sorties per possessed aircraft per O&M day."
     )
-    st.dataframe([deployed], width="stretch")
     st.stop()
 
 if page == "Manual Turn Pattern":
@@ -556,7 +711,7 @@ if page == "Manual Turn Pattern":
     st.metric("Manual Planned Sorties", planned)
 
     if st.button("Run Manual Pattern", type="primary"):
-        result = run_manual_pattern(
+        st.session_state["manual_result"] = run_manual_pattern(
             pai=int(pai_max),
             required_sorties=int(required_sorties) if required_sorties else planned,
             first_go=tuple(first_go),
@@ -574,12 +729,18 @@ if page == "Manual Turn Pattern":
             max_daily_sorties=int(max_daily_sorties),
             max_second_go=int(max_second_go),
         )
+
+    result = st.session_state.get("manual_result")
+    if result:
         if result["warnings"]:
             st.warning(result["warnings"])
+
         st.subheader("Results")
-        st.dataframe(_summary_rows(result["summaries"]), width="stretch")
+        st.dataframe(_summary_rows(result["summaries"]), width="stretch", hide_index=True)
+
         st.subheader("Interpretation")
         st.dataframe(_manual_interpretation_rows(result["summaries"]), width="stretch", hide_index=True)
+
         st.subheader("Sample Iteration Table")
         selected_model = st.selectbox("Sample Iteration Model", list(result["summaries"]))
         st.dataframe(
@@ -597,7 +758,15 @@ if page == "Manual Turn Pattern":
     st.stop()
 
 st.header("Optimization Dashboard")
-st.caption("UTE search always uses every target from 0.40 through 0.52, plus the separate max-commit surge case.")
+st.caption(
+    "Planning optimization searches every UTE target from 0.40 through 0.52. "
+    "Max-commit surge is shown in the capacity table and can be included as an optional stress case."
+)
+if pai_max > pai_min and int(iterations) * int(max_patterns) * (pai_max - pai_min + 1) > 120_000:
+    st.warning(
+        "This sweep is large for Streamlit Cloud. For faster visual checks, lower iterations or max patterns; "
+        "increase them for final planning runs."
+    )
 
 if st.button("Run Model", type="primary"):
     st.session_state["best_fit_result"] = run_best_fit(
@@ -618,6 +787,7 @@ if st.button("Run Model", type="primary"):
         max_daily_sorties=int(max_daily_sorties),
         max_second_go=int(max_second_go),
         max_day_delta=int(max_day_delta),
+        include_surge=bool(include_surge),
     )
 
 result = st.session_state.get("best_fit_result")
@@ -626,26 +796,55 @@ if not result:
     st.stop()
     raise SystemExit
 
-summary, capacity, patterns, detail = st.tabs(["Summary", "Capacity Sweep", "Best Patterns", "Pattern Detail"])
+summary, capacity, patterns, diagnostics, detail = st.tabs(
+    ["Summary", "Capacity Sweep", "Best Patterns", "Diagnostics", "Pattern Detail"]
+)
 rows = result["rows"]
+policy = result["policy"]
 
 with summary:
     if not rows:
         st.warning("No valid patterns were generated for these inputs.")
     else:
-        best = max(rows, key=_rank)
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Best Pattern", best["pattern_with_frontlines"])
-        col2.metric("Success", f"{float(best['success']):.1%}")
-        col3.metric("Next Mon MC", f"{float(best['avg_next_monday']):.1f}")
-        col4.metric("Risk", best["risk_band"])
-        st.write(f"Primary failure mode: {best['failure_mode']}")
+        st.subheader("Operating Envelope")
+        st.dataframe(_operating_envelope_rows(rows, policy), width="stretch", hide_index=True)
+
+        for pai_value in _pai_values(rows):
+            pai_rows = _rows_for_pai(rows, pai_value)
+            viable = _recommendable_rows(pai_rows, policy)
+            recommended = max(viable, key=_rank) if viable else max(pai_rows, key=_rank)
+            label = "Recommendation" if viable else "Best Failed Candidate"
+
+            with st.expander(f"{pai_value} PAI Decision Brief", expanded=(pai_value == _pai_values(rows)[0])):
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric(label, recommended["pattern_with_frontlines"])
+                col2.metric("Success", f"{float(recommended['success']):.1%}")
+                col3.metric("Next Mon MC", f"{float(recommended['avg_next_monday']):.1f}")
+                col4.metric("Risk", recommended["risk_band"])
+                st.write(_decision_guidance(pai_value, pai_rows, policy))
+
+                st.markdown("**Viable Options**")
+                if viable:
+                    st.dataframe(_display_rows(_top_pattern_rows(viable)), width="stretch", hide_index=True)
+                else:
+                    st.info("No Green/Yellow sustainable options met the current requirement and recovery rules.")
+
+                st.markdown("**Failure Readout**")
+                st.dataframe(_failure_readout_rows(pai_rows), width="stretch", hide_index=True)
 
 with capacity:
-    st.dataframe(result["capacity_rows"], width="stretch")
+    st.dataframe(_capacity_display_rows(result["capacity_rows"]), width="stretch", hide_index=True)
 
 with patterns:
-    st.dataframe(_display_rows(rows), width="stretch")
+    recommendable = _recommendable_rows(rows, policy)
+    if recommendable:
+        st.dataframe(_display_rows(recommendable), width="stretch", hide_index=True)
+    else:
+        st.warning("No sustainable best patterns were found under the current assumptions.")
+
+with diagnostics:
+    st.caption("All tested best candidates, including patterns rejected from the Best Patterns tab.")
+    st.dataframe(_display_rows(rows), width="stretch", hide_index=True)
 
 with detail:
     if rows:
@@ -654,4 +853,4 @@ with detail:
             for row in rows
         }
         selected = options[st.selectbox("Selected Pattern", list(options))]
-        st.write(selected)
+        st.dataframe(_detail_rows(selected), width="stretch", hide_index=True)
