@@ -256,6 +256,7 @@ def _result_row(
         "capacity_label": point["label"],
         "weekly_sorties": point["weekly_sorties"],
         "ute": point["actual_ute"],
+        "avg_sorties_per_aircraft": int(point["weekly_sorties"]) / pai if pai else 0,
         "commit_aircraft": point["commit_aircraft"],
         "model": model_name,
         "pattern_index": pattern_index,
@@ -438,6 +439,8 @@ def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
             "Capacity Point": row["capacity_label"],
             "Planned Sorties": row["weekly_sorties"],
             "Required Sorties": row["required_sorties"],
+            "UTE": f"{float(row['ute']):.2f}",
+            "Avg Sorties / Aircraft": f"{float(row['avg_sorties_per_aircraft']):.1f}",
             "Recovery Model": row["model"],
             "Pattern Total(Frontline)": row["pattern_with_frontlines"],
             "Pattern Family": row["pattern_name"],
@@ -599,6 +602,7 @@ def _capacity_display_rows(rows: list[dict[str, object]]) -> list[dict[str, obje
             "Target UTE": f"{float(row['target_ute']):.2f}",
             "Weekly Sorties": row["weekly_sorties"],
             "Actual UTE": f"{float(row['actual_ute']):.2f}",
+            "Avg Sorties / Aircraft": f"{int(row['weekly_sorties']) / int(row['pai']):.1f}" if row.get("pai") else "",
             "Commit Aircraft": row["commit_aircraft"],
         }
         for row in rows
@@ -612,6 +616,7 @@ def _detail_rows(row: dict[str, object]) -> list[dict[str, str]]:
         {"Metric": "Planned Sorties", "Value": str(row["weekly_sorties"])},
         {"Metric": "Required Sorties", "Value": str(row["required_sorties"])},
         {"Metric": "UTE", "Value": f"{float(row['ute']):.2f}"},
+        {"Metric": "Avg Sorties / Aircraft", "Value": f"{float(row['avg_sorties_per_aircraft']):.1f}"},
         {"Metric": "Commit Aircraft", "Value": str(row["commit_aircraft"])},
         {"Metric": "Recovery Model", "Value": str(row["model"])},
         {"Metric": "Pattern Total(Frontline)", "Value": str(row["pattern_with_frontlines"])},
@@ -675,19 +680,43 @@ def _show_about_page() -> None:
     )
 
     st.subheader("How The Model Flows")
-    st.code(
-        "\n".join(
-            [
-                "User inputs",
-                "  -> Policy layer: commit rate, UTE range, go limits, recovery rules",
-                "  -> Capacity sweep: sortie output by PAI and UTE",
-                "  -> Pattern generator: first-go / second-go daily splits",
-                "  -> Monte Carlo simulation: GA, Code 3, fixes, daily carry-forward",
-                "  -> Success scoring: sorties, daily schedule, aircraft, commit, recovery, backlog",
-                "  -> GUI outputs: recommendations, diagnostics, comparisons",
-            ]
-        ),
-        language="text",
+    st.graphviz_chart(
+        """
+        digraph {
+            graph [
+                rankdir=LR,
+                bgcolor="transparent",
+                pad="0.35",
+                nodesep="0.55",
+                ranksep="0.75"
+            ];
+            node [
+                shape=rect,
+                style="rounded,filled",
+                color="#334155",
+                fillcolor="#f8fafc",
+                fontname="Helvetica",
+                fontsize="14",
+                margin="0.16,0.10"
+            ];
+            edge [
+                color="#64748b",
+                arrowsize="0.8",
+                penwidth="1.5"
+            ];
+
+            inputs [label="User Inputs\\nPAI, sorties, rates, UTE range"];
+            policy [label="Policy Layer\\ncommit, go limits, recovery rules"];
+            capacity [label="Capacity Sweep\\nPAI x UTE sortie capacity"];
+            patterns [label="Pattern Generator\\nfirst-go / second-go splits"];
+            simulation [label="Monte Carlo Engine\\nGA, Code 3, fixes, carry-forward"];
+            scoring [label="Success Scoring\\nsorties, aircraft, commit, recovery, backlog"];
+            outputs [label="App Outputs\\nrecommendations, diagnostics, comparisons"];
+
+            inputs -> policy -> capacity -> patterns -> simulation -> scoring -> outputs;
+        }
+        """,
+        use_container_width=True,
     )
 
     with st.expander("Inputs And Policy Rules", expanded=True):
