@@ -1,4 +1,4 @@
-# Air Force Turn Pattern Sustainability Modeler
+# Turn Pattern Sustainability Modeler
 
 This is a condensed Streamlit model for assessing whether weekly turn patterns are sustainable under TTP commit limits, UTE planning bands, maintenance event rates, and repair assumptions.
 
