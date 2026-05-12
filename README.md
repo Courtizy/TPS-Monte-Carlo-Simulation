@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.9`
+Current model version: `0.10`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -126,3 +126,5 @@ Version `0.8` adds a left-to-right visual model-flow diagram to the web app.
 
 Version `0.9` adds average sorties per aircraft to UTE-facing tables and
 shows UTE in best-pattern outputs.
+
+Version `0.10` enlarges the in-app model-flow diagram for readability.

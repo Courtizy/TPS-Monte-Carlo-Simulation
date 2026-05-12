@@ -687,8 +687,10 @@ def _show_about_page() -> None:
                 rankdir=LR,
                 bgcolor="transparent",
                 pad="0.35",
-                nodesep="0.55",
-                ranksep="0.75"
+                nodesep="0.85",
+                ranksep="1.15",
+                size="18,5",
+                ratio="fill"
             ];
             node [
                 shape=rect,
@@ -696,13 +698,15 @@ def _show_about_page() -> None:
                 color="#334155",
                 fillcolor="#f8fafc",
                 fontname="Helvetica",
-                fontsize="14",
-                margin="0.16,0.10"
+                fontsize="22",
+                width="2.7",
+                height="1.1",
+                margin="0.22,0.16"
             ];
             edge [
                 color="#64748b",
-                arrowsize="0.8",
-                penwidth="1.5"
+                arrowsize="1.1",
+                penwidth="2.0"
             ];
 
             inputs [label="User Inputs\\nPAI, sorties, rates, UTE range"];
