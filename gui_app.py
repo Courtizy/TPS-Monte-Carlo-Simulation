@@ -45,12 +45,16 @@ def run_best_fit(
     max_second_go: int,
     max_day_delta: int,
     include_surge: bool,
+    ute_min: float,
+    ute_max: float,
 ) -> dict[str, object]:
     policy = replace(
         DEFAULT_TTP_POLICY,
         max_daily_sorties=max_daily_sorties,
         max_second_go=max_second_go,
         max_day_to_day_delta=max_day_delta,
+        ute_min=ute_min,
+        ute_max=ute_max,
     )
     constraints = PatternConstraints.from_policy(policy)
     rng = Random(random_seed)
@@ -148,8 +152,16 @@ def run_manual_pattern(
     fix_count_model: str,
     max_daily_sorties: int,
     max_second_go: int,
+    ute_min: float,
+    ute_max: float,
 ) -> dict[str, object]:
-    policy = replace(DEFAULT_TTP_POLICY, max_daily_sorties=max_daily_sorties, max_second_go=max_second_go)
+    policy = replace(
+        DEFAULT_TTP_POLICY,
+        max_daily_sorties=max_daily_sorties,
+        max_second_go=max_second_go,
+        ute_min=ute_min,
+        ute_max=ute_max,
+    )
     schedule = {
         day: DaySchedule(first_go=first_go[index], second_go=second_go[index])
         for index, day in enumerate(policy.flying_days)
@@ -467,6 +479,27 @@ def _top_pattern_rows(rows: list[dict[str, object]], limit: int = 5) -> list[dic
     return sorted(rows, key=_rank, reverse=True)[:limit]
 
 
+def _best_by_ute_rows(
+    rows: list[dict[str, object]],
+    policy: TtpPolicy,
+) -> list[dict[str, object]]:
+    output = []
+    for pai in _pai_values(rows):
+        pai_rows = _recommendable_rows(_rows_for_pai(rows, pai), policy)
+        capacity_labels = sorted(
+            {str(row["capacity_label"]) for row in pai_rows},
+            key=lambda label: (
+                "Surge" in label,
+                float(label.split()[-1]) if label.startswith("UTE ") else 99.0,
+            ),
+        )
+        for label in capacity_labels:
+            matching = [row for row in pai_rows if row["capacity_label"] == label]
+            if matching:
+                output.append(max(matching, key=_rank))
+    return output
+
+
 def _operating_envelope_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, str]]:
     output = []
     for pai in _pai_values(rows):
@@ -513,6 +546,30 @@ def _failure_readout_rows(rows: list[dict[str, object]]) -> list[dict[str, str]]
         }
         for failure, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)
     ]
+
+
+def _recovery_delta_rows(summaries: dict[str, SimulationSummary]) -> list[dict[str, str]]:
+    rows = []
+    names = list(summaries)
+    baseline = summaries[names[0]] if names else None
+    for name, summary in summaries.items():
+        delta = "Baseline"
+        if baseline is not None and summary is not baseline:
+            delta = f"{summary.probability_success - baseline.probability_success:+.1%}"
+        rows.append(
+            {
+                "Recovery Model": name,
+                "Overall Success": _pct(summary.probability_success),
+                "Delta vs Strict": delta,
+                "Sortie Target Met": _pct(summary.probability_meet_sorties),
+                "Aircraft Available": _pct(summary.probability_meet_aircraft_required),
+                "Next-Monday Recovery": _pct(summary.probability_recovery),
+                "Avg Next-Monday MC": f"{summary.average_next_monday_available:.1f}",
+                "Avg Backlog": f"{summary.average_repair_backlog:.1f}",
+                "Primary Failure": _primary_failure(summary),
+            }
+        )
+    return rows
 
 
 def _decision_guidance(pai: int, rows: list[dict[str, object]], policy: TtpPolicy) -> str:
@@ -579,6 +636,8 @@ def _dsute_calculation(
     om_days: int,
     possessed_aircraft: int,
     base_sorties: int,
+    ute_min: float,
+    ute_max: float,
     include_operating_location_sorties: bool = False,
     operating_location_sorties: int = 0,
 ) -> dict[str, float | int | bool]:
@@ -599,9 +658,9 @@ def _dsute_calculation(
         "dsute": dsute,
         "sorties_per_day": modeled_sorties / om_days if om_days > 0 else 0,
         "sorties_per_aircraft": modeled_sorties / possessed_aircraft if possessed_aircraft > 0 else 0,
-        "within_planning_band": DEFAULT_TTP_POLICY.ute_min <= dsute <= DEFAULT_TTP_POLICY.ute_max,
-        "below_planning_band": dsute < DEFAULT_TTP_POLICY.ute_min,
-        "above_planning_band": dsute > DEFAULT_TTP_POLICY.ute_max,
+        "within_planning_band": ute_min <= dsute <= ute_max,
+        "below_planning_band": dsute < ute_min,
+        "above_planning_band": dsute > ute_max,
     }
 
 
@@ -614,6 +673,13 @@ with st.sidebar:
     page = st.radio(
         "Page",
         ["Optimization Dashboard", "Manual Turn Pattern", "DSUTE Calculator"],
+    )
+    ute_min, ute_max = st.slider(
+        "UTE Planning Range",
+        min_value=0.00,
+        max_value=0.80,
+        value=(DEFAULT_TTP_POLICY.ute_min, DEFAULT_TTP_POLICY.ute_max),
+        step=0.01,
     )
 
     if page != "DSUTE Calculator":
@@ -674,6 +740,8 @@ if page == "DSUTE Calculator":
         om_days=om_days,
         possessed_aircraft=possessed_aircraft,
         base_sorties=base_sorties,
+        ute_min=float(ute_min),
+        ute_max=float(ute_max),
         include_operating_location_sorties=include_operating_location_sorties,
         operating_location_sorties=operating_location_sorties,
     )
@@ -683,11 +751,11 @@ if page == "DSUTE Calculator":
     metric_cols[2].metric("Sorties / O&M Day", f"{float(deployed['sorties_per_day']):.1f}")
     metric_cols[3].metric("Planning Band", "Inside" if deployed["within_planning_band"] else "Outside")
     if deployed["above_planning_band"]:
-        st.warning("This DSUTE is above the 0.40-0.52 homestation planning band.")
+        st.warning(f"This DSUTE is above the {float(ute_min):.2f}-{float(ute_max):.2f} planning band.")
     elif deployed["below_planning_band"]:
-        st.info("This DSUTE is below the 0.40-0.52 homestation planning band.")
+        st.info(f"This DSUTE is below the {float(ute_min):.2f}-{float(ute_max):.2f} planning band.")
     else:
-        st.success("This DSUTE is inside the 0.40-0.52 homestation planning band.")
+        st.success(f"This DSUTE is inside the {float(ute_min):.2f}-{float(ute_max):.2f} planning band.")
     st.write(
         f"Interpretation: {float(deployed['dsute']):.2f} DSUTE means this location is generating "
         f"about {float(deployed['dsute']):.2f} sorties per possessed aircraft per O&M day."
@@ -728,6 +796,8 @@ if page == "Manual Turn Pattern":
             fix_count_model=fix_count_model,
             max_daily_sorties=int(max_daily_sorties),
             max_second_go=int(max_second_go),
+            ute_min=float(ute_min),
+            ute_max=float(ute_max),
         )
 
     result = st.session_state.get("manual_result")
@@ -759,7 +829,7 @@ if page == "Manual Turn Pattern":
 
 st.header("Optimization Dashboard")
 st.caption(
-    "Planning optimization searches every UTE target from 0.40 through 0.52. "
+    f"Planning optimization searches every UTE target from {float(ute_min):.2f} through {float(ute_max):.2f}. "
     "Max-commit surge is shown in the capacity table and can be included as an optional stress case."
 )
 if pai_max > pai_min and int(iterations) * int(max_patterns) * (pai_max - pai_min + 1) > 120_000:
@@ -788,6 +858,8 @@ if st.button("Run Model", type="primary"):
         max_second_go=int(max_second_go),
         max_day_delta=int(max_day_delta),
         include_surge=bool(include_surge),
+        ute_min=float(ute_min),
+        ute_max=float(ute_max),
     )
 
 result = st.session_state.get("best_fit_result")
@@ -838,6 +910,10 @@ with capacity:
 with patterns:
     recommendable = _recommendable_rows(rows, policy)
     if recommendable:
+        st.subheader("Best Sustainable Pattern by UTE")
+        best_by_ute = _best_by_ute_rows(rows, policy)
+        st.dataframe(_display_rows(best_by_ute), width="stretch", hide_index=True)
+        st.subheader("All Sustainable Pattern Candidates")
         st.dataframe(_display_rows(recommendable), width="stretch", hide_index=True)
     else:
         st.warning("No sustainable best patterns were found under the current assumptions.")
@@ -854,3 +930,32 @@ with detail:
         }
         selected = options[st.selectbox("Selected Pattern", list(options))]
         st.dataframe(_detail_rows(selected), width="stretch", hide_index=True)
+
+        st.subheader("Recovery Model Comparison")
+        st.caption("Reruns the selected pattern under both recovery assumptions using the current sidebar inputs.")
+        if st.button("Compare Recovery Models for Selected Pattern"):
+            comparison = run_manual_pattern(
+                pai=int(selected["pai"]),
+                required_sorties=int(selected["required_sorties"]),
+                first_go=tuple(int(value) for value in selected["first_go_sequence"]),
+                second_go=tuple(int(value) for value in selected["turn_sequence"]),
+                iterations=int(iterations),
+                random_seed=int(random_seed),
+                mc_rate=float(mc_rate),
+                ground_abort_rate=float(ground_abort_rate),
+                break_rate=float(break_rate),
+                fix_8hr_rate=float(fix_8hr_rate),
+                fix_12hr_rate=float(fix_12hr_rate),
+                fix_24hr_rate=float(fix_24hr_rate),
+                event_count_model=event_count_model,
+                fix_count_model=fix_count_model,
+                max_daily_sorties=int(max_daily_sorties),
+                max_second_go=int(max_second_go),
+                ute_min=float(ute_min),
+                ute_max=float(ute_max),
+            )
+            st.session_state["detail_recovery_comparison"] = comparison
+
+        comparison = st.session_state.get("detail_recovery_comparison")
+        if comparison:
+            st.dataframe(_recovery_delta_rows(comparison["summaries"]), width="stretch", hide_index=True)

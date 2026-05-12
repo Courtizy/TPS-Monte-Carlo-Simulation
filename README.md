@@ -102,4 +102,10 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.2`
+Current model version: `0.4`
+
+Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
+sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
+
+Version `0.4` adds embedded comparison views: best sustainable pattern by UTE
+and selected-pattern recovery model comparison.
