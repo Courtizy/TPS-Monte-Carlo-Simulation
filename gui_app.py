@@ -729,6 +729,48 @@ def _show_about_page() -> None:
             """
         )
 
+    with st.expander("Sidebar Options"):
+        st.markdown(
+            """
+            - **Page**: selects the major workflow: optimization, manual pattern testing, DSUTE, or this guide.
+            - **UTE Planning Range**: controls which UTE points the optimizer tests. A tighter range focuses the model near a known operating tempo.
+            - **PAI Mode**: run one possessed-aircraft value or sweep a range such as 9-12.
+            - **Required Weekly Sorties**: the sortie target the model must satisfy. Patterns can plan more than this, but not less.
+            - **Iterations**: number of Monte Carlo weeks simulated per pattern. More iterations improve stability but take longer.
+            - **Random Seed**: keeps results repeatable when comparing changes.
+            - **Event Count Model**: chooses how weekly ground aborts and Code 3s are generated.
+            - **Fix Count Model**: chooses how 8/12/24-hour fixes are generated.
+            - **Max Daily Sorties**: caps total sorties on any flying day.
+            - **Max Second-Go Sorties**: caps turn sorties after first-go aircraft.
+            - **Max Day-to-Day Delta**: limits sharp changes between adjacent days in generated patterns.
+            - **Include Max-Commit Surge**: adds the max-commit stress case into optimization. Leave off for normal sustainment planning.
+            """
+        )
+
+    with st.expander("Maintenance Rate Inputs"):
+        st.markdown(
+            """
+            - **MC Rate**: starting mission-capable aircraft percentage. Starting MC is rounded down because partial aircraft cannot fly.
+            - **Ground Abort Rate**: expected ground aborts generated from planned weekly sorties.
+            - **Break / Code 3 Rate**: expected aircraft breaks generated from planned weekly sorties.
+            - **8-Hour Fix Rate**: chance or modeled share of events fixed the same day.
+            - **12-Hour Fix Rate**: chance or modeled share of events fixed by the next recovery window. Long fixes begin Tuesday by default.
+            - **24-Hour Fix Rate**: chance or modeled share of events fixed by the next-day recovery window. Long fixes begin Tuesday by default.
+
+            The rates should be entered as decimals. For example, `0.265` means 26.5%.
+            """
+        )
+
+    with st.expander("Event And Fix Model Choices"):
+        st.markdown(
+            """
+            - **Normal TTP**: calculates expected weekly event/fix counts from the input rates and distributes them through the week. This behaves closer to a planning spreadsheet.
+            - **Probabilistic Monte Carlo**: rolls events and fixes probabilistically each iteration. This adds more variation and is better for stress-testing uncertainty.
+
+            Using probabilistic events and probabilistic fixes will usually create wider result variation. Using Normal TTP for both gives a more stable planning estimate.
+            """
+        )
+
     with st.expander("What Counts As Success"):
         st.markdown(
             """
@@ -738,6 +780,22 @@ def _show_about_page() -> None:
 
             A pattern that meets the sortie target but leaves the fleet unrecovered is treated as risky
             or unsustainable rather than a clean success.
+            """
+        )
+
+    with st.expander("Output Metrics"):
+        st.markdown(
+            """
+            - **Overall Success**: all required success checks passed in the iteration.
+            - **Sortie Target Met**: actual sorties flown met or exceeded required weekly sorties.
+            - **Daily Schedule Met**: each day met its planned daily schedule, not just the weekly total.
+            - **Aircraft Available**: enough MC aircraft existed to support the scheduled requirement.
+            - **Within Commit**: daily aircraft committed stayed within the policy commit limit.
+            - **Next-Monday Recovery**: the fleet recovered enough aircraft by the next Monday marker.
+            - **Backlog Success**: repair backlog stayed within the allowed threshold.
+            - **Recovery Debt**: how far average next-Monday MC falls below starting MC.
+            - **Risk Band**: Green, Yellow, Orange, or Red based on overall success probability.
+            - **Avg Sorties / Aircraft**: planned weekly sorties divided by PAI.
             """
         )
 
@@ -752,6 +810,31 @@ def _show_about_page() -> None:
             """
         )
 
+    with st.expander("Optimization Dashboard Features"):
+        st.markdown(
+            """
+            - **Summary**: gives a decision brief for each PAI in the sweep. This is the first place to look.
+            - **Operating Envelope**: shows sustainable UTE min/max and maximum sustainable sorties by PAI.
+            - **PAI Decision Briefs**: show the recommendation, viable options, and failure readout for each PAI.
+            - **Capacity Sweep**: shows raw sortie capacity by PAI and UTE point, including average sorties per aircraft.
+            - **Best Patterns**: only shows sustainable/recommendable patterns, plus best sustainable pattern by UTE.
+            - **Diagnostics**: shows failed candidates too, so you can see why something was rejected.
+            - **Pattern Detail**: shows the selected pattern’s metrics and lets you compare recovery models.
+            """
+        )
+
+    with st.expander("Manual Turn Pattern Features"):
+        st.markdown(
+            """
+            Use this page when you already have a pattern in mind, such as `5x2, 4x2, 4x2, 3x2, 2x0`.
+
+            The first number is first-go aircraft/sorties. The second number is second-go turns.
+            For example, `5x2` means 5 first-go sorties and 2 second-go sorties, for 7 total sorties that day.
+
+            The page runs the same pattern under both recovery models and shows an Excel-style sample iteration table.
+            """
+        )
+
     with st.expander("DSUTE Calculator"):
         st.markdown(
             """
@@ -761,6 +844,23 @@ def _show_about_page() -> None:
 
             Flying hours, average sortie duration, and deployed or operating-location hours are not used.
             Deployed or operating-location sorties are only included if intentionally toggled into the requirement.
+
+            The **Suggested Model UTE Band** section turns the calculated DSUTE into a planning range that can be copied into the sidebar UTE Planning Range.
+            """
+        )
+
+    with st.expander("Best-Pattern Logic"):
+        st.markdown(
+            """
+            The app does not treat every generated pattern as a recommendation.
+
+            A pattern must:
+            - plan at least the required weekly sorties,
+            - meet the minimum success threshold,
+            - meet the recovery threshold,
+            - meet the backlog threshold.
+
+            Failed patterns remain visible in Diagnostics, but they are not shown as Best Patterns.
             """
         )
 
