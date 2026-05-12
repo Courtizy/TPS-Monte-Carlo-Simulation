@@ -680,48 +680,18 @@ def _show_about_page() -> None:
     )
 
     st.subheader("How The Model Flows")
-    st.graphviz_chart(
-        """
-        digraph {
-            graph [
-                rankdir=LR,
-                bgcolor="transparent",
-                pad="0.35",
-                nodesep="0.85",
-                ranksep="1.15",
-                size="18,5",
-                ratio="fill"
-            ];
-            node [
-                shape=rect,
-                style="rounded,filled",
-                color="#334155",
-                fillcolor="#f8fafc",
-                fontname="Helvetica",
-                fontsize="22",
-                width="2.7",
-                height="1.1",
-                margin="0.22,0.16"
-            ];
-            edge [
-                color="#64748b",
-                arrowsize="1.1",
-                penwidth="2.0"
-            ];
-
-            inputs [label="User Inputs\\nPAI, sorties, rates, UTE range"];
-            policy [label="Policy Layer\\ncommit, go limits, recovery rules"];
-            capacity [label="Capacity Sweep\\nPAI x UTE sortie capacity"];
-            patterns [label="Pattern Generator\\nfirst-go / second-go splits"];
-            simulation [label="Monte Carlo Engine\\nGA, Code 3, fixes, carry-forward"];
-            scoring [label="Success Scoring\\nsorties, aircraft, commit, recovery, backlog"];
-            outputs [label="App Outputs\\nrecommendations, diagnostics, comparisons"];
-
-            inputs -> policy -> capacity -> patterns -> simulation -> scoring -> outputs;
-        }
-        """,
-        use_container_width=True,
-    )
+    flow_steps = [
+        ("1. User Inputs", "PAI, sortie requirement, maintenance rates, UTE range, and model options."),
+        ("2. Policy Layer", "Applies commit rate, go limits, recovery rules, risk bands, and rounding rules."),
+        ("3. Capacity Sweep", "Calculates weekly sortie capacity for each PAI and UTE point."),
+        ("4. Pattern Generator", "Builds realistic first-go and second-go turn-pattern candidates."),
+        ("5. Monte Carlo Engine", "Runs ground aborts, Code 3s, fixes, daily MC carry-forward, and weekend recovery."),
+        ("6. Success Scoring", "Checks sorties, daily schedule, aircraft availability, commit compliance, recovery, and backlog."),
+        ("7. App Outputs", "Shows recommendations, sustainable patterns, diagnostics, and recovery-model comparisons."),
+    ]
+    for title, body in flow_steps:
+        st.markdown(f"**{title}**")
+        st.write(body)
 
     with st.expander("Inputs And Policy Rules", expanded=True):
         st.markdown(
