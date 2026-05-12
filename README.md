@@ -58,14 +58,14 @@ Calculates homestation DSUTE on the sortie side only. Flying hours, average sort
 
 Inputs:
 
-- Offutt sorties.
-- Offutt possessed aircraft.
+- Required Sorties.
+- Possessed aircraft.
 - O&M days.
-- Optional downrange / OL sorties only when intentionally toggled into the Offutt requirement.
+- Optional downrange / OL sorties only when intentionally toggled into the requirement.
 
 Calculations:
 
-- `DSUTE = Offutt sorties / (Offutt possessed aircraft x O&M days)`
+- `DSUTE = Sorties / (Possessed aircraft x O&M days)`
 
 Example:
 
