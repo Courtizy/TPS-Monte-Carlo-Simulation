@@ -440,7 +440,7 @@ def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
             "Planned Sorties": row["weekly_sorties"],
             "Required Sorties": row["required_sorties"],
             "UTE": f"{float(row['ute']):.2f}",
-            "Avg Sorties / Aircraft": f"{float(row['avg_sorties_per_aircraft']):.1f}",
+            "Avg Sorties / Aircraft": f"{_avg_sorties_per_aircraft(row):.1f}",
             "Recovery Model": row["model"],
             "Pattern Total(Frontline)": row["pattern_with_frontlines"],
             "Pattern Family": row["pattern_name"],
@@ -452,6 +452,13 @@ def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
         }
         for row in rows
     ]
+
+
+def _avg_sorties_per_aircraft(row: dict[str, object]) -> float:
+    if "avg_sorties_per_aircraft" in row:
+        return float(row["avg_sorties_per_aircraft"])
+    pai = int(row.get("pai", 0))
+    return int(row.get("weekly_sorties", 0)) / pai if pai else 0.0
 
 
 def _is_recommendable(row: dict[str, object], policy: TtpPolicy = DEFAULT_TTP_POLICY) -> bool:
@@ -616,7 +623,7 @@ def _detail_rows(row: dict[str, object]) -> list[dict[str, str]]:
         {"Metric": "Planned Sorties", "Value": str(row["weekly_sorties"])},
         {"Metric": "Required Sorties", "Value": str(row["required_sorties"])},
         {"Metric": "UTE", "Value": f"{float(row['ute']):.2f}"},
-        {"Metric": "Avg Sorties / Aircraft", "Value": f"{float(row['avg_sorties_per_aircraft']):.1f}"},
+        {"Metric": "Avg Sorties / Aircraft", "Value": f"{_avg_sorties_per_aircraft(row):.1f}"},
         {"Metric": "Commit Aircraft", "Value": str(row["commit_aircraft"])},
         {"Metric": "Recovery Model", "Value": str(row["model"])},
         {"Metric": "Pattern Total(Frontline)", "Value": str(row["pattern_with_frontlines"])},

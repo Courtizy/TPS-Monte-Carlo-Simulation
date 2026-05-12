@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.12`
+Current model version: `0.13`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -133,3 +133,6 @@ Version `0.11` replaces the model-flow diagram with a readable stepped flow
 section in the About page.
 
 Version `0.12` adds a DSUTE-derived suggested UTE planning band for model limits.
+
+Version `0.13` makes UTE table displays compatible with cached results from
+older model versions.
