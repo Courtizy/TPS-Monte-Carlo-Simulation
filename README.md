@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.21.3`
+Current model version: `0.21.4`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -173,3 +173,6 @@ Version `0.21.3` separates tested candidates from recommendations. The model can
 simulate operationally questionable shapes for visibility, but the recommendation
 screen rejects max-commit surge, heavily back-loaded, Friday-heavy, compressed,
 or highly uneven patterns from the sustainable/recommendable list.
+
+Version `0.21.4` tightens pattern-family classification so low-variance
+waterfalls like `4x2-4x2-4x2-3x2-3x2` are no longer mislabeled as flat turns.

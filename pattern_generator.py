@@ -566,14 +566,14 @@ def _pattern_family(
     compression_score: float,
     valley_count: int,
 ) -> str:
-    if std_dev <= 0.75:
-        return "Flat Turns"
     if compression_score >= 0.70:
         return "Compressed Surge"
     if _is_monotonic(pattern, descending=True):
         return "Waterfall"
     if _is_monotonic(pattern, descending=False):
         return "Reverse Waterfall"
+    if _is_true_flat(pattern, std_dev):
+        return "Flat Turns"
     if _has_steps(pattern, descending=True):
         return "Step-Down"
     if _has_steps(pattern, descending=False):
@@ -591,6 +591,12 @@ def _pattern_family(
     if back_load_score >= 0.62:
         return "Back-Loaded Push"
     return "Balanced Push"
+
+
+def _is_true_flat(pattern: list[int], std_dev: float) -> bool:
+    if not pattern:
+        return False
+    return std_dev <= 0.50 and max(pattern) - min(pattern) <= 1
 
 
 def _pattern_modifiers(
