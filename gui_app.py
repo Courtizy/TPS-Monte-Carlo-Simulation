@@ -14,6 +14,7 @@ from ttp_rules import (
     DEFAULT_TTP_POLICY,
     MODEL_VERSION,
     TtpPolicy,
+    commit_aircraft,
     recovery_model_options,
     risk_band,
     validate_scenario,
@@ -208,6 +209,83 @@ def run_manual_pattern(
         "summaries": summaries,
         "warnings": tuple(sorted(set(warnings))),
     }
+
+
+@st.cache_data(show_spinner=False)
+def run_surge_weeks(
+    *,
+    pai_min: int,
+    pai_max: int,
+    surge_weeks: int,
+    iterations: int,
+    random_seed: int,
+    mc_rate: float,
+    ground_abort_rate: float,
+    break_rate: float,
+    fix_8hr_rate: float,
+    fix_12hr_rate: float,
+    fix_24hr_rate: float,
+    event_count_model: str,
+    fix_count_model: str,
+    ute_min: float,
+    ute_max: float,
+) -> list[dict[str, object]]:
+    policy = replace(DEFAULT_TTP_POLICY, ute_min=ute_min, ute_max=ute_max)
+    rng = Random(random_seed)
+    rows = []
+    for pai in range(pai_min, pai_max + 1):
+        committed = commit_aircraft(pai, policy)
+        schedule = {
+            day: DaySchedule(first_go=committed)
+            for day in policy.flying_days
+        }
+        required_sorties = committed * len(policy.flying_days)
+        for week in range(1, surge_weeks + 1):
+            fatigue_break_multiplier = 1.0 + (0.10 * (week - 1))
+            fatigue_fix_degradation = max(0.60, 1.0 - (0.08 * (week - 1)))
+            for model_name, use_uncommitted in recovery_model_options():
+                scenario = Scenario(
+                    inventory=AircraftInventory(paa=pai, pai=pai),
+                    homestation=HomestationData(
+                        mc_rate=mc_rate,
+                        ground_abort_rate=ground_abort_rate,
+                        break_rate=break_rate,
+                        fix_8hr_rate=fix_8hr_rate,
+                        fix_12hr_rate=fix_12hr_rate,
+                        fix_24hr_rate=fix_24hr_rate,
+                        ttp_commit_rate=policy.commit_rate,
+                        spare_rate=policy.spare_rate,
+                        use_uncommitted_aircraft_for_ga_recovery=use_uncommitted,
+                        event_count_model=event_count_model,
+                        fix_count_model=fix_count_model,
+                        fatigue_break_multiplier=fatigue_break_multiplier,
+                        fatigue_fix_degradation=fatigue_fix_degradation,
+                    ),
+                    schedule=schedule,
+                    total_required_sorties=required_sorties,
+                    policy=policy,
+                )
+                summary = simulate(scenario, iterations=iterations, seed=rng.randrange(1_000_000_000))
+                rows.append(
+                    {
+                        "PAI": pai,
+                        "Week": week,
+                        "Recovery Model": model_name,
+                        "Commit Aircraft": committed,
+                        "Planned Sorties": required_sorties,
+                        "Max-Commit UTE": required_sorties / (pai * len(policy.flying_days)) if pai else 0,
+                        "Break Stress": fatigue_break_multiplier,
+                        "Fix Effectiveness": fatigue_fix_degradation,
+                        "Overall Success": summary.probability_success,
+                        "Sortie Target Met": summary.probability_meet_sorties,
+                        "Next-Monday Recovery": summary.probability_recovery,
+                        "Avg Next-Monday MC": summary.average_next_monday_available,
+                        "Avg Backlog": summary.average_repair_backlog,
+                        "Risk": risk_band(summary.probability_success, policy),
+                        "Primary Failure": _primary_failure(summary),
+                    }
+                )
+    return rows
 
 
 def _scenario(
@@ -601,6 +679,29 @@ def _recovery_delta_rows(summaries: dict[str, SimulationSummary]) -> list[dict[s
     return rows
 
 
+def _surge_display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [
+        {
+            "PAI": row["PAI"],
+            "Week": row["Week"],
+            "Recovery Model": row["Recovery Model"],
+            "Commit Aircraft": row["Commit Aircraft"],
+            "Planned Sorties": row["Planned Sorties"],
+            "Max-Commit UTE": f"{float(row['Max-Commit UTE']):.2f}",
+            "Break Stress": f"{float(row['Break Stress']):.2f}x",
+            "Fix Effectiveness": f"{float(row['Fix Effectiveness']):.2f}x",
+            "Overall Success": _pct(float(row["Overall Success"])),
+            "Sortie Target Met": _pct(float(row["Sortie Target Met"])),
+            "Next-Monday Recovery": _pct(float(row["Next-Monday Recovery"])),
+            "Avg Next-Monday MC": f"{float(row['Avg Next-Monday MC']):.1f}",
+            "Avg Backlog": f"{float(row['Avg Backlog']):.1f}",
+            "Risk": row["Risk"],
+            "Primary Failure": row["Primary Failure"],
+        }
+        for row in rows
+    ]
+
+
 def _decision_guidance(pai: int, rows: list[dict[str, object]], policy: TtpPolicy) -> str:
     viable = _recommendable_rows(rows, policy)
     if viable:
@@ -738,6 +839,66 @@ def _show_about_page() -> None:
         st.markdown(f"**{title}**")
         st.write(body)
 
+    with st.expander("Underlying Logic", expanded=True):
+        st.markdown(
+            """
+            **1. Capacity math**
+
+            - Commit aircraft = `floor(PAI x commit rate)`.
+            - UTE weekly sorties = `floor(PAI x flying days x UTE)`.
+            - Max surge sorties = `commit aircraft x flying days`.
+            - The model floors aircraft and sortie capacity because partial aircraft cannot be scheduled.
+
+            **2. Pattern generation**
+
+            - The optimizer generates Monday-Friday patterns that equal the weekly sortie count for each UTE point.
+            - Each day is split across the enabled number of GOs: 1st, 2nd, 3rd, and 4th when allowed.
+            - Patterns are constrained by daily sortie cap, commit aircraft, # of GOs limits, day-to-day delta, and human-factor preferences.
+            - Front-week and smoother patterns are favored over back-loaded Friday-heavy schedules.
+
+            **3. Event generation**
+
+            - Weekly Code 3 events are based on planned weekly sorties and break rate.
+            - Weekly ground aborts are based on planned weekly sorties and ground-abort rate.
+            - Normal TTP mode uses expected event counts.
+            - Probabilistic Monte Carlo mode rolls each sortie as a chance event.
+
+            **4. Event distribution**
+
+            - Events are randomly distributed across Monday-Friday flying days.
+            - Events are limited by available first-go exposure.
+            - If all events cannot be placed, the run is flagged for suppressed events and cannot count as clean overall success.
+
+            **5. Daily execution**
+
+            - Each day starts with available MC aircraft carried from the previous day.
+            - The model checks aircraft required, commit compliance, Code 3s, ground aborts, sortie losses, and fixes.
+            - Ground aborts may be covered by scheduled spares or fleet-flex aircraft depending on recovery model.
+            - End-of-day available aircraft carry into the next day.
+
+            **6. Repair logic**
+
+            - 8-hour fixes can return aircraft the same day.
+            - 12-hour and 24-hour fixes begin on Tuesday by default.
+            - Each event can only be repaired once.
+            - Unfixed events remain in the repair backlog.
+            - Saturday, Sunday, and next Monday continue recovery logic.
+
+            **7. Success logic**
+
+            Overall success requires more than meeting the weekly sortie count. A successful iteration must meet required sorties,
+            make the daily schedule, have enough aircraft available, stay within commit limits, recover by next Monday,
+            keep backlog within threshold, and avoid suppressed-event integrity issues.
+
+            **8. Surge logic**
+
+            - Max surge uses committed aircraft as the true front-line schedule.
+            - It is intentionally separate from normal UTE sustainment planning.
+            - Weeks 2-5 apply increasing break stress and reduced fix effectiveness.
+            - The purpose is to show when max commit starts becoming risky, not to recommend it as normal execution.
+            """
+        )
+
     with st.expander("Inputs And Policy Rules", expanded=True):
         st.markdown(
             """
@@ -840,6 +1001,7 @@ def _show_about_page() -> None:
             - **PAI Decision Briefs**: show the recommendation, viable options, and failure readout for each PAI.
             - **Capacity Sweep**: shows raw sortie capacity by PAI and UTE point, including average sorties per aircraft.
             - **Best Patterns**: only shows sustainable/recommendable patterns, plus best sustainable pattern by UTE.
+            - **Max Surge Weeks**: shows week 1-5 max-commit stress calculations separately from normal sustainment planning.
             - **Diagnostics**: shows failed candidates too, so you can see why something was rejected.
             - **Pattern Detail**: shows the selected pattern’s metrics and lets you compare recovery models.
             """
@@ -957,10 +1119,12 @@ with st.sidebar:
             max_patterns = st.number_input("Max Patterns Per UTE Point", min_value=1, value=30, step=10)
             max_day_delta = st.slider("Max Day-to-Day Delta", 0, 8, 2)
             include_surge = st.checkbox("Include max-commit surge in optimization", value=False)
+            surge_weeks = st.slider("Max Surge Weeks", 1, 5, 5)
         else:
             max_patterns = 40
             max_day_delta = DEFAULT_TTP_POLICY.max_day_to_day_delta or 0
             include_surge = False
+            surge_weeks = 5
 
 if page == "About / Model Logic":
     _show_about_page()
@@ -1155,6 +1319,23 @@ if st.button("Run Model", type="primary"):
         ute_min=float(ute_min),
         ute_max=float(ute_max),
     )
+    st.session_state["surge_result"] = run_surge_weeks(
+        pai_min=int(pai_min),
+        pai_max=int(pai_max),
+        surge_weeks=int(surge_weeks),
+        iterations=int(iterations),
+        random_seed=int(random_seed) + 55_000,
+        mc_rate=float(mc_rate),
+        ground_abort_rate=float(ground_abort_rate),
+        break_rate=float(break_rate),
+        fix_8hr_rate=float(fix_8hr_rate),
+        fix_12hr_rate=float(fix_12hr_rate),
+        fix_24hr_rate=float(fix_24hr_rate),
+        event_count_model=event_count_model,
+        fix_count_model=fix_count_model,
+        ute_min=float(ute_min),
+        ute_max=float(ute_max),
+    )
 
 result = st.session_state.get("best_fit_result")
 if not result:
@@ -1162,11 +1343,12 @@ if not result:
     st.stop()
     raise SystemExit
 
-summary, capacity, patterns, diagnostics, detail = st.tabs(
-    ["Summary", "Capacity Sweep", "Best Patterns", "Diagnostics", "Pattern Detail"]
+summary, capacity, patterns, surge, diagnostics, detail = st.tabs(
+    ["Summary", "Capacity Sweep", "Best Patterns", "Max Surge Weeks", "Diagnostics", "Pattern Detail"]
 )
 rows = result["rows"]
 policy = result["policy"]
+surge_rows = st.session_state.get("surge_result", [])
 
 with summary:
     if not rows:
@@ -1211,6 +1393,16 @@ with patterns:
         st.dataframe(_display_rows(recommendable), width="stretch", hide_index=True)
     else:
         st.warning("No sustainable best patterns were found under the current assumptions.")
+
+with surge:
+    st.caption(
+        "Max surge uses true max-commit front-line scheduling: committed aircraft x flying days. "
+        "Weeks 2-5 apply increasing break stress and reduced fix effectiveness to avoid treating max surge as indefinitely sustainable."
+    )
+    if surge_rows:
+        st.dataframe(_surge_display_rows(surge_rows), width="stretch", hide_index=True)
+    else:
+        st.info("Run the model to calculate max-commit surge weeks.")
 
 with diagnostics:
     st.caption("All tested best candidates, including patterns rejected from the Best Patterns tab.")

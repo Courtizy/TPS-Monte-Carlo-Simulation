@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.15`
+Current model version: `0.17`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -142,3 +142,8 @@ maintenance rates, event/fix modes, output metrics, and tab features.
 
 Version `0.15` adds configurable # of GOs depth for 1st through 4th go in both
 optimization and manual turn-pattern testing.
+
+Version `0.16` restores a separate max-commit surge week calculation for weeks
+1-5 in the web app.
+
+Version `0.17` adds a detailed Underlying Logic section to the About page.
