@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.21`
+Current model version: `0.21.1`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -161,3 +161,7 @@ success dimensions.
 Version `0.21` removes low-value dashboard charts and replaces them with clearer
 diagnostic readout tables while keeping useful pressure visuals for surge weeks
 and daily sortie shape.
+
+Version `0.21.1` keeps the Summary decision brief and makes generated pattern
+selection family-balanced so all discovered pattern families are represented
+before Monte Carlo ranking.

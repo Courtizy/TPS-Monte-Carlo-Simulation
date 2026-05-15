@@ -64,6 +64,7 @@ def run_best_fit(
     constraints = PatternConstraints.from_policy(policy)
     rng = Random(random_seed)
     rows: list[dict[str, object]] = []
+    family_coverage_rows: list[dict[str, object]] = []
     capacity_rows = [
         {"pai": pai, **point}
         for pai in range(pai_min, pai_max + 1)
@@ -95,6 +96,20 @@ def run_best_fit(
                 template,
                 constraints,
                 max_results=max_patterns,
+            )
+            family_names = sorted({
+                str(pattern["classification"]["pattern_family"])
+                for pattern in patterns
+            })
+            family_coverage_rows.append(
+                {
+                    "PAI": pai,
+                    "Capacity Point": point["label"],
+                    "Weekly Sorties": point["weekly_sorties"],
+                    "Patterns Tested": len(patterns),
+                    "Families Tested": len(family_names),
+                    "Pattern Families": ", ".join(family_names),
+                }
             )
             for model_name, use_uncommitted in recovery_model_options():
                 best_row = None
@@ -134,6 +149,7 @@ def run_best_fit(
     return {
         "policy": policy,
         "capacity_rows": capacity_rows,
+        "family_coverage_rows": family_coverage_rows,
         "rows": sorted(rows, key=lambda row: (row["pai"], row["weekly_sorties"], row["model"])),
     }
 
@@ -1698,6 +1714,13 @@ with capacity:
 
 with patterns:
     recommendable = _recommendable_rows(rows, policy)
+    coverage_rows = result.get("family_coverage_rows", [])
+    if coverage_rows:
+        st.subheader("Pattern Family Coverage")
+        st.caption(
+            "This confirms which generated pattern families were included in the candidate set before Monte Carlo ranking."
+        )
+        st.dataframe(coverage_rows, width="stretch", hide_index=True)
     if recommendable:
         st.subheader("Pattern Family Comparison")
         st.caption(

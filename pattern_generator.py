@@ -212,10 +212,49 @@ def generate_turn_pattern_permutations(
                     "schedule_signature": schedule_signature,
                 }
             )
-            if max_results is not None and len(patterns) >= max_results:
-                return sorted(patterns, key=_pattern_sort_key)
 
-    return sorted(patterns, key=_pattern_sort_key)
+    sorted_patterns = sorted(patterns, key=_pattern_sort_key)
+    if max_results is not None:
+        return _family_balanced_patterns(sorted_patterns, max_results)
+    return sorted_patterns
+
+
+def _family_balanced_patterns(
+    patterns: list[dict[str, object]],
+    max_results: int,
+) -> list[dict[str, object]]:
+    if len(patterns) <= max_results:
+        return patterns
+
+    families = sorted({str(pattern["classification"]["pattern_family"]) for pattern in patterns})
+    grouped = {
+        family: [
+            pattern for pattern in patterns
+            if str(pattern["classification"]["pattern_family"]) == family
+        ]
+        for family in families
+    }
+    selected: list[dict[str, object]] = []
+    selected_signatures: set[str] = set()
+
+    while len(selected) < max_results:
+        added_this_round = False
+        for family in families:
+            while grouped[family]:
+                candidate = grouped[family].pop(0)
+                signature = str(candidate["signature"])
+                if signature in selected_signatures:
+                    continue
+                selected.append(candidate)
+                selected_signatures.add(signature)
+                added_this_round = True
+                break
+            if len(selected) >= max_results:
+                break
+        if not added_this_round:
+            break
+
+    return sorted(selected, key=_pattern_sort_key)
 
 
 def _classification_sort_key(
