@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.25`
+Current model version: `0.21`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -161,18 +161,3 @@ success dimensions.
 Version `0.21` removes low-value dashboard charts and replaces them with clearer
 diagnostic readout tables while keeping useful pressure visuals for surge weeks
 and daily sortie shape.
-
-Version `0.22` adds decision-focused simulation outputs: recommended actions,
-minimum PAI to meet the requirement, constraint-pressure readouts, and manual
-pattern versus optimized-pattern comparison.
-
-Version `0.23` separates MC recovery debt from total recovery burden by adding
-Recovery Pressure, which combines next-Monday MC shortfall and average repair
-backlog.
-
-Version `0.24` adds midweek stress visibility with Midweek MC Drawdown, sample
-event burden, and sample fix workload so patterns can show operational pressure
-even when next-Monday recovery debt and backlog are zero.
-
-Version `0.25` adds a weekend recovery posture control and reduces dashboard
-clutter by moving lower-priority detail tables into expanders.

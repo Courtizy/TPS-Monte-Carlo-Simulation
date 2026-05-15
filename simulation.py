@@ -36,7 +36,6 @@ class HomestationData:
     backlog_threshold: int = 0
     max_daily_repair_throughput: int | None = None
     weekend_repair_capacity_factor: float = 1.0
-    weekend_recovery_posture: str = "Full Weekend Recovery"
     repeat_recur_multiplier: float = 1.0
     fatigue_break_multiplier: float = 1.0
     fatigue_fix_degradation: float = 1.0
@@ -413,20 +412,15 @@ def run_iteration(scenario: Scenario, rng: Random) -> IterationResult:
             long_fix_queue += remaining
         else:
             long_fix_candidates = long_fix_queue + remaining
-            recovery_factor = _recovery_day_fix_factor(day, scenario)
             fixed_12hr, remaining_after_12hr = _sequential_fix_count(
                 long_fix_candidates,
-                scenario.homestation.fix_12hr_rate
-                * scenario.homestation.fatigue_fix_degradation
-                * recovery_factor,
+                scenario.homestation.fix_12hr_rate * scenario.homestation.fatigue_fix_degradation,
                 scenario.homestation.fix_count_model,
                 rng,
             )
             fixed_24hr, remaining_after_24hr = _sequential_fix_count(
                 remaining_after_12hr,
-                scenario.homestation.fix_24hr_rate
-                * scenario.homestation.fatigue_fix_degradation
-                * recovery_factor,
+                scenario.homestation.fix_24hr_rate * scenario.homestation.fatigue_fix_degradation,
                 scenario.homestation.fix_count_model,
                 rng,
             )
@@ -741,19 +735,6 @@ def _apply_repair_capacity(
     fixed_8hr -= reduce_8
     deferred = reduce_24 + reduce_12 + reduce_8
     return fixed_8hr, fixed_12hr, fixed_24hr, deferred
-
-
-def _recovery_day_fix_factor(day: str, scenario: Scenario) -> float:
-    if day in scenario.policy.flying_days:
-        return 1.0
-    posture = scenario.homestation.weekend_recovery_posture
-    if posture == "No Weekend Recovery":
-        return 0.0
-    if posture == "Saturday Only":
-        return 1.0 if day == "Sat" else 0.0
-    if posture == "Reduced Weekend Recovery":
-        return 0.5
-    return 1.0
 
 
 def _probability(values: Iterable[bool]) -> float:
