@@ -360,6 +360,7 @@ def _result_row(
     turn_pattern = _turn_pattern_display(first_go, turns, third_go, fourth_go)
     starting_mc = summary.sample_iteration.days[0].total_mc_aircraft
     recovery_debt = max(0.0, starting_mc - summary.average_next_monday_available)
+    shape_flags = _operational_shape_flags(classification, first_go, policy, str(point["label"]))
     return {
         "pai": pai,
         "capacity_label": point["label"],
@@ -390,6 +391,8 @@ def _result_row(
         "avg_next_monday": summary.average_next_monday_available,
         "recovery_debt": recovery_debt,
         "failure_mode": _top_count(summary.failure_mode_counts),
+        "operational_shape_success": not shape_flags,
+        "recommendation_flags": "; ".join(shape_flags) if shape_flags else "Pass",
         "risk_band": risk_band(summary.probability_success, policy),
         "score": _score(summary, classification, recovery_debt),
     }
@@ -428,6 +431,33 @@ def _score(summary: SimulationSummary, classification: dict[str, object], recove
         - float(classification["backend_penalty"]) * 0.08
         - float(classification["friday_penalty"]) * 0.06
     )
+
+
+def _operational_shape_flags(
+    classification: dict[str, object],
+    first_go: list[int],
+    policy: TtpPolicy,
+    capacity_label: str,
+) -> list[str]:
+    flags: list[str] = []
+    sequence = [int(value) for value in classification["daily_sequence"]]
+    if capacity_label == policy.surge_label:
+        flags.append("Max-commit surge is stress-only")
+    if float(classification["backend_penalty"]) > 0.20:
+        flags.append("Back-loaded Thu/Fri pressure")
+    if float(classification["friday_penalty"]) > 0.20:
+        flags.append("Friday recovery preference not met")
+    if float(classification["compression_score"]) >= 0.70:
+        flags.append("Compressed sortie concentration")
+    if float(classification["smoothness_score"]) < 0.55:
+        flags.append("Large day-to-day sortie swings")
+    if len(sequence) >= 5 and sequence[-1] > sequence[-2]:
+        flags.append("Friday increases from Thursday")
+    if first_go and sum(first_go[-2:]) > sum(first_go[:2]) + 1:
+        flags.append("Back-loaded first-go demand")
+    if first_go and first_go[-1] == max(first_go) and first_go[-1] > 0:
+        flags.append("Friday is peak first-go day")
+    return flags
 
 
 def _rank(row: dict[str, object]) -> tuple[float, float, float, float]:
@@ -580,6 +610,7 @@ def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
             "Sortie Target Met": _pct(float(row["sortie_success"])),
             "Avg Next-Monday MC": f"{float(row['avg_next_monday']):.1f}",
             "Recovery Debt": f"{float(row['recovery_debt']):.1f}",
+            "Recommendation Screen": row.get("recommendation_flags", "Pass"),
             "Risk": row["risk_band"],
         }
         for row in rows
@@ -599,6 +630,7 @@ def _is_recommendable(row: dict[str, object], policy: TtpPolicy = DEFAULT_TTP_PO
         and float(row["success"]) >= policy.yellow_success_threshold
         and float(row["recovery_success"]) >= policy.yellow_success_threshold
         and float(row["backlog_success"]) >= policy.yellow_success_threshold
+        and bool(row.get("operational_shape_success", True))
     )
 
 
@@ -607,6 +639,13 @@ def _recommendable_rows(
     policy: TtpPolicy = DEFAULT_TTP_POLICY,
 ) -> list[dict[str, object]]:
     return [row for row in rows if _is_recommendable(row, policy)]
+
+
+def _recommendation_blocker(row: dict[str, object]) -> str:
+    flags = str(row.get("recommendation_flags", "Pass"))
+    if flags and flags != "Pass":
+        return flags
+    return str(row["failure_mode"])
 
 
 def _pai_values(rows: list[dict[str, object]]) -> list[int]:
@@ -675,7 +714,7 @@ def _failure_readout_rows(rows: list[dict[str, object]]) -> list[dict[str, str]]
     for row in rows:
         if _is_recommendable(row):
             continue
-        failure = str(row["failure_mode"])
+        failure = _recommendation_blocker(row)
         counts[failure] = counts.get(failure, 0) + 1
     if not counts:
         return [{"Failure Mode": "None", "Patterns": "0", "Share": "0.0%"}]
@@ -708,7 +747,7 @@ def _summary_decision_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> 
                 "Recovery": _pct(float(selected["recovery_success"])),
                 "Backlog": _pct(float(selected["backlog_success"])),
                 "Risk": selected["risk_band"],
-                "Limiter": selected["failure_mode"],
+                "Limiter": _recommendation_blocker(selected),
             }
         )
     return output
@@ -762,7 +801,7 @@ def _pattern_family_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> li
                 "Average Success": _pct(avg_success),
                 "Average Recovery Debt": f"{avg_debt:.1f}",
                 "Best Pattern": best["pattern_with_frontlines"],
-                "Primary Failure": best["failure_mode"],
+                "Primary Failure": _recommendation_blocker(best),
             }
         )
     return sorted(output, key=lambda row: (int(row["Sustainable"]), row["Best Success"]), reverse=True)
@@ -795,7 +834,7 @@ def _failure_mode_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list
     for row in rows:
         if _is_recommendable(row, policy):
             continue
-        failure = str(row["failure_mode"])
+        failure = _recommendation_blocker(row)
         counts[failure] = counts.get(failure, 0) + 1
     total = sum(counts.values())
     return [
@@ -1029,7 +1068,7 @@ def _decision_guidance(pai: int, rows: list[dict[str, object]], policy: TtpPolic
     return (
         f"{pai} PAI has no sustainable pattern under the current assumptions. "
         f"The best failed candidate is {best_failed['pattern_with_frontlines']} at "
-        f"{best_failed['capacity_label']}, failing primarily from {best_failed['failure_mode']}."
+        f"{best_failed['capacity_label']}, failing primarily from {_recommendation_blocker(best_failed)}."
     )
 
 
@@ -1073,6 +1112,7 @@ def _detail_rows(row: dict[str, object]) -> list[dict[str, str]]:
         {"Metric": "Avg Next-Monday MC", "Value": f"{float(row['avg_next_monday']):.1f}"},
         {"Metric": "Recovery Debt", "Value": f"{float(row['recovery_debt']):.1f}"},
         {"Metric": "Primary Failure", "Value": str(row["failure_mode"])},
+        {"Metric": "Recommendation Screen", "Value": str(row.get("recommendation_flags", "Pass"))},
         {"Metric": "Risk", "Value": str(row["risk_band"])},
     ]
 

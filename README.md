@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.21.2`
+Current model version: `0.21.3`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -168,3 +168,8 @@ before Monte Carlo ranking.
 
 Version `0.21.2` simplifies the Summary tab by removing the Decision Overview
 and Operating Envelope callouts.
+
+Version `0.21.3` separates tested candidates from recommendations. The model can
+simulate operationally questionable shapes for visibility, but the recommendation
+screen rejects max-commit surge, heavily back-loaded, Friday-heavy, compressed,
+or highly uneven patterns from the sustainable/recommendable list.
