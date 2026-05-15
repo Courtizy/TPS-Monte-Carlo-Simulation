@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.14`
+Current model version: `0.15`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -139,3 +139,6 @@ older model versions.
 
 Version `0.14` expands the About page with explanations for sidebar options,
 maintenance rates, event/fix modes, output metrics, and tab features.
+
+Version `0.15` adds configurable go-wave depth for 1st through 4th go in both
+optimization and manual turn-pattern testing.

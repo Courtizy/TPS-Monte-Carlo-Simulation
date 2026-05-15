@@ -163,7 +163,13 @@ def generate_turn_pattern_permutations(
     policy = scenario.policy
     constraints = constraints or PatternConstraints.from_policy(policy)
     commit_aircraft_count = max(1, commit_aircraft(pai, policy))
-    daily_cap = min(constraints.max_daily_sorties, commit_aircraft_count + constraints.max_second_go)
+    daily_cap = min(
+        constraints.max_daily_sorties,
+        commit_aircraft_count
+        + constraints.max_second_go
+        + constraints.max_third_go
+        + constraints.max_fourth_go,
+    )
     patterns = []
 
     classified_totals = sorted(
@@ -429,20 +435,38 @@ def _day_schedule_options_cached(
         return (DaySchedule(),)
 
     options = []
-    min_first_go = max(1, total - constraints.max_second_go)
+    max_turn_sorties = constraints.max_second_go + constraints.max_third_go + constraints.max_fourth_go
+    min_first_go = max(1, total - max_turn_sorties)
     max_first_go = min(total, commit_aircraft)
     for first_go in range(min_first_go, max_first_go + 1):
-        second_go = total - first_go
-        if second_go > constraints.max_second_go:
-            continue
-        if second_go > first_go:
-            continue
-        options.append(DaySchedule(first_go=first_go, second_go=second_go))
+        remaining_after_first = total - first_go
+        for second_go in range(0, min(constraints.max_second_go, remaining_after_first) + 1):
+            remaining_after_second = remaining_after_first - second_go
+            for third_go in range(0, min(constraints.max_third_go, remaining_after_second) + 1):
+                fourth_go = remaining_after_second - third_go
+                if fourth_go > constraints.max_fourth_go:
+                    continue
+                if any(turn > first_go for turn in (second_go, third_go, fourth_go)):
+                    continue
+                if third_go and not second_go:
+                    continue
+                if fourth_go and not third_go:
+                    continue
+                options.append(
+                    DaySchedule(
+                        first_go=first_go,
+                        second_go=second_go,
+                        third_go=third_go,
+                        fourth_go=fourth_go,
+                    )
+                )
     return tuple(sorted(
         options,
         key=lambda schedule: (
             schedule.first_go,
             -schedule.second_go,
+            -schedule.third_go,
+            -schedule.fourth_go,
         ),
     ))
 

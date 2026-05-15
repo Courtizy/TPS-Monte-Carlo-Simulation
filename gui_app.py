@@ -43,6 +43,8 @@ def run_best_fit(
     max_patterns: int,
     max_daily_sorties: int,
     max_second_go: int,
+    max_third_go: int,
+    max_fourth_go: int,
     max_day_delta: int,
     include_surge: bool,
     ute_min: float,
@@ -52,6 +54,8 @@ def run_best_fit(
         DEFAULT_TTP_POLICY,
         max_daily_sorties=max_daily_sorties,
         max_second_go=max_second_go,
+        max_third_go=max_third_go,
+        max_fourth_go=max_fourth_go,
         max_day_to_day_delta=max_day_delta,
         ute_min=ute_min,
         ute_max=ute_max,
@@ -140,6 +144,8 @@ def run_manual_pattern(
     required_sorties: int,
     first_go: tuple[int, ...],
     second_go: tuple[int, ...],
+    third_go: tuple[int, ...],
+    fourth_go: tuple[int, ...],
     iterations: int,
     random_seed: int,
     mc_rate: float,
@@ -152,6 +158,8 @@ def run_manual_pattern(
     fix_count_model: str,
     max_daily_sorties: int,
     max_second_go: int,
+    max_third_go: int,
+    max_fourth_go: int,
     ute_min: float,
     ute_max: float,
 ) -> dict[str, object]:
@@ -159,11 +167,18 @@ def run_manual_pattern(
         DEFAULT_TTP_POLICY,
         max_daily_sorties=max_daily_sorties,
         max_second_go=max_second_go,
+        max_third_go=max_third_go,
+        max_fourth_go=max_fourth_go,
         ute_min=ute_min,
         ute_max=ute_max,
     )
     schedule = {
-        day: DaySchedule(first_go=first_go[index], second_go=second_go[index])
+        day: DaySchedule(
+            first_go=first_go[index],
+            second_go=second_go[index],
+            third_go=third_go[index],
+            fourth_go=fourth_go[index],
+        )
         for index, day in enumerate(policy.flying_days)
     }
     summaries = {}
@@ -246,6 +261,8 @@ def _result_row(
     classification = pattern["classification"]
     first_go = [schedule[day].first_go for day in policy.flying_days]
     turns = [schedule[day].second_go for day in policy.flying_days]
+    third_go = [schedule[day].third_go for day in policy.flying_days]
+    fourth_go = [schedule[day].fourth_go for day in policy.flying_days]
     pattern_with_frontlines = "-".join(
         f"{total}({front})" for total, front in zip(classification["daily_sequence"], first_go)
     )
@@ -266,6 +283,8 @@ def _result_row(
         "daily_sequence": classification["daily_sequence"],
         "first_go_sequence": first_go,
         "turn_sequence": turns,
+        "third_go_sequence": third_go,
+        "fourth_go_sequence": fourth_go,
         "required_sorties": summary.required_weekly_sorties,
         "success": summary.probability_success,
         "sortie_success": summary.probability_meet_sorties,
@@ -629,6 +648,8 @@ def _detail_rows(row: dict[str, object]) -> list[dict[str, str]]:
         {"Metric": "Pattern Total(Frontline)", "Value": str(row["pattern_with_frontlines"])},
         {"Metric": "1st Go Sequence", "Value": "-".join(str(value) for value in row["first_go_sequence"])},
         {"Metric": "2nd Go Sequence", "Value": "-".join(str(value) for value in row["turn_sequence"])},
+        {"Metric": "3rd Go Sequence", "Value": "-".join(str(value) for value in row.get("third_go_sequence", [0, 0, 0, 0, 0]))},
+        {"Metric": "4th Go Sequence", "Value": "-".join(str(value) for value in row.get("fourth_go_sequence", [0, 0, 0, 0, 0]))},
         {"Metric": "Pattern Family", "Value": str(row["pattern_name"])},
         {"Metric": "Overall Success", "Value": _pct(float(row["success"]))},
         {"Metric": "Sortie Target Met", "Value": _pct(float(row["sortie_success"]))},
@@ -708,7 +729,7 @@ def _show_about_page() -> None:
         ("1. User Inputs", "PAI, sortie requirement, maintenance rates, UTE range, and model options."),
         ("2. Policy Layer", "Applies commit rate, go limits, recovery rules, risk bands, and rounding rules."),
         ("3. Capacity Sweep", "Calculates weekly sortie capacity for each PAI and UTE point."),
-        ("4. Pattern Generator", "Builds realistic first-go and second-go turn-pattern candidates."),
+        ("4. Pattern Generator", "Builds realistic first-go, second-go, third-go, and fourth-go candidates when enabled."),
         ("5. Monte Carlo Engine", "Runs ground aborts, Code 3s, fixes, daily MC carry-forward, and weekend recovery."),
         ("6. Success Scoring", "Checks sorties, daily schedule, aircraft availability, commit compliance, recovery, and backlog."),
         ("7. App Outputs", "Shows recommendations, sustainable patterns, diagnostics, and recovery-model comparisons."),
@@ -724,7 +745,7 @@ def _show_about_page() -> None:
             - **UTE planning range**: sortie output band used to generate candidate weekly sortie counts.
             - **Required weekly sorties**: the sortie target the pattern must meet.
             - **Commit rate**: maximum aircraft committed to the flying schedule.
-            - **Max daily sorties / second-go limit**: controls which patterns are considered realistic.
+            - **Max daily sorties / go-wave limits**: controls which patterns are considered realistic.
             - **Maintenance rates**: MC rate, ground-abort rate, break rate, and 8/12/24-hour fix rates.
             """
         )
@@ -741,7 +762,8 @@ def _show_about_page() -> None:
             - **Event Count Model**: chooses how weekly ground aborts and Code 3s are generated.
             - **Fix Count Model**: chooses how 8/12/24-hour fixes are generated.
             - **Max Daily Sorties**: caps total sorties on any flying day.
-            - **Max Second-Go Sorties**: caps turn sorties after first-go aircraft.
+            - **Go Waves To Use**: controls whether the optimizer and manual page use only 1st/2nd go or also allow 3rd/4th go.
+            - **Max Second/Third/Fourth-Go Sorties**: caps turn sorties in each later go wave.
             - **Max Day-to-Day Delta**: limits sharp changes between adjacent days in generated patterns.
             - **Include Max-Commit Surge**: adds the max-commit stress case into optimization. Leave off for normal sustainment planning.
             """
@@ -830,6 +852,9 @@ def _show_about_page() -> None:
 
             The first number is first-go aircraft/sorties. The second number is second-go turns.
             For example, `5x2` means 5 first-go sorties and 2 second-go sorties, for 7 total sorties that day.
+
+            If the sidebar is set to 3 or 4 go waves, the manual page adds 3rd-go and 4th-go inputs.
+            Leave those as zero when the platform or location only uses 1st/2nd go.
 
             The page runs the same pattern under both recovery models and shows an Excel-style sample iteration table.
             """
@@ -923,7 +948,10 @@ with st.sidebar:
         event_count_model = st.selectbox("Event Count Model", ["Normal TTP", "Probabilistic Monte Carlo"])
         fix_count_model = st.selectbox("Fix Count Model", ["Normal TTP", "Probabilistic Monte Carlo"])
         max_daily_sorties = st.slider("Max Daily Sorties", 1, 12, 7)
-        max_second_go = st.slider("Max Second-Go Sorties", 0, 6, 2)
+        go_waves = st.slider("Go Waves To Use", 1, 4, 2)
+        max_second_go = st.slider("Max Second-Go Sorties", 0, 6, 2) if go_waves >= 2 else 0
+        max_third_go = st.slider("Max Third-Go Sorties", 0, 6, 0 if go_waves < 3 else 2) if go_waves >= 3 else 0
+        max_fourth_go = st.slider("Max Fourth-Go Sorties", 0, 6, 0 if go_waves < 4 else 2) if go_waves >= 4 else 0
 
         if page == "Optimization Dashboard":
             max_patterns = st.number_input("Max Patterns Per UTE Point", min_value=1, value=30, step=10)
@@ -1013,15 +1041,29 @@ if page == "Manual Turn Pattern":
     days = list(DEFAULT_TTP_POLICY.flying_days)
     default_first = [5, 4, 4, 3, 2]
     default_second = [2, 2, 2, 2, 0]
+    default_empty_go = [0, 0, 0, 0, 0]
     cols = st.columns(len(days))
     first_go = []
     second_go = []
+    third_go = []
+    fourth_go = []
     for index, day in enumerate(days):
         with cols[index]:
             st.markdown(f"**{day}**")
             first_go.append(int(st.number_input(f"{day} 1st Go", min_value=0, max_value=15, value=default_first[index])))
-            second_go.append(int(st.number_input(f"{day} 2nd Go", min_value=0, max_value=15, value=default_second[index])))
-    planned = sum(first_go) + sum(second_go)
+            if go_waves >= 2:
+                second_go.append(int(st.number_input(f"{day} 2nd Go", min_value=0, max_value=15, value=default_second[index])))
+            else:
+                second_go.append(0)
+            if go_waves >= 3:
+                third_go.append(int(st.number_input(f"{day} 3rd Go", min_value=0, max_value=15, value=default_empty_go[index])))
+            else:
+                third_go.append(0)
+            if go_waves >= 4:
+                fourth_go.append(int(st.number_input(f"{day} 4th Go", min_value=0, max_value=15, value=default_empty_go[index])))
+            else:
+                fourth_go.append(0)
+    planned = sum(first_go) + sum(second_go) + sum(third_go) + sum(fourth_go)
     st.metric("Manual Planned Sorties", planned)
 
     if st.button("Run Manual Pattern", type="primary"):
@@ -1030,6 +1072,8 @@ if page == "Manual Turn Pattern":
             required_sorties=int(required_sorties) if required_sorties else planned,
             first_go=tuple(first_go),
             second_go=tuple(second_go),
+            third_go=tuple(third_go),
+            fourth_go=tuple(fourth_go),
             iterations=int(iterations),
             random_seed=int(random_seed),
             mc_rate=float(mc_rate),
@@ -1042,6 +1086,8 @@ if page == "Manual Turn Pattern":
             fix_count_model=fix_count_model,
             max_daily_sorties=int(max_daily_sorties),
             max_second_go=int(max_second_go),
+            max_third_go=int(max_third_go),
+            max_fourth_go=int(max_fourth_go),
             ute_min=float(ute_min),
             ute_max=float(ute_max),
         )
@@ -1102,6 +1148,8 @@ if st.button("Run Model", type="primary"):
         max_patterns=int(max_patterns),
         max_daily_sorties=int(max_daily_sorties),
         max_second_go=int(max_second_go),
+        max_third_go=int(max_third_go),
+        max_fourth_go=int(max_fourth_go),
         max_day_delta=int(max_day_delta),
         include_surge=bool(include_surge),
         ute_min=float(ute_min),
@@ -1185,6 +1233,8 @@ with detail:
                 required_sorties=int(selected["required_sorties"]),
                 first_go=tuple(int(value) for value in selected["first_go_sequence"]),
                 second_go=tuple(int(value) for value in selected["turn_sequence"]),
+                third_go=tuple(int(value) for value in selected.get("third_go_sequence", [0, 0, 0, 0, 0])),
+                fourth_go=tuple(int(value) for value in selected.get("fourth_go_sequence", [0, 0, 0, 0, 0])),
                 iterations=int(iterations),
                 random_seed=int(random_seed),
                 mc_rate=float(mc_rate),
@@ -1197,6 +1247,8 @@ with detail:
                 fix_count_model=fix_count_model,
                 max_daily_sorties=int(max_daily_sorties),
                 max_second_go=int(max_second_go),
+                max_third_go=int(max_third_go),
+                max_fourth_go=int(max_fourth_go),
                 ute_min=float(ute_min),
                 ute_max=float(ute_max),
             )

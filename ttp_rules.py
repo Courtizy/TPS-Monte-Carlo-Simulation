@@ -7,7 +7,7 @@ from math import floor
 from typing import Any, Protocol
 
 
-MODEL_VERSION = "0.14"
+MODEL_VERSION = "0.15"
 SCHEDULED_SPARES_MODEL = "Scheduled-Spares Only"
 FLEET_FLEX_MODEL = "Fleet-Flex Recovery"
 
@@ -211,7 +211,10 @@ def validate_scenario(scenario: Any) -> ValidationResult:
         aircraft_count = aircraft_required(schedule, policy) if schedule is not None else 0
         if aircraft_count > commit_limit:
             warnings.append(f"{day}: aircraft required exceeds the TTP commit cap.")
-        if getattr(schedule, "third_go", 0) or getattr(schedule, "fourth_go", 0):
+        if (
+            (getattr(schedule, "third_go", 0) and policy.max_third_go == 0)
+            or (getattr(schedule, "fourth_go", 0) and policy.max_fourth_go == 0)
+        ):
             warnings.append(f"{day}: third/fourth go is scheduled; verify platform policy allows it.")
         if getattr(schedule, "second_go", 0) > policy.max_second_go:
             warnings.append(f"{day}: second-go count exceeds policy max.")
