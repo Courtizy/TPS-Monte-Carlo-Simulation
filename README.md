@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.17`
+Current model version: `0.19`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -147,3 +147,9 @@ Version `0.16` restores a separate max-commit surge week calculation for weeks
 1-5 in the web app.
 
 Version `0.17` adds a detailed Underlying Logic section to the About page.
+
+Version `0.18` improves the Max Surge Weeks tab with a sustainability summary,
+trend charts, and a first-failure explanation for each PAI/recovery model.
+
+Version `0.19` changes generated turn-pattern displays to normal go notation,
+such as `4x2-4x2-4x2-3x2-3x2`.

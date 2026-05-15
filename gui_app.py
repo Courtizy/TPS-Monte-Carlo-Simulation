@@ -341,9 +341,7 @@ def _result_row(
     turns = [schedule[day].second_go for day in policy.flying_days]
     third_go = [schedule[day].third_go for day in policy.flying_days]
     fourth_go = [schedule[day].fourth_go for day in policy.flying_days]
-    pattern_with_frontlines = "-".join(
-        f"{total}({front})" for total, front in zip(classification["daily_sequence"], first_go)
-    )
+    turn_pattern = _turn_pattern_display(first_go, turns, third_go, fourth_go)
     starting_mc = summary.sample_iteration.days[0].total_mc_aircraft
     recovery_debt = max(0.0, starting_mc - summary.average_next_monday_available)
     return {
@@ -357,7 +355,7 @@ def _result_row(
         "pattern_index": pattern_index,
         "pattern_name": classification["pattern_name"],
         "pattern_family": classification["pattern_family"],
-        "pattern_with_frontlines": pattern_with_frontlines,
+        "pattern_with_frontlines": turn_pattern,
         "daily_sequence": classification["daily_sequence"],
         "first_go_sequence": first_go,
         "turn_sequence": turns,
@@ -379,6 +377,27 @@ def _result_row(
         "risk_band": risk_band(summary.probability_success, policy),
         "score": _score(summary, classification, recovery_debt),
     }
+
+
+def _turn_pattern_display(
+    first_go: list[int],
+    second_go: list[int],
+    third_go: list[int] | None = None,
+    fourth_go: list[int] | None = None,
+) -> str:
+    third_go = third_go or [0] * len(first_go)
+    fourth_go = fourth_go or [0] * len(first_go)
+    use_third = any(third_go)
+    use_fourth = any(fourth_go)
+    days = []
+    for first, second, third, fourth in zip(first_go, second_go, third_go, fourth_go):
+        if use_fourth:
+            days.append(f"{first}x{second}x{third}x{fourth}")
+        elif use_third:
+            days.append(f"{first}x{second}x{third}")
+        else:
+            days.append(f"{first}x{second}")
+    return "-".join(days)
 
 
 def _score(summary: SimulationSummary, classification: dict[str, object], recovery_debt: float) -> float:
@@ -539,7 +558,7 @@ def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
             "UTE": f"{float(row['ute']):.2f}",
             "Avg Sorties / Aircraft": f"{_avg_sorties_per_aircraft(row):.1f}",
             "Recovery Model": row["model"],
-            "Pattern Total(Frontline)": row["pattern_with_frontlines"],
+            "Turn Pattern": row["pattern_with_frontlines"],
             "Pattern Family": row["pattern_name"],
             "Overall Success": _pct(float(row["success"])),
             "Sortie Target Met": _pct(float(row["sortie_success"])),
@@ -702,6 +721,138 @@ def _surge_display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]
     ]
 
 
+def _surge_is_sustainable(row: dict[str, object], policy: TtpPolicy) -> bool:
+    return (
+        float(row["Overall Success"]) >= policy.yellow_success_threshold
+        and float(row["Next-Monday Recovery"]) >= policy.yellow_success_threshold
+        and float(row["Avg Backlog"]) <= 0.5
+        and str(row["Risk"]) in ("Green", "Yellow")
+    )
+
+
+def _surge_grouped_rows(rows: list[dict[str, object]]) -> list[tuple[int, str, list[dict[str, object]]]]:
+    groups: list[tuple[int, str, list[dict[str, object]]]] = []
+    keys = sorted({(int(row["PAI"]), str(row["Recovery Model"])) for row in rows})
+    for pai, model in keys:
+        matching = [
+            row for row in rows
+            if int(row["PAI"]) == pai and str(row["Recovery Model"]) == model
+        ]
+        groups.append((pai, model, sorted(matching, key=lambda row: int(row["Week"]))))
+    return groups
+
+
+def _surge_summary_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
+    output = []
+    for pai, model, group in _surge_grouped_rows(rows):
+        sustained_through = 0
+        first_failed: dict[str, object] | None = None
+        for row in group:
+            if first_failed is None and _surge_is_sustainable(row, policy):
+                sustained_through = int(row["Week"])
+            elif first_failed is None:
+                first_failed = row
+        week_1 = group[0] if group else {}
+        final_week = group[-1] if group else {}
+        peak_backlog = max(float(row["Avg Backlog"]) for row in group) if group else 0.0
+        lowest_recovery = min(float(row["Next-Monday Recovery"]) for row in group) if group else 0.0
+        if first_failed is None:
+            first_failed_week = "None in window"
+            limiter = "No hard failure"
+            interpretation = (
+                "Modeled as sustainable through the selected surge window. Treat this as a stress posture, "
+                "not a normal planning rate."
+            )
+        elif sustained_through == 0:
+            first_failed_week = str(first_failed["Week"])
+            limiter = str(first_failed["Primary Failure"])
+            interpretation = (
+                "Max surge is not sustainable even in week 1 under this recovery model. "
+                "Use the failure readout to see whether sorties, recovery, or backlog is driving the miss."
+            )
+        else:
+            first_failed_week = str(first_failed["Week"])
+            limiter = str(first_failed["Primary Failure"])
+            interpretation = (
+                f"Surge is modeled as usable through week {sustained_through}; "
+                f"risk becomes unacceptable in week {first_failed_week}."
+            )
+        output.append(
+            {
+                "PAI": pai,
+                "Recovery Model": model,
+                "Sustained Through Week": sustained_through,
+                "First Failed Week": first_failed_week,
+                "Week 1 Success": _pct(float(week_1.get("Overall Success", 0.0))),
+                "Final Week Success": _pct(float(final_week.get("Overall Success", 0.0))),
+                "Lowest Next-Monday Recovery": _pct(lowest_recovery),
+                "Peak Avg Backlog": f"{peak_backlog:.1f}",
+                "Primary Limiter": limiter,
+                "Interpretation": interpretation,
+            }
+        )
+    return output
+
+
+def _surge_failure_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
+    output = []
+    for pai, model, group in _surge_grouped_rows(rows):
+        first_failed = next(
+            (row for row in group if not _surge_is_sustainable(row, policy)),
+            None,
+        )
+        if first_failed is None:
+            watch_row = min(
+                group,
+                key=lambda row: (
+                    float(row["Overall Success"]),
+                    float(row["Next-Monday Recovery"]),
+                    -float(row["Avg Backlog"]),
+                ),
+            )
+            output.append(
+                {
+                    "PAI": pai,
+                    "Recovery Model": model,
+                    "Status": "Passes selected window",
+                    "Week": watch_row["Week"],
+                    "Failure Signal": "Weakest modeled week",
+                    "Primary Failure": "None",
+                    "Next-Monday Recovery": _pct(float(watch_row["Next-Monday Recovery"])),
+                    "Avg Backlog": f"{float(watch_row['Avg Backlog']):.1f}",
+                    "Explanation": "No hard failure in the selected window; this row shows the weakest week to monitor.",
+                }
+            )
+        else:
+            output.append(
+                {
+                    "PAI": pai,
+                    "Recovery Model": model,
+                    "Status": "Fails sustainability screen",
+                    "Week": first_failed["Week"],
+                    "Failure Signal": first_failed["Risk"],
+                    "Primary Failure": first_failed["Primary Failure"],
+                    "Next-Monday Recovery": _pct(float(first_failed["Next-Monday Recovery"])),
+                    "Avg Backlog": f"{float(first_failed['Avg Backlog']):.1f}",
+                    "Explanation": (
+                        "This is the first week where success, recovery, or backlog no longer meets the surge screen."
+                    ),
+                }
+            )
+    return output
+
+
+def _surge_chart_rows(rows: list[dict[str, object]], metric: str) -> list[dict[str, object]]:
+    return [
+        {
+            "Week": int(row["Week"]),
+            "Series": f"{row['PAI']} PAI / {row['Recovery Model']}",
+            metric: float(row[metric]),
+        }
+        for row in rows
+    ]
+
+
 def _decision_guidance(pai: int, rows: list[dict[str, object]], policy: TtpPolicy) -> str:
     viable = _recommendable_rows(rows, policy)
     if viable:
@@ -746,7 +897,7 @@ def _detail_rows(row: dict[str, object]) -> list[dict[str, str]]:
         {"Metric": "Avg Sorties / Aircraft", "Value": f"{_avg_sorties_per_aircraft(row):.1f}"},
         {"Metric": "Commit Aircraft", "Value": str(row["commit_aircraft"])},
         {"Metric": "Recovery Model", "Value": str(row["model"])},
-        {"Metric": "Pattern Total(Frontline)", "Value": str(row["pattern_with_frontlines"])},
+        {"Metric": "Turn Pattern", "Value": str(row["pattern_with_frontlines"])},
         {"Metric": "1st Go Sequence", "Value": "-".join(str(value) for value in row["first_go_sequence"])},
         {"Metric": "2nd Go Sequence", "Value": "-".join(str(value) for value in row["turn_sequence"])},
         {"Metric": "3rd Go Sequence", "Value": "-".join(str(value) for value in row.get("third_go_sequence", [0, 0, 0, 0, 0]))},
@@ -1001,7 +1152,8 @@ def _show_about_page() -> None:
             - **PAI Decision Briefs**: show the recommendation, viable options, and failure readout for each PAI.
             - **Capacity Sweep**: shows raw sortie capacity by PAI and UTE point, including average sorties per aircraft.
             - **Best Patterns**: only shows sustainable/recommendable patterns, plus best sustainable pattern by UTE.
-            - **Max Surge Weeks**: shows week 1-5 max-commit stress calculations separately from normal sustainment planning.
+            - **Max Surge Weeks**: shows how long max-commit stress remains usable, what week it fails, and whether sorties,
+              next-Monday recovery, or repair backlog is the limiting factor.
             - **Diagnostics**: shows failed candidates too, so you can see why something was rejected.
             - **Pattern Detail**: shows the selected pattern’s metrics and lets you compare recovery models.
             """
@@ -1057,6 +1209,7 @@ def _show_about_page() -> None:
             - **Summary**: decision brief by PAI, operating envelope, viable options, and failure readout.
             - **Capacity Sweep**: sortie math across the selected UTE range and max-commit capacity point.
             - **Best Patterns**: sustainable/recommendable candidates only, including best pattern by UTE.
+            - **Max Surge Weeks**: surge-only stress readout showing usable duration, trend lines, and first failure cause.
             - **Diagnostics**: all tested best candidates, including failed patterns.
             - **Pattern Detail**: selected pattern details and recovery-model comparison.
             - **Manual Turn Pattern**: test a specific first-go / second-go schedule.
@@ -1395,11 +1548,49 @@ with patterns:
         st.warning("No sustainable best patterns were found under the current assumptions.")
 
 with surge:
-    st.caption(
-        "Max surge uses true max-commit front-line scheduling: committed aircraft x flying days. "
-        "Weeks 2-5 apply increasing break stress and reduced fix effectiveness to avoid treating max surge as indefinitely sustainable."
+    st.info(
+        "Read this tab as a stress test, not a normal weekly plan. Week 1 asks whether max commit is executable now; "
+        "later weeks show whether recovery, backlog, or maintenance stress makes that posture unsustainable."
     )
     if surge_rows:
+        st.subheader("Surge Sustainability Summary")
+        st.caption(
+            "Sustained Through Week is the last consecutive week that met the surge screen: overall success, "
+            "next-Monday recovery, and backlog control."
+        )
+        st.dataframe(_surge_summary_rows(surge_rows, policy), width="stretch", hide_index=True)
+
+        st.subheader("Visual Trend")
+        success_chart, recovery_chart = st.columns(2)
+        with success_chart:
+            st.caption("Overall success should stay above the Yellow threshold to remain usable.")
+            st.line_chart(
+                _surge_chart_rows(surge_rows, "Overall Success"),
+                x="Week",
+                y="Overall Success",
+                color="Series",
+            )
+        with recovery_chart:
+            st.caption("Next-Monday recovery shows whether the fleet can reset for another week.")
+            st.line_chart(
+                _surge_chart_rows(surge_rows, "Next-Monday Recovery"),
+                x="Week",
+                y="Next-Monday Recovery",
+                color="Series",
+            )
+
+        st.subheader("Why It Fails Or Passes")
+        st.caption(
+            "This isolates the first unacceptable week for each PAI and recovery model. If no week fails, "
+            "the weakest modeled week is shown as a watch item."
+        )
+        st.dataframe(_surge_failure_rows(surge_rows, policy), width="stretch", hide_index=True)
+
+        st.subheader("Week-by-Week Detail")
+        st.caption(
+            "Max surge uses true max-commit front-line scheduling: committed aircraft x flying days. "
+            "Weeks 2-5 apply increasing break stress and reduced fix effectiveness."
+        )
         st.dataframe(_surge_display_rows(surge_rows), width="stretch", hide_index=True)
     else:
         st.info("Run the model to calculate max-commit surge weeks.")
