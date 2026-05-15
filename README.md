@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.23`
+Current model version: `0.25`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -169,3 +169,10 @@ pattern versus optimized-pattern comparison.
 Version `0.23` separates MC recovery debt from total recovery burden by adding
 Recovery Pressure, which combines next-Monday MC shortfall and average repair
 backlog.
+
+Version `0.24` adds midweek stress visibility with Midweek MC Drawdown, sample
+event burden, and sample fix workload so patterns can show operational pressure
+even when next-Monday recovery debt and backlog are zero.
+
+Version `0.25` adds a weekend recovery posture control and reduces dashboard
+clutter by moving lower-priority detail tables into expanders.
