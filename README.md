@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.19`
+Current model version: `0.20`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -153,3 +153,7 @@ trend charts, and a first-failure explanation for each PAI/recovery model.
 
 Version `0.19` changes generated turn-pattern displays to normal go notation,
 such as `4x2-4x2-4x2-3x2-3x2`.
+
+Version `0.20` adds dashboard diagnostics and charts for summary decisions,
+capacity shape, pattern-family performance, failure modes, and selected-pattern
+success dimensions.
