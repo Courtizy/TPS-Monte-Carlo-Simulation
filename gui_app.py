@@ -745,7 +745,7 @@ def _show_about_page() -> None:
             - **UTE planning range**: sortie output band used to generate candidate weekly sortie counts.
             - **Required weekly sorties**: the sortie target the pattern must meet.
             - **Commit rate**: maximum aircraft committed to the flying schedule.
-            - **Max daily sorties / go-wave limits**: controls which patterns are considered realistic.
+            - **Max daily sorties / # of GOs limits**: controls which patterns are considered realistic.
             - **Maintenance rates**: MC rate, ground-abort rate, break rate, and 8/12/24-hour fix rates.
             """
         )
@@ -762,8 +762,8 @@ def _show_about_page() -> None:
             - **Event Count Model**: chooses how weekly ground aborts and Code 3s are generated.
             - **Fix Count Model**: chooses how 8/12/24-hour fixes are generated.
             - **Max Daily Sorties**: caps total sorties on any flying day.
-            - **Go Waves To Use**: controls whether the optimizer and manual page use only 1st/2nd go or also allow 3rd/4th go.
-            - **Max Second/Third/Fourth-Go Sorties**: caps turn sorties in each later go wave.
+            - **# of GOs**: controls whether the optimizer and manual page use only 1st/2nd go or also allow 3rd/4th go.
+            - **Max Second/Third/Fourth-Go Sorties**: caps turn sorties in each later GO.
             - **Max Day-to-Day Delta**: limits sharp changes between adjacent days in generated patterns.
             - **Include Max-Commit Surge**: adds the max-commit stress case into optimization. Leave off for normal sustainment planning.
             """
@@ -853,7 +853,7 @@ def _show_about_page() -> None:
             The first number is first-go aircraft/sorties. The second number is second-go turns.
             For example, `5x2` means 5 first-go sorties and 2 second-go sorties, for 7 total sorties that day.
 
-            If the sidebar is set to 3 or 4 go waves, the manual page adds 3rd-go and 4th-go inputs.
+            If the sidebar is set to 3 or 4 GOs, the manual page adds 3rd-go and 4th-go inputs.
             Leave those as zero when the platform or location only uses 1st/2nd go.
 
             The page runs the same pattern under both recovery models and shows an Excel-style sample iteration table.
@@ -948,7 +948,7 @@ with st.sidebar:
         event_count_model = st.selectbox("Event Count Model", ["Normal TTP", "Probabilistic Monte Carlo"])
         fix_count_model = st.selectbox("Fix Count Model", ["Normal TTP", "Probabilistic Monte Carlo"])
         max_daily_sorties = st.slider("Max Daily Sorties", 1, 12, 7)
-        go_waves = st.slider("Go Waves To Use", 1, 4, 2)
+        go_waves = st.slider("# of GOs", 1, 4, 2)
         max_second_go = st.slider("Max Second-Go Sorties", 0, 6, 2) if go_waves >= 2 else 0
         max_third_go = st.slider("Max Third-Go Sorties", 0, 6, 0 if go_waves < 3 else 2) if go_waves >= 3 else 0
         max_fourth_go = st.slider("Max Fourth-Go Sorties", 0, 6, 0 if go_waves < 4 else 2) if go_waves >= 4 else 0
