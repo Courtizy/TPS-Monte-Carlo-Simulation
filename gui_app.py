@@ -674,68 +674,57 @@ def _failure_readout_rows(rows: list[dict[str, object]]) -> list[dict[str, str]]
     ]
 
 
-def _summary_probability_chart_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
+def _summary_decision_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
     output = []
     for pai in _pai_values(rows):
         pai_rows = _rows_for_pai(rows, pai)
         viable = _recommendable_rows(pai_rows, policy)
         selected = max(viable, key=_rank) if viable else max(pai_rows, key=_rank)
-        for metric, label in (
-            ("success", "Overall Success"),
-            ("sortie_success", "Sortie Target Met"),
-            ("recovery_success", "Next-Monday Recovery"),
-            ("backlog_success", "Backlog Success"),
-        ):
-            output.append(
-                {
-                    "PAI": pai,
-                    "Metric": label,
-                    "Probability": float(selected[metric]),
-                }
-            )
-    return output
-
-
-def _summary_sortie_chart_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
-    output = []
-    for pai in _pai_values(rows):
-        pai_rows = _rows_for_pai(rows, pai)
-        viable = _recommendable_rows(pai_rows, policy)
-        max_sorties = max((int(row["weekly_sorties"]) for row in viable), default=0)
-        required = max((int(row["required_sorties"]) for row in pai_rows), default=0)
-        output.extend(
-            [
-                {"PAI": pai, "Metric": "Max Sustainable Sorties", "Sorties": max_sorties},
-                {"PAI": pai, "Metric": "Required Sorties", "Sorties": required},
-            ]
+        output.append(
+            {
+                "PAI": pai,
+                "Status": "Recommendable" if viable else "Best Failed Candidate",
+                "Turn Pattern": selected["pattern_with_frontlines"],
+                "Planned": selected["weekly_sorties"],
+                "Required": selected["required_sorties"],
+                "UTE": f"{float(selected['ute']):.2f}",
+                "Success": _pct(float(selected["success"])),
+                "Recovery": _pct(float(selected["recovery_success"])),
+                "Backlog": _pct(float(selected["backlog_success"])),
+                "Risk": selected["risk_band"],
+                "Limiter": selected["failure_mode"],
+            }
         )
     return output
 
 
-def _capacity_chart_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    return [
-        {
-            "PAI": int(row["pai"]),
-            "Capacity Point": str(row["label"]),
-            "Weekly Sorties": int(row["weekly_sorties"]),
-            "Actual UTE": float(row["actual_ute"]),
-        }
-        for row in rows
-        if "55%" not in str(row["label"])
-    ]
-
-
-def _capacity_surge_chart_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    return [
-        {
-            "PAI": int(row["pai"]),
-            "Capacity Point": str(row["label"]),
-            "Weekly Sorties": int(row["weekly_sorties"]),
-            "Actual UTE": float(row["actual_ute"]),
-        }
-        for row in rows
-        if "55%" in str(row["label"])
-    ]
+def _capacity_interpretation_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    output = []
+    pai_values = sorted({int(row["pai"]) for row in rows if row.get("pai")})
+    for pai in pai_values:
+        pai_rows = [row for row in rows if int(row.get("pai", 0)) == pai]
+        normal_rows = [row for row in pai_rows if "55%" not in str(row["label"])]
+        surge_rows = [row for row in pai_rows if "55%" in str(row["label"])]
+        min_normal = min((int(row["weekly_sorties"]) for row in normal_rows), default=0)
+        max_normal = max((int(row["weekly_sorties"]) for row in normal_rows), default=0)
+        min_ute = min((float(row["actual_ute"]) for row in normal_rows), default=0.0)
+        max_ute = max((float(row["actual_ute"]) for row in normal_rows), default=0.0)
+        surge = max(surge_rows, key=lambda row: int(row["weekly_sorties"])) if surge_rows else None
+        output.append(
+            {
+                "PAI": pai,
+                "Normal UTE Band": f"{min_ute:.2f}-{max_ute:.2f}",
+                "Normal Sortie Band": f"{min_normal}-{max_normal}",
+                "Max-Commit Sorties": surge["weekly_sorties"] if surge else "Not included",
+                "Max-Commit UTE": f"{float(surge['actual_ute']):.2f}" if surge else "Not included",
+                "Interpretation": (
+                    "Use the normal band for weekly planning; treat max-commit as surge-only."
+                    if surge else
+                    "Use this range for weekly planning."
+                ),
+            }
+        )
+    return output
 
 
 def _pattern_family_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
@@ -763,36 +752,6 @@ def _pattern_family_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> li
     return sorted(output, key=lambda row: (int(row["Sustainable"]), row["Best Success"]), reverse=True)
 
 
-def _pattern_family_chart_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
-    output = []
-    families = sorted({str(row["pattern_family"]) for row in rows})
-    for family in families:
-        family_rows = [row for row in rows if str(row["pattern_family"]) == family]
-        viable = _recommendable_rows(family_rows, policy)
-        best_pool = viable or family_rows
-        best = max(best_pool, key=_rank)
-        output.append(
-            {
-                "Pattern Family": family,
-                "Best Success": float(best["success"]),
-                "Sustainable Candidates": len(viable),
-            }
-        )
-    return output
-
-
-def _recovery_debt_chart_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    return [
-        {
-            "Overall Success": float(row["success"]),
-            "Recovery Debt": float(row["recovery_debt"]),
-            "Pattern": str(row["pattern_with_frontlines"]),
-            "Family": str(row["pattern_family"]),
-        }
-        for row in rows
-    ]
-
-
 def _diagnostic_pai_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
     output = []
     for pai in _pai_values(rows):
@@ -815,15 +774,16 @@ def _diagnostic_pai_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> li
     return output
 
 
-def _failure_chart_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
+def _failure_mode_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
     counts: dict[str, int] = {}
     for row in rows:
         if _is_recommendable(row, policy):
             continue
         failure = str(row["failure_mode"])
         counts[failure] = counts.get(failure, 0) + 1
+    total = sum(counts.values())
     return [
-        {"Failure Mode": failure, "Patterns": count}
+        {"Failure Mode": failure, "Patterns": count, "Share": _pct(count / total) if total else "0.0%"}
         for failure, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)
     ]
 
@@ -1694,24 +1654,10 @@ with summary:
     else:
         st.subheader("Decision Overview")
         st.caption(
-            "This shows the strongest usable candidate for each PAI. Look for PAI levels where overall success, "
-            "recovery, and sustainable sorties all move together."
+            "This is the quick read across PAI. It shows the recommended or best-failed candidate, "
+            "the planned-vs-required sortie relationship, and the active limiter."
         )
-        prob_col, sortie_col = st.columns(2)
-        with prob_col:
-            st.line_chart(
-                _summary_probability_chart_rows(rows, policy),
-                x="PAI",
-                y="Probability",
-                color="Metric",
-            )
-        with sortie_col:
-            st.line_chart(
-                _summary_sortie_chart_rows(rows, policy),
-                x="PAI",
-                y="Sorties",
-                color="Metric",
-            )
+        st.dataframe(_summary_decision_rows(rows, policy), width="stretch", hide_index=True)
 
         st.subheader("Operating Envelope")
         st.caption("This is the leadership-ready view: what sortie range appears sustainable at each PAI.")
@@ -1741,23 +1687,13 @@ with summary:
                 st.dataframe(_failure_readout_rows(pai_rows), width="stretch", hide_index=True)
 
 with capacity:
-    st.subheader("Capacity Shape")
+    st.subheader("Capacity Readout")
     st.caption(
-        "This is pure capacity math before Monte Carlo sustainability. It shows how weekly sorties change across "
-        "the selected UTE range for each PAI."
+        "This is pure capacity math before Monte Carlo sustainability. Use it to see the normal planning band "
+        "and keep max-commit separate from routine sustainment."
     )
-    st.line_chart(
-        _capacity_chart_rows(result["capacity_rows"]),
-        x="PAI",
-        y="Weekly Sorties",
-        color="Capacity Point",
-    )
-    surge_capacity = _capacity_surge_chart_rows(result["capacity_rows"])
-    if surge_capacity:
-        st.subheader("Max-Commit Capacity")
-        st.caption("This is the separate 55% commit capacity point. It belongs with surge stress, not normal planning.")
-        st.bar_chart(surge_capacity, x="PAI", y="Weekly Sorties")
-    st.subheader("Capacity Table")
+    st.dataframe(_capacity_interpretation_rows(result["capacity_rows"]), width="stretch", hide_index=True)
+    st.subheader("Detailed Capacity Table")
     st.dataframe(_capacity_display_rows(result["capacity_rows"]), width="stretch", hide_index=True)
 
 with patterns:
@@ -1768,20 +1704,6 @@ with patterns:
             "This groups successful and failed candidates by pattern family so you can see whether flats, waterfalls, "
             "or other shapes are actually carrying the result."
         )
-        family_chart, debt_chart = st.columns(2)
-        with family_chart:
-            st.bar_chart(
-                _pattern_family_chart_rows(rows, policy),
-                x="Pattern Family",
-                y="Best Success",
-            )
-        with debt_chart:
-            st.scatter_chart(
-                _recovery_debt_chart_rows(recommendable),
-                x="Recovery Debt",
-                y="Overall Success",
-                color="Family",
-            )
         st.dataframe(_pattern_family_rows(rows, policy), width="stretch", hide_index=True)
 
         st.subheader("Best Sustainable Pattern by UTE")
@@ -1850,11 +1772,11 @@ with diagnostics:
     st.subheader("Candidate Pass / Reject Summary")
     st.dataframe(_diagnostic_pai_rows(rows, policy), width="stretch", hide_index=True)
 
-    failures = _failure_chart_rows(rows, policy)
+    failures = _failure_mode_rows(rows, policy)
     if failures:
-        st.subheader("Failure Mode Counts")
+        st.subheader("Failure Mode Readout")
         st.caption("This shows why rejected patterns were rejected. High counts indicate the active limiting factor.")
-        st.bar_chart(failures, x="Failure Mode", y="Patterns")
+        st.dataframe(failures, width="stretch", hide_index=True)
     else:
         st.success("No rejected candidates under the current recommendation screen.")
 
@@ -1872,7 +1794,14 @@ with detail:
         diag_col, schedule_col = st.columns(2)
         with diag_col:
             st.caption("Component probabilities show which success dimension is carrying or limiting the pattern.")
-            st.bar_chart(_detail_probability_rows(selected), x="Metric", y="Probability")
+            st.dataframe(
+                [
+                    {"Metric": row["Metric"], "Probability": _pct(float(row["Probability"]))}
+                    for row in _detail_probability_rows(selected)
+                ],
+                width="stretch",
+                hide_index=True,
+            )
         with schedule_col:
             st.caption("Daily sortie shape shows how much pressure is being placed on each day.")
             st.bar_chart(_detail_daily_sortie_rows(selected, policy), x="Day", y="Daily Sorties")
