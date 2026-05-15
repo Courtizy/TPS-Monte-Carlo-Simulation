@@ -1668,17 +1668,6 @@ with summary:
     if not rows:
         st.warning("No valid patterns were generated for these inputs.")
     else:
-        st.subheader("Decision Overview")
-        st.caption(
-            "This is the quick read across PAI. It shows the recommended or best-failed candidate, "
-            "the planned-vs-required sortie relationship, and the active limiter."
-        )
-        st.dataframe(_summary_decision_rows(rows, policy), width="stretch", hide_index=True)
-
-        st.subheader("Operating Envelope")
-        st.caption("This is the leadership-ready view: what sortie range appears sustainable at each PAI.")
-        st.dataframe(_operating_envelope_rows(rows, policy), width="stretch", hide_index=True)
-
         for pai_value in _pai_values(rows):
             pai_rows = _rows_for_pai(rows, pai_value)
             viable = _recommendable_rows(pai_rows, policy)
