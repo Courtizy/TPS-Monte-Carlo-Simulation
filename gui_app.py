@@ -344,6 +344,7 @@ def _result_row(
     turn_pattern = _turn_pattern_display(first_go, turns, third_go, fourth_go)
     starting_mc = summary.sample_iteration.days[0].total_mc_aircraft
     recovery_debt = max(0.0, starting_mc - summary.average_next_monday_available)
+    recovery_pressure = recovery_debt + summary.average_repair_backlog
     return {
         "pai": pai,
         "capacity_label": point["label"],
@@ -372,10 +373,12 @@ def _result_row(
         "success_min": summary.success_min,
         "success_max": summary.success_max,
         "avg_next_monday": summary.average_next_monday_available,
+        "avg_backlog": summary.average_repair_backlog,
         "recovery_debt": recovery_debt,
+        "recovery_pressure": recovery_pressure,
         "failure_mode": _top_count(summary.failure_mode_counts),
         "risk_band": risk_band(summary.probability_success, policy),
-        "score": _score(summary, classification, recovery_debt),
+        "score": _score(summary, classification, recovery_pressure),
     }
 
 
@@ -400,7 +403,7 @@ def _turn_pattern_display(
     return "-".join(days)
 
 
-def _score(summary: SimulationSummary, classification: dict[str, object], recovery_debt: float) -> float:
+def _score(summary: SimulationSummary, classification: dict[str, object], recovery_pressure: float) -> float:
     return (
         summary.probability_success * 0.45
         + summary.probability_meet_sorties * 0.18
@@ -408,7 +411,7 @@ def _score(summary: SimulationSummary, classification: dict[str, object], recove
         + summary.probability_within_ttp_commit * 0.12
         + summary.probability_recovery * 0.08
         + float(classification["smoothness_score"]) * 0.05
-        - recovery_debt * 0.02
+        - recovery_pressure * 0.02
         - float(classification["backend_penalty"]) * 0.08
         - float(classification["friday_penalty"]) * 0.06
     )
@@ -419,7 +422,7 @@ def _rank(row: dict[str, object]) -> tuple[float, float, float, float]:
         float(row["score"]),
         float(row["success"]),
         float(row["avg_next_monday"]),
-        -float(row["recovery_debt"]),
+        -_recovery_pressure(row),
     )
 
 
@@ -563,7 +566,9 @@ def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
             "Overall Success": _pct(float(row["success"])),
             "Sortie Target Met": _pct(float(row["sortie_success"])),
             "Avg Next-Monday MC": f"{float(row['avg_next_monday']):.1f}",
-            "Recovery Debt": f"{float(row['recovery_debt']):.1f}",
+            "MC Recovery Debt": f"{float(row['recovery_debt']):.1f}",
+            "Avg Backlog": f"{_avg_backlog(row):.1f}",
+            "Recovery Pressure": f"{_recovery_pressure(row):.1f}",
             "Risk": row["risk_band"],
         }
         for row in rows
@@ -575,6 +580,14 @@ def _avg_sorties_per_aircraft(row: dict[str, object]) -> float:
         return float(row["avg_sorties_per_aircraft"])
     pai = int(row.get("pai", 0))
     return int(row.get("weekly_sorties", 0)) / pai if pai else 0.0
+
+
+def _avg_backlog(row: dict[str, object]) -> float:
+    return float(row.get("avg_backlog", 0.0))
+
+
+def _recovery_pressure(row: dict[str, object]) -> float:
+    return float(row.get("recovery_pressure", float(row.get("recovery_debt", 0.0)) + _avg_backlog(row)))
 
 
 def _is_recommendable(row: dict[str, object], policy: TtpPolicy = DEFAULT_TTP_POLICY) -> bool:
@@ -691,8 +704,145 @@ def _summary_decision_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> 
                 "Success": _pct(float(selected["success"])),
                 "Recovery": _pct(float(selected["recovery_success"])),
                 "Backlog": _pct(float(selected["backlog_success"])),
+                "Recovery Pressure": f"{_recovery_pressure(selected):.1f}",
                 "Risk": selected["risk_band"],
                 "Limiter": selected["failure_mode"],
+            }
+        )
+    return output
+
+
+def _recommended_action(row: dict[str, object], policy: TtpPolicy) -> str:
+    if _is_recommendable(row, policy):
+        if str(row["model"]) == "Fleet-Flex Recovery":
+            return "Use as candidate; relies on fleet-flex recovery."
+        return "Use as primary candidate under strict recovery assumptions."
+    if int(row["weekly_sorties"]) < int(row["required_sorties"]):
+        return "Increase planned sorties or lower the requirement."
+    if float(row["recovery_success"]) < policy.yellow_success_threshold:
+        return "Pattern may execute but does not reliably recover by next Monday."
+    if float(row["backlog_success"]) < policy.yellow_success_threshold:
+        return "Reduce tempo or improve repair capacity; backlog is the limiting risk."
+    if float(row["aircraft_success"]) < policy.yellow_success_threshold:
+        return "Aircraft availability is limiting; add PAI or reduce daily pressure."
+    return "Not recommended under current assumptions; review failure mode."
+
+
+def _recommended_action_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
+    output = []
+    for pai in _pai_values(rows):
+        pai_rows = _rows_for_pai(rows, pai)
+        viable = _recommendable_rows(pai_rows, policy)
+        selected = max(viable, key=_rank) if viable else max(pai_rows, key=_rank)
+        output.append(
+            {
+                "PAI": pai,
+                "Action": _recommended_action(selected, policy),
+                "Pattern": selected["pattern_with_frontlines"],
+                "Recovery Model": selected["model"],
+                "Success": _pct(float(selected["success"])),
+                "Recovery Pressure": f"{_recovery_pressure(selected):.1f}",
+                "Risk": selected["risk_band"],
+                "Limiter": selected["failure_mode"],
+            }
+        )
+    return output
+
+
+def _minimum_pai_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
+    viable = _recommendable_rows(rows, policy)
+    if not viable:
+        best = max(rows, key=_rank) if rows else None
+        return [
+            {
+                "Requirement": "Minimum PAI",
+                "Answer": "No PAI in sweep met the recommendation screen.",
+                "Pattern": best["pattern_with_frontlines"] if best else "None",
+                "Success": _pct(float(best["success"])) if best else "0.0%",
+                "Risk": best["risk_band"] if best else "None",
+                "Recovery Pressure": f"{_recovery_pressure(best):.1f}" if best else "0.0",
+                "Limiter": best["failure_mode"] if best else "No valid patterns",
+            }
+        ]
+    min_pai = min(int(row["pai"]) for row in viable)
+    candidates = [row for row in viable if int(row["pai"]) == min_pai]
+    best = max(candidates, key=_rank)
+    return [
+        {
+            "Requirement": "Minimum PAI",
+            "Answer": f"{min_pai} PAI meets the current requirement and sustainability screen.",
+            "Pattern": best["pattern_with_frontlines"],
+            "Success": _pct(float(best["success"])),
+            "Risk": best["risk_band"],
+            "Recovery Pressure": f"{_recovery_pressure(best):.1f}",
+            "Limiter": best["failure_mode"],
+        }
+    ]
+
+
+def _constraint_pressure_rows(row: dict[str, object], policy: TtpPolicy) -> list[dict[str, object]]:
+    max_frontline = max((int(value) for value in row["first_go_sequence"]), default=0)
+    commit_limit = int(row["commit_aircraft"])
+    sortie_margin = int(row["weekly_sorties"]) - int(row["required_sorties"])
+    pressure = [
+        {
+            "Constraint": "Sortie Requirement",
+            "Margin": sortie_margin,
+            "Status": "OK" if sortie_margin >= 0 else "Short",
+            "Interpretation": f"{abs(sortie_margin)} sortie {'buffer' if sortie_margin >= 0 else 'shortfall'} versus requirement.",
+        },
+        {
+            "Constraint": "Commit Aircraft",
+            "Margin": commit_limit - max_frontline,
+            "Status": "OK" if commit_limit >= max_frontline else "Over",
+            "Interpretation": f"{max_frontline} peak first-go aircraft against {commit_limit} commit aircraft.",
+        },
+        {
+            "Constraint": "Recovery Pressure",
+            "Margin": f"{_recovery_pressure(row):.1f}",
+            "Status": "OK" if _recovery_pressure(row) <= 0.5 else "Watch",
+            "Interpretation": (
+                f"{float(row['recovery_debt']):.1f} MC recovery debt + "
+                f"{_avg_backlog(row):.1f} average repair backlog."
+            ),
+        },
+    ]
+    for label, value in (
+        ("Overall Success", float(row["success"])),
+        ("Aircraft Availability", float(row["aircraft_success"])),
+        ("Next-Monday Recovery", float(row["recovery_success"])),
+        ("Backlog Control", float(row["backlog_success"])),
+    ):
+        margin = value - policy.yellow_success_threshold
+        pressure.append(
+            {
+                "Constraint": label,
+                "Margin": f"{margin:+.1%}",
+                "Status": "OK" if margin >= 0 else "Tight",
+                "Interpretation": f"{_pct(value)} versus {_pct(policy.yellow_success_threshold)} minimum screen.",
+            }
+        )
+    return pressure
+
+
+def _constraint_pressure_for_pai_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list[dict[str, object]]:
+    output = []
+    for pai in _pai_values(rows):
+        pai_rows = _rows_for_pai(rows, pai)
+        viable = _recommendable_rows(pai_rows, policy)
+        selected = max(viable, key=_rank) if viable else max(pai_rows, key=_rank)
+        tight = [
+            item for item in _constraint_pressure_rows(selected, policy)
+            if item["Status"] != "OK"
+        ]
+        output.append(
+            {
+                "PAI": pai,
+                "Pattern": selected["pattern_with_frontlines"],
+                "Risk": selected["risk_band"],
+                "Recovery Pressure": f"{_recovery_pressure(selected):.1f}",
+                "Tightest Constraint": tight[0]["Constraint"] if tight else "None",
+                "Constraint Detail": tight[0]["Interpretation"] if tight else "All primary constraints clear the screen.",
             }
         )
     return output
@@ -737,6 +887,7 @@ def _pattern_family_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> li
         best = max(best_pool, key=_rank)
         avg_success = sum(float(row["success"]) for row in family_rows) / len(family_rows)
         avg_debt = sum(float(row["recovery_debt"]) for row in family_rows) / len(family_rows)
+        avg_pressure = sum(_recovery_pressure(row) for row in family_rows) / len(family_rows)
         output.append(
             {
                 "Pattern Family": family,
@@ -744,7 +895,8 @@ def _pattern_family_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> li
                 "Sustainable": len(viable),
                 "Best Success": _pct(float(best["success"])),
                 "Average Success": _pct(avg_success),
-                "Average Recovery Debt": f"{avg_debt:.1f}",
+                "Avg MC Recovery Debt": f"{avg_debt:.1f}",
+                "Avg Recovery Pressure": f"{avg_pressure:.1f}",
                 "Best Pattern": best["pattern_with_frontlines"],
                 "Primary Failure": best["failure_mode"],
             }
@@ -841,6 +993,51 @@ def _recovery_delta_rows(summaries: dict[str, SimulationSummary]) -> list[dict[s
             }
         )
     return rows
+
+
+def _manual_vs_optimized_rows(
+    manual_result: dict[str, object],
+    optimization_rows: list[dict[str, object]],
+    pai: int,
+    policy: TtpPolicy,
+) -> list[dict[str, object]]:
+    pai_rows = _rows_for_pai(optimization_rows, pai)
+    if not pai_rows:
+        return [
+            {
+                "Comparison": "Manual vs Optimized",
+                "Manual Model": "N/A",
+                "Manual Success": "N/A",
+                "Optimized Pattern": "No optimized result for this PAI",
+                "Optimized Success": "N/A",
+                "Delta": "N/A",
+                "Interpretation": "Run the optimization dashboard for the same PAI to compare.",
+            }
+        ]
+    viable = _recommendable_rows(pai_rows, policy)
+    optimized = max(viable, key=_rank) if viable else max(pai_rows, key=_rank)
+    summaries = manual_result["summaries"]
+    output = []
+    for model_name, summary in summaries.items():
+        delta = summary.probability_success - float(optimized["success"])
+        if delta >= 0.05:
+            interpretation = "Manual pattern is performing better than the current optimized candidate."
+        elif delta <= -0.05:
+            interpretation = "Optimized candidate is materially stronger than the manual pattern."
+        else:
+            interpretation = "Manual pattern is close to the optimized candidate."
+        output.append(
+            {
+                "Comparison": "Manual vs Optimized",
+                "Manual Model": model_name,
+                "Manual Success": _pct(summary.probability_success),
+                "Optimized Pattern": optimized["pattern_with_frontlines"],
+                "Optimized Success": _pct(float(optimized["success"])),
+                "Delta": f"{delta:+.1%}",
+                "Interpretation": interpretation,
+            }
+        )
+    return output
 
 
 def _surge_display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -1055,7 +1252,9 @@ def _detail_rows(row: dict[str, object]) -> list[dict[str, str]]:
         {"Metric": "Next-Monday Recovery", "Value": _pct(float(row["recovery_success"]))},
         {"Metric": "Backlog Success", "Value": _pct(float(row["backlog_success"]))},
         {"Metric": "Avg Next-Monday MC", "Value": f"{float(row['avg_next_monday']):.1f}"},
-        {"Metric": "Recovery Debt", "Value": f"{float(row['recovery_debt']):.1f}"},
+        {"Metric": "MC Recovery Debt", "Value": f"{float(row['recovery_debt']):.1f}"},
+        {"Metric": "Avg Repair Backlog", "Value": f"{_avg_backlog(row):.1f}"},
+        {"Metric": "Recovery Pressure", "Value": f"{_recovery_pressure(row):.1f}"},
         {"Metric": "Primary Failure", "Value": str(row["failure_mode"])},
         {"Metric": "Risk", "Value": str(row["risk_band"])},
     ]
@@ -1272,7 +1471,8 @@ def _show_about_page() -> None:
             - **Within Commit**: daily aircraft committed stayed within the policy commit limit.
             - **Next-Monday Recovery**: the fleet recovered enough aircraft by the next Monday marker.
             - **Backlog Success**: repair backlog stayed within the allowed threshold.
-            - **Recovery Debt**: how far average next-Monday MC falls below starting MC.
+            - **MC Recovery Debt**: how far average next-Monday MC falls below starting MC.
+            - **Recovery Pressure**: MC recovery debt plus average repair backlog. This is the better recovery-burden signal.
             - **Risk Band**: Green, Yellow, Orange, or Red based on overall success probability.
             - **Avg Sorties / Aircraft**: planned weekly sorties divided by PAI.
             """
@@ -1293,6 +1493,8 @@ def _show_about_page() -> None:
         st.markdown(
             """
             - **Summary**: gives a decision brief for each PAI in the sweep. This is the first place to look.
+            - **Recommended Action**: translates the strongest candidate into a plain-language action.
+            - **Minimum PAI**: identifies the first PAI in the sweep that meets the requirement and sustainability screen.
             - **Operating Envelope**: shows sustainable UTE min/max and maximum sustainable sorties by PAI.
             - **PAI Decision Briefs**: show the recommendation, viable options, and failure readout for each PAI.
             - **Capacity Sweep**: shows raw sortie capacity by PAI and UTE point, including average sorties per aircraft.
@@ -1355,9 +1557,9 @@ def _show_about_page() -> None:
             - **Capacity Sweep**: sortie math across the selected UTE range and max-commit capacity point.
             - **Best Patterns**: sustainable/recommendable candidates only, including best pattern by UTE.
             - **Max Surge Weeks**: surge-only stress readout showing usable duration, trend lines, and first failure cause.
-            - **Diagnostics**: all tested best candidates, including failed patterns.
-            - **Pattern Detail**: selected pattern details and recovery-model comparison.
-            - **Manual Turn Pattern**: test a specific first-go / second-go schedule.
+            - **Diagnostics**: all tested best candidates, failed patterns, and constraint pressure by PAI.
+            - **Pattern Detail**: selected pattern details, daily pressure, constraint pressure, and recovery-model comparison.
+            - **Manual Turn Pattern**: test a specific first-go / second-go schedule and compare it to optimized candidates.
             """
         )
 
@@ -1565,6 +1767,23 @@ if page == "Manual Turn Pattern":
         st.subheader("Interpretation")
         st.dataframe(_manual_interpretation_rows(result["summaries"]), width="stretch", hide_index=True)
 
+        optimization_result = st.session_state.get("best_fit_result")
+        if optimization_result:
+            st.subheader("Manual vs Optimized")
+            st.caption("Compares this manual pattern against the strongest optimized candidate for the same PAI.")
+            st.dataframe(
+                _manual_vs_optimized_rows(
+                    result,
+                    optimization_result["rows"],
+                    int(pai_max),
+                    optimization_result["policy"],
+                ),
+                width="stretch",
+                hide_index=True,
+            )
+        else:
+            st.info("Run the Optimization Dashboard for the same PAI to compare this manual pattern against generated candidates.")
+
         st.subheader("Sample Iteration Table")
         selected_model = st.selectbox("Sample Iteration Model", list(result["summaries"]))
         st.dataframe(
@@ -1658,6 +1877,14 @@ with summary:
             "the planned-vs-required sortie relationship, and the active limiter."
         )
         st.dataframe(_summary_decision_rows(rows, policy), width="stretch", hide_index=True)
+
+        st.subheader("Recommended Action")
+        st.caption("Plain-language action for each PAI based on the strongest usable or best-failed candidate.")
+        st.dataframe(_recommended_action_rows(rows, policy), width="stretch", hide_index=True)
+
+        st.subheader("Minimum PAI to Meet Requirement")
+        st.caption("The first PAI in the sweep that clears the requirement and sustainability screen.")
+        st.dataframe(_minimum_pai_rows(rows, policy), width="stretch", hide_index=True)
 
         st.subheader("Operating Envelope")
         st.caption("This is the leadership-ready view: what sortie range appears sustainable at each PAI.")
@@ -1772,6 +1999,10 @@ with diagnostics:
     st.subheader("Candidate Pass / Reject Summary")
     st.dataframe(_diagnostic_pai_rows(rows, policy), width="stretch", hide_index=True)
 
+    st.subheader("Constraint Pressure by PAI")
+    st.caption("Shows which primary constraint is closest to driving the recommendation or failure.")
+    st.dataframe(_constraint_pressure_for_pai_rows(rows, policy), width="stretch", hide_index=True)
+
     failures = _failure_mode_rows(rows, policy)
     if failures:
         st.subheader("Failure Mode Readout")
@@ -1808,6 +2039,10 @@ with detail:
 
         st.subheader("Selected Pattern Metrics")
         st.dataframe(_detail_rows(selected), width="stretch", hide_index=True)
+
+        st.subheader("Constraint Pressure")
+        st.caption("Margins show whether the selected pattern has buffer or is close to failing a screen.")
+        st.dataframe(_constraint_pressure_rows(selected, policy), width="stretch", hide_index=True)
 
         st.subheader("Recovery Model Comparison")
         st.caption("Reruns the selected pattern under both recovery assumptions using the current sidebar inputs.")
