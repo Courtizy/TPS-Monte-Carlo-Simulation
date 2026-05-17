@@ -821,8 +821,8 @@ def _diagnostic_pai_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> li
         pai_rows = _rows_for_pai(rows, pai)
         viable = _recommendable_rows(pai_rows, policy)
         rejected = len(pai_rows) - len(viable)
-        best_failed_pool = [row for row in pai_rows if not _is_recommendable(row, policy)]
-        best_failed = max(best_failed_pool, key=_rank) if best_failed_pool else None
+        near_miss_pool = [row for row in pai_rows if not _is_recommendable(row, policy)]
+        near_miss = max(near_miss_pool, key=_rank) if near_miss_pool else None
         output.append(
             {
                 "PAI": pai,
@@ -830,8 +830,8 @@ def _diagnostic_pai_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> li
                 "Sustainable": len(viable),
                 "Rejected": rejected,
                 "Sustainable Share": _pct(len(viable) / len(pai_rows)) if pai_rows else "0.0%",
-                "Best Failed Pattern": best_failed["pattern_with_frontlines"] if best_failed else "None",
-                "Best Failed Reason": best_failed["failure_mode"] if best_failed else "None",
+                "Closest Non-Recommended Pattern": near_miss["pattern_with_frontlines"] if near_miss else "None",
+                "Why It Was Not Recommended": _recommendation_blocker(near_miss) if near_miss else "None",
             }
         )
     return output
@@ -1075,7 +1075,7 @@ def _decision_guidance(pai: int, rows: list[dict[str, object]], policy: TtpPolic
     best_failed = max(rows, key=_rank)
     return (
         f"{pai} PAI has no sustainable pattern under the current assumptions. "
-        f"The best failed candidate is {best_failed['pattern_with_frontlines']} at "
+        f"The closest non-recommended candidate is {best_failed['pattern_with_frontlines']} at "
         f"{best_failed['capacity_label']}, failing primarily from {_recommendation_blocker(best_failed)}."
     )
 
@@ -1850,6 +1850,12 @@ with surge:
 
 with diagnostics:
     st.caption("All tested best candidates, including patterns rejected from the Best Patterns tab.")
+    st.info(
+        "Closest Non-Recommended Pattern is the strongest near-miss candidate for that PAI. "
+        "It is shown for troubleshooting and planning context, not as a recommendation. "
+        "Use the reason column to see whether it missed because of sortie success, recovery, backlog, "
+        "or the operational-shape screen."
+    )
     st.subheader("Candidate Pass / Reject Summary")
     st.dataframe(_diagnostic_pai_rows(rows, policy), width="stretch", hide_index=True)
 

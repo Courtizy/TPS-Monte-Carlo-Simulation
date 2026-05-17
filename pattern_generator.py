@@ -291,7 +291,15 @@ def _classification_for_schedule(
     classification["frontline_family"] = frontline_family
     classification["frontline_sequence"] = first_go_sequence
 
-    if total_family in {"Flat Turns", "Balanced Push"} and frontline_family in directional_families:
+    if _is_exact_flat_schedule(schedule, policy):
+        classification["pattern_family"] = "Flat Turns"
+        classification["pattern_name"] = _family_name_for_pattern(
+            list(totals),
+            "Flat Turns",
+            commit_aircraft_count,
+            policy,
+        )
+    elif total_family in {"Flat Turns", "Balanced Push"} and frontline_family in directional_families:
         classification["pattern_family"] = frontline_family
         classification["pattern_name"] = _family_name_for_pattern(
             list(totals),
@@ -300,6 +308,22 @@ def _classification_for_schedule(
             policy,
         )
     return classification
+
+
+def _is_exact_flat_schedule(
+    schedule: dict[str, DaySchedule],
+    policy: TtpPolicy,
+) -> bool:
+    signatures = {
+        (
+            schedule[day].first_go,
+            schedule[day].second_go,
+            schedule[day].third_go,
+            schedule[day].fourth_go,
+        )
+        for day in policy.flying_days
+    }
+    return len(signatures) == 1
 
 
 def _family_name_for_pattern(
@@ -652,7 +676,7 @@ def _pattern_family(
 def _is_true_flat(pattern: list[int], std_dev: float) -> bool:
     if not pattern:
         return False
-    return std_dev <= 0.50 and max(pattern) - min(pattern) <= 1
+    return max(pattern) - min(pattern) == 0
 
 
 def _pattern_modifiers(

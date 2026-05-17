@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.21.6`
+Current model version: `0.21.8`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -185,3 +185,11 @@ when that better reflects the operational turn pattern.
 Version `0.21.6` adds a sidebar scheduled-spares toggle. When enabled, scheduled
 spares are modeled at 20% of first-go aircraft; when disabled, the model uses no
 scheduled spares.
+
+Version `0.21.7` makes flat-turn classification operational instead of
+statistical. A pattern is only a flat turn when the same GO split repeats every
+flying day, such as `4x2-4x2-4x2-4x2-4x2`.
+
+Version `0.21.8` renames diagnostics near-miss wording from "best failed" to
+"Closest Non-Recommended Pattern" and adds an explanatory callout in the
+Diagnostics tab.
