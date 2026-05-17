@@ -379,6 +379,7 @@ def _result_row(
         "pattern_index": pattern_index,
         "pattern_name": classification["pattern_name"],
         "pattern_family": classification["pattern_family"],
+        "diagnostic_only": bool(classification.get("diagnostic_only", False)),
         "pattern_with_frontlines": turn_pattern,
         "daily_sequence": classification["daily_sequence"],
         "first_go_sequence": first_go,
@@ -451,6 +452,8 @@ def _operational_shape_flags(
     is_flat_turn = str(classification.get("pattern_family", "")) == "Flat Turns"
     if capacity_label == policy.surge_label:
         flags.append("Max-commit surge is stress-only")
+    if bool(classification.get("diagnostic_only", False)):
+        flags.append("Diagnostic-only pattern family")
     if not is_flat_turn and float(classification["backend_penalty"]) > 0.20:
         flags.append("Back-loaded Thu/Fri pressure")
     if not is_flat_turn and float(classification["friday_penalty"]) > 0.20:

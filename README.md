@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.21.10`
+Current model version: `0.22.2`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -201,3 +201,15 @@ execution recommendations.
 Version `0.21.10` prevents exact flat-turn patterns from being rejected as
 Friday pushes simply because Friday ties the same first-go count used every
 other flying day.
+
+Version `0.22.0` simplifies pattern selection by using an explicit operational
+family order. Normal families are preserved first, while reverse-waterfall,
+back-loaded, and compressed-surge families remain visible as diagnostic-only
+candidates rather than normal recommendations.
+
+Version `0.22.1` further tightens flat-turn logic so flat daily sortie totals
+are not labeled as flat turns unless the exact GO split repeats every flying day.
+
+Version `0.22.2` changes generator ordering to favor smoother, less-compressed
+patterns before Friday-recovery-heavy shapes, reducing unrealistic schedules
+with very low Friday output when a normal waterfall or flat option exists.

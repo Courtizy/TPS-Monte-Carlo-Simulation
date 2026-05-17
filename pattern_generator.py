@@ -9,6 +9,26 @@ from simulation import DaySchedule, Scenario
 from ttp_rules import DEFAULT_TTP_POLICY, TtpPolicy, commit_aircraft, floor_count
 
 
+RECOMMENDABLE_PATTERN_FAMILIES = (
+    "Flat Turns",
+    "Waterfall",
+    "Step-Down",
+    "Front-Loaded Push",
+    "Balanced Push",
+    "Recovery Valley",
+    "Midweek Spike",
+    "Multi-Spike",
+    "Sawtooth",
+    "Step-Up",
+)
+DIAGNOSTIC_PATTERN_FAMILIES = (
+    "Reverse Waterfall",
+    "Back-Loaded Push",
+    "Compressed Surge",
+)
+PATTERN_FAMILY_ORDER = RECOMMENDABLE_PATTERN_FAMILIES + DIAGNOSTIC_PATTERN_FAMILIES
+
+
 @dataclass(frozen=True)
 class PatternConstraints:
     flying_days: int = len(DEFAULT_TTP_POLICY.flying_days)
@@ -233,7 +253,11 @@ def _family_balanced_patterns(
     if len(patterns) <= max_results:
         return patterns
 
-    families = sorted({str(pattern["classification"]["pattern_family"]) for pattern in patterns})
+    discovered_families = {str(pattern["classification"]["pattern_family"]) for pattern in patterns}
+    families = [
+        family for family in PATTERN_FAMILY_ORDER
+        if family in discovered_families
+    ] + sorted(discovered_families - set(PATTERN_FAMILY_ORDER))
     grouped = {
         family: [
             pattern for pattern in patterns
@@ -299,6 +323,14 @@ def _classification_for_schedule(
             commit_aircraft_count,
             policy,
         )
+    elif total_family == "Flat Turns":
+        classification["pattern_family"] = "Balanced Push"
+        classification["pattern_name"] = _family_name_for_pattern(
+            list(totals),
+            "Balanced Push",
+            commit_aircraft_count,
+            policy,
+        )
     elif total_family in {"Flat Turns", "Balanced Push"} and frontline_family in directional_families:
         classification["pattern_family"] = frontline_family
         classification["pattern_name"] = _family_name_for_pattern(
@@ -307,6 +339,9 @@ def _classification_for_schedule(
             commit_aircraft_count,
             policy,
         )
+    classification["diagnostic_only"] = (
+        str(classification["pattern_family"]) in DIAGNOSTIC_PATTERN_FAMILIES
+    )
     return classification
 
 
@@ -342,26 +377,28 @@ def _classification_sort_key(
     policy: TtpPolicy = DEFAULT_TTP_POLICY,
 ) -> tuple[object, ...]:
     return (
-        -_human_factor_shape_score(classification["daily_sequence"], policy),
         classification["compression_score"],
-        classification["friday_penalty"],
-        classification["backend_penalty"],
-        -classification["early_week_preference"],
         -classification["smoothness_score"],
+        classification["day_to_day_delta"],
+        classification["backend_penalty"],
+        classification["friday_penalty"],
+        -classification["early_week_preference"],
         classification["friday_sorties"],
+        -_human_factor_shape_score(classification["daily_sequence"], policy),
         classification["pattern_signature"],
     )
 
 
 def _pattern_sort_key(item: dict[str, object]) -> tuple[object, ...]:
     return (
-        -_human_factor_shape_score(item["classification"]["daily_sequence"]),
         item["classification"]["compression_score"],
-        item["classification"]["friday_penalty"],
-        item["classification"]["backend_penalty"],
-        -item["classification"]["early_week_preference"],
         -item["classification"]["smoothness_score"],
+        item["classification"]["day_to_day_delta"],
+        item["classification"]["backend_penalty"],
+        item["classification"]["friday_penalty"],
+        -item["classification"]["early_week_preference"],
         _peak_frontlines(item["schedule"]),
+        -_human_factor_shape_score(item["classification"]["daily_sequence"]),
         item["classification"]["friday_sorties"],
         item["signature"],
     )
