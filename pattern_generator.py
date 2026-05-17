@@ -202,13 +202,20 @@ def generate_turn_pattern_permutations(
         for schedule in schedule_options:
             if any(day.aircraft_required(policy=policy) > commit_aircraft_count for day in schedule.values()):
                 continue
+            schedule_classification = _classification_for_schedule(
+                totals,
+                classification,
+                schedule,
+                commit_aircraft_count,
+                policy,
+            )
             schedule_signature = _schedule_signature(schedule, policy)
             patterns.append(
                 {
                     "daily_totals": list(totals),
                     "schedule": schedule,
-                    "classification": classification,
-                    "signature": f"{classification['pattern_signature']}|{schedule_signature}",
+                    "classification": schedule_classification,
+                    "signature": f"{schedule_classification['pattern_signature']}|{schedule_signature}",
                     "schedule_signature": schedule_signature,
                 }
             )
@@ -255,6 +262,55 @@ def _family_balanced_patterns(
             break
 
     return sorted(selected, key=_pattern_sort_key)
+
+
+def _classification_for_schedule(
+    totals: tuple[int, ...],
+    total_classification: dict[str, object],
+    schedule: dict[str, DaySchedule],
+    commit_aircraft_count: int,
+    policy: TtpPolicy,
+) -> dict[str, object]:
+    first_go_sequence = [schedule[day].first_go for day in policy.flying_days]
+    frontline_classification = classify_turn_pattern(
+        first_go_sequence,
+        commit_aircraft=commit_aircraft_count,
+        policy=policy,
+    )
+    total_family = str(total_classification["pattern_family"])
+    frontline_family = str(frontline_classification["pattern_family"])
+    directional_families = {
+        "Waterfall",
+        "Reverse Waterfall",
+        "Step-Down",
+        "Step-Up",
+        "Front-Loaded Push",
+        "Back-Loaded Push",
+    }
+    classification = dict(total_classification)
+    classification["frontline_family"] = frontline_family
+    classification["frontline_sequence"] = first_go_sequence
+
+    if total_family in {"Flat Turns", "Balanced Push"} and frontline_family in directional_families:
+        classification["pattern_family"] = frontline_family
+        classification["pattern_name"] = _family_name_for_pattern(
+            list(totals),
+            frontline_family,
+            commit_aircraft_count,
+            policy,
+        )
+    return classification
+
+
+def _family_name_for_pattern(
+    pattern: list[int],
+    family: str,
+    commit_aircraft_count: int,
+    policy: TtpPolicy,
+) -> str:
+    avg = mean(pattern) if pattern else 0
+    modifiers = _pattern_modifiers(pattern, avg, commit_aircraft_count, family, policy)
+    return " ".join(modifiers + [family]).strip()
 
 
 def _classification_sort_key(

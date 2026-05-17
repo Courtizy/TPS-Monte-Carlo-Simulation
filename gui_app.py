@@ -50,6 +50,7 @@ def run_best_fit(
     include_surge: bool,
     ute_min: float,
     ute_max: float,
+    spare_rate: float,
 ) -> dict[str, object]:
     policy = replace(
         DEFAULT_TTP_POLICY,
@@ -60,6 +61,7 @@ def run_best_fit(
         max_day_to_day_delta=max_day_delta,
         ute_min=ute_min,
         ute_max=ute_max,
+        spare_rate=spare_rate,
     )
     constraints = PatternConstraints.from_policy(policy)
     rng = Random(random_seed)
@@ -112,7 +114,7 @@ def run_best_fit(
                 }
             )
             for model_name, use_uncommitted in recovery_model_options():
-                best_row = None
+                best_rows_by_family: dict[str, dict[str, object]] = {}
                 for index, pattern in enumerate(patterns):
                     weekly_sorties = int(point["weekly_sorties"])
                     target = required_sorties if required_sorties and required_sorties > 0 else weekly_sorties
@@ -141,10 +143,11 @@ def run_best_fit(
                         policy=policy,
                         pattern_index=index,
                     )
-                    if best_row is None or _rank(row) > _rank(best_row):
-                        best_row = row
-                if best_row is not None:
-                    rows.append(best_row)
+                    family = str(row["pattern_family"])
+                    current_best = best_rows_by_family.get(family)
+                    if current_best is None or _rank(row) > _rank(current_best):
+                        best_rows_by_family[family] = row
+                rows.extend(best_rows_by_family.values())
 
     return {
         "policy": policy,
@@ -179,6 +182,7 @@ def run_manual_pattern(
     max_fourth_go: int,
     ute_min: float,
     ute_max: float,
+    spare_rate: float,
 ) -> dict[str, object]:
     policy = replace(
         DEFAULT_TTP_POLICY,
@@ -188,6 +192,7 @@ def run_manual_pattern(
         max_fourth_go=max_fourth_go,
         ute_min=ute_min,
         ute_max=ute_max,
+        spare_rate=spare_rate,
     )
     schedule = {
         day: DaySchedule(
@@ -245,8 +250,9 @@ def run_surge_weeks(
     fix_count_model: str,
     ute_min: float,
     ute_max: float,
+    spare_rate: float,
 ) -> list[dict[str, object]]:
-    policy = replace(DEFAULT_TTP_POLICY, ute_min=ute_min, ute_max=ute_max)
+    policy = replace(DEFAULT_TTP_POLICY, ute_min=ute_min, ute_max=ute_max, spare_rate=spare_rate)
     rng = Random(random_seed)
     rows = []
     for pai in range(pai_min, pai_max + 1):
@@ -368,6 +374,7 @@ def _result_row(
         "ute": point["actual_ute"],
         "avg_sorties_per_aircraft": int(point["weekly_sorties"]) / pai if pai else 0,
         "commit_aircraft": point["commit_aircraft"],
+        "spare_rate": policy.spare_rate,
         "model": model_name,
         "pattern_index": pattern_index,
         "pattern_name": classification["pattern_name"],
@@ -603,6 +610,7 @@ def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
             "Required Sorties": row["required_sorties"],
             "UTE": f"{float(row['ute']):.2f}",
             "Avg Sorties / Aircraft": f"{_avg_sorties_per_aircraft(row):.1f}",
+            "Spare Rate": f"{float(row.get('spare_rate', 0)):.0%}",
             "Recovery Model": row["model"],
             "Turn Pattern": row["pattern_with_frontlines"],
             "Pattern Family": row["pattern_name"],
@@ -1096,6 +1104,7 @@ def _detail_rows(row: dict[str, object]) -> list[dict[str, str]]:
         {"Metric": "UTE", "Value": f"{float(row['ute']):.2f}"},
         {"Metric": "Avg Sorties / Aircraft", "Value": f"{_avg_sorties_per_aircraft(row):.1f}"},
         {"Metric": "Commit Aircraft", "Value": str(row["commit_aircraft"])},
+        {"Metric": "Scheduled Spare Rate", "Value": f"{row.get('spare_rate', 0):.0%}"},
         {"Metric": "Recovery Model", "Value": str(row["model"])},
         {"Metric": "Turn Pattern", "Value": str(row["pattern_with_frontlines"])},
         {"Metric": "1st Go Sequence", "Value": "-".join(str(value) for value in row["first_go_sequence"])},
@@ -1398,9 +1407,23 @@ def _show_about_page() -> None:
             - plan at least the required weekly sorties,
             - meet the minimum success threshold,
             - meet the recovery threshold,
-            - meet the backlog threshold.
+            - meet the backlog threshold,
+            - pass the operational-shape screen.
 
             Failed patterns remain visible in Diagnostics, but they are not shown as Best Patterns.
+            """
+        )
+
+    with st.expander("Scheduled Spares"):
+        st.markdown(
+            """
+            The sidebar **Use scheduled spares** option controls whether spares are built into each daily schedule.
+
+            - When enabled, scheduled spares are calculated as 20% of first-go aircraft.
+            - When disabled, scheduled spares are zero.
+            - Spares count toward aircraft required and can absorb ground aborts before fleet-flex recovery is used.
+
+            Fractional spare aircraft are rounded down because the model cannot schedule part of an aircraft.
             """
         )
 
@@ -1463,6 +1486,9 @@ with st.sidebar:
         st.header("Model Options")
         event_count_model = st.selectbox("Event Count Model", ["Normal TTP", "Probabilistic Monte Carlo"])
         fix_count_model = st.selectbox("Fix Count Model", ["Normal TTP", "Probabilistic Monte Carlo"])
+        use_spares = st.checkbox("Use scheduled spares", value=False)
+        spare_rate = 0.20 if use_spares else 0.0
+        st.caption(f"Scheduled spare rate: {spare_rate:.0%}")
         max_daily_sorties = st.slider("Max Daily Sorties", 1, 12, 7)
         go_waves = st.slider("# of GOs", 1, 4, 2)
         max_second_go = st.slider("Max Second-Go Sorties", 0, 6, 2) if go_waves >= 2 else 0
@@ -1608,6 +1634,7 @@ if page == "Manual Turn Pattern":
             max_fourth_go=int(max_fourth_go),
             ute_min=float(ute_min),
             ute_max=float(ute_max),
+            spare_rate=float(spare_rate),
         )
 
     result = st.session_state.get("manual_result")
@@ -1672,6 +1699,7 @@ if st.button("Run Model", type="primary"):
         include_surge=bool(include_surge),
         ute_min=float(ute_min),
         ute_max=float(ute_max),
+        spare_rate=float(spare_rate),
     )
     st.session_state["surge_result"] = run_surge_weeks(
         pai_min=int(pai_min),
@@ -1689,6 +1717,7 @@ if st.button("Run Model", type="primary"):
         fix_count_model=fix_count_model,
         ute_min=float(ute_min),
         ute_max=float(ute_max),
+        spare_rate=float(spare_rate),
     )
 
 result = st.session_state.get("best_fit_result")
@@ -1887,6 +1916,7 @@ with detail:
                 max_fourth_go=int(max_fourth_go),
                 ute_min=float(ute_min),
                 ute_max=float(ute_max),
+                spare_rate=float(spare_rate),
             )
             st.session_state["detail_recovery_comparison"] = comparison
 

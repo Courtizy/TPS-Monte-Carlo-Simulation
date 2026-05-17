@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.21.4`
+Current model version: `0.21.6`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -176,3 +176,12 @@ or highly uneven patterns from the sustainable/recommendable list.
 
 Version `0.21.4` tightens pattern-family classification so low-variance
 waterfalls like `4x2-4x2-4x2-3x2-3x2` are no longer mislabeled as flat turns.
+
+Version `0.21.5` keeps the best simulated candidate from each discovered pattern
+family instead of only the single overall winner, and lets first-go shape relabel
+near-flat sortie totals as waterfall, step, front-loaded, or back-loaded patterns
+when that better reflects the operational turn pattern.
+
+Version `0.21.6` adds a sidebar scheduled-spares toggle. When enabled, scheduled
+spares are modeled at 20% of first-go aircraft; when disabled, the model uses no
+scheduled spares.
