@@ -448,21 +448,22 @@ def _operational_shape_flags(
 ) -> list[str]:
     flags: list[str] = []
     sequence = [int(value) for value in classification["daily_sequence"]]
+    is_flat_turn = str(classification.get("pattern_family", "")) == "Flat Turns"
     if capacity_label == policy.surge_label:
         flags.append("Max-commit surge is stress-only")
-    if float(classification["backend_penalty"]) > 0.20:
+    if not is_flat_turn and float(classification["backend_penalty"]) > 0.20:
         flags.append("Back-loaded Thu/Fri pressure")
-    if float(classification["friday_penalty"]) > 0.20:
+    if not is_flat_turn and float(classification["friday_penalty"]) > 0.20:
         flags.append("Friday recovery preference not met")
     if float(classification["compression_score"]) >= 0.70:
         flags.append("Compressed sortie concentration")
     if float(classification["smoothness_score"]) < 0.55:
         flags.append("Large day-to-day sortie swings")
-    if len(sequence) >= 5 and sequence[-1] > sequence[-2]:
+    if not is_flat_turn and len(sequence) >= 5 and sequence[-1] > sequence[-2]:
         flags.append("Friday increases from Thursday")
-    if first_go and sum(first_go[-2:]) > sum(first_go[:2]) + 1:
+    if not is_flat_turn and first_go and sum(first_go[-2:]) > sum(first_go[:2]) + 1:
         flags.append("Back-loaded first-go demand")
-    if first_go and first_go[-1] == max(first_go) and first_go[-1] > 0:
+    if not is_flat_turn and first_go and first_go[-1] == max(first_go) and first_go[-1] > 0:
         flags.append("Friday is peak first-go day")
     return flags
 
@@ -653,7 +654,12 @@ def _recommendation_blocker(row: dict[str, object]) -> str:
     flags = str(row.get("recommendation_flags", "Pass"))
     if flags and flags != "Pass":
         return flags
-    return str(row["failure_mode"])
+    failure = str(row["failure_mode"])
+    return "Passed recommendation screen" if failure == "None" else failure
+
+
+def _recommendation_status(row: dict[str, object], policy: TtpPolicy) -> str:
+    return "Recommendable" if _is_recommendable(row, policy) else "Not recommended"
 
 
 def _pai_values(rows: list[dict[str, object]]) -> list[int]:
@@ -704,7 +710,7 @@ def _operating_envelope_rows(rows: list[dict[str, object]], policy: TtpPolicy) -
             min_ute = max_ute = None
             max_sorties = 0
             best = max(pai_rows, key=_rank) if pai_rows else None
-            status = f"No sustainable pattern; best failed risk {best['risk_band']}" if best else "No valid patterns"
+            status = f"No sustainable pattern; closest non-recommended risk {best['risk_band']}" if best else "No valid patterns"
         output.append(
             {
                 "PAI": str(pai),
@@ -725,11 +731,11 @@ def _failure_readout_rows(rows: list[dict[str, object]]) -> list[dict[str, str]]
         failure = _recommendation_blocker(row)
         counts[failure] = counts.get(failure, 0) + 1
     if not counts:
-        return [{"Failure Mode": "None", "Patterns": "0", "Share": "0.0%"}]
+        return [{"Not-Recommended Reason": "None", "Patterns": "0", "Share": "0.0%"}]
     total = sum(counts.values())
     return [
         {
-            "Failure Mode": failure,
+            "Not-Recommended Reason": failure,
             "Patterns": str(count),
             "Share": _pct(count / total),
         }
@@ -746,7 +752,7 @@ def _summary_decision_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> 
         output.append(
             {
                 "PAI": pai,
-                "Status": "Recommendable" if viable else "Best Failed Candidate",
+                "Status": "Recommendable" if viable else "Closest Non-Recommended",
                 "Turn Pattern": selected["pattern_with_frontlines"],
                 "Planned": selected["weekly_sorties"],
                 "Required": selected["required_sorties"],
@@ -808,8 +814,9 @@ def _pattern_family_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> li
                 "Best Success": _pct(float(best["success"])),
                 "Average Success": _pct(avg_success),
                 "Average Recovery Debt": f"{avg_debt:.1f}",
-                "Best Pattern": best["pattern_with_frontlines"],
-                "Primary Failure": _recommendation_blocker(best),
+                "Representative Pattern": best["pattern_with_frontlines"],
+                "Recommendation Status": "Recommendable" if viable else "No recommendable pattern in family",
+                "Limiter / Screen": _recommendation_blocker(best),
             }
         )
     return sorted(output, key=lambda row: (int(row["Sustainable"]), row["Best Success"]), reverse=True)
@@ -846,7 +853,7 @@ def _failure_mode_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> list
         counts[failure] = counts.get(failure, 0) + 1
     total = sum(counts.values())
     return [
-        {"Failure Mode": failure, "Patterns": count, "Share": _pct(count / total) if total else "0.0%"}
+        {"Not-Recommended Reason": failure, "Patterns": count, "Share": _pct(count / total) if total else "0.0%"}
         for failure, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)
     ]
 
@@ -1359,12 +1366,12 @@ def _show_about_page() -> None:
             """
             - **Summary**: gives a decision brief for each PAI in the sweep. This is the first place to look.
             - **Operating Envelope**: shows sustainable UTE min/max and maximum sustainable sorties by PAI.
-            - **PAI Decision Briefs**: show the recommendation, viable options, and failure readout for each PAI.
+            - **PAI Decision Briefs**: show the recommendation, recommendable options, and screening reasons for each PAI.
             - **Capacity Sweep**: shows raw sortie capacity by PAI and UTE point, including average sorties per aircraft.
-            - **Best Patterns**: only shows sustainable/recommendable patterns, plus best sustainable pattern by UTE.
+            - **Best Patterns**: only shows recommendable patterns, plus the top recommendable pattern by UTE.
             - **Max Surge Weeks**: shows how long max-commit stress remains usable, what week it fails, and whether sorties,
               next-Monday recovery, or repair backlog is the limiting factor.
-            - **Diagnostics**: shows failed candidates too, so you can see why something was rejected.
+            - **Diagnostics**: shows non-recommended candidates too, so you can see why something was screened out.
             - **Pattern Detail**: shows the selected pattern’s metrics and lets you compare recovery models.
             """
         )
@@ -1410,7 +1417,7 @@ def _show_about_page() -> None:
             - meet the backlog threshold,
             - pass the operational-shape screen.
 
-            Failed patterns remain visible in Diagnostics, but they are not shown as Best Patterns.
+            Non-recommended patterns remain visible in Diagnostics, but they are not shown as Best Patterns.
             """
         )
 
@@ -1430,11 +1437,11 @@ def _show_about_page() -> None:
     with st.expander("How To Read The Tabs"):
         st.markdown(
             """
-            - **Summary**: decision brief by PAI, operating envelope, viable options, and failure readout.
+            - **Summary**: decision brief by PAI, recommendable options, and screening reason readout.
             - **Capacity Sweep**: sortie math across the selected UTE range and max-commit capacity point.
-            - **Best Patterns**: sustainable/recommendable candidates only, including best pattern by UTE.
+            - **Best Patterns**: recommendable candidates only, including the top pattern by UTE.
             - **Max Surge Weeks**: surge-only stress readout showing usable duration, trend lines, and first failure cause.
-            - **Diagnostics**: all tested best candidates, failed patterns, and constraint pressure by PAI.
+            - **Diagnostics**: all tested family-level candidates, non-recommended patterns, and constraint pressure by PAI.
             - **Pattern Detail**: selected pattern details, daily pressure, constraint pressure, and recovery-model comparison.
             - **Manual Turn Pattern**: test a specific first-go / second-go schedule and compare it to optimized candidates.
             """
@@ -1741,7 +1748,7 @@ with summary:
             pai_rows = _rows_for_pai(rows, pai_value)
             viable = _recommendable_rows(pai_rows, policy)
             recommended = max(viable, key=_rank) if viable else max(pai_rows, key=_rank)
-            label = "Recommendation" if viable else "Best Failed Candidate"
+            label = "Recommendation" if viable else "Closest Non-Recommended"
 
             with st.expander(f"{pai_value} PAI Decision Brief", expanded=(pai_value == _pai_values(rows)[0])):
                 col1, col2, col3, col4 = st.columns(4)
@@ -1749,15 +1756,20 @@ with summary:
                 col2.metric("Success", f"{float(recommended['success']):.1%}")
                 col3.metric("Next Mon MC", f"{float(recommended['avg_next_monday']):.1f}")
                 col4.metric("Risk", recommended["risk_band"])
+                if not viable:
+                    st.info(
+                        "This row is shown because no recommendable pattern passed the current screen for this PAI. "
+                        "Treat it as the closest modeled alternative to troubleshoot, not as an execution recommendation."
+                    )
                 st.write(_decision_guidance(pai_value, pai_rows, policy))
 
-                st.markdown("**Viable Options**")
+                st.markdown("**Recommendable Options**")
                 if viable:
                     st.dataframe(_display_rows(_top_pattern_rows(viable)), width="stretch", hide_index=True)
                 else:
                     st.info("No Green/Yellow sustainable options met the current requirement and recovery rules.")
 
-                st.markdown("**Failure Readout**")
+                st.markdown("**Why Candidates Were Not Recommended**")
                 st.dataframe(_failure_readout_rows(pai_rows), width="stretch", hide_index=True)
 
 with capacity:
@@ -1782,22 +1794,23 @@ with patterns:
     if recommendable:
         st.subheader("Pattern Family Comparison")
         st.caption(
-            "This groups successful and failed candidates by pattern family so you can see whether flats, waterfalls, "
-            "or other shapes are actually carrying the result."
+            "This groups candidates by pattern family. If a family has no recommendable option, the representative "
+            "pattern is the strongest near-miss from that family and is shown only for context."
         )
         st.dataframe(_pattern_family_rows(rows, policy), width="stretch", hide_index=True)
 
-        st.subheader("Best Sustainable Pattern by UTE")
-        st.caption("One best recommendable option per PAI and UTE point.")
+        st.subheader("Top Recommendable Pattern by UTE")
+        st.caption("One top-scoring pattern per PAI and UTE point after the recommendation screen.")
         best_by_ute = _best_by_ute_rows(rows, policy)
         st.dataframe(_display_rows(best_by_ute), width="stretch", hide_index=True)
 
-        st.subheader("All Sustainable Pattern Candidates")
-        st.caption("These are the patterns that passed the recommendation screen.")
+        st.subheader("All Recommendable Pattern Candidates")
+        st.caption("These patterns passed the success, recovery, backlog, commit, and operational-shape screens.")
         st.dataframe(_display_rows(recommendable), width="stretch", hide_index=True)
     else:
-        st.warning("No sustainable best patterns were found under the current assumptions.")
-        st.subheader("Pattern Family Failure Readout")
+        st.warning("No recommendable patterns were found under the current assumptions.")
+        st.subheader("Pattern Family Near-Miss Readout")
+        st.caption("These are representative near-miss candidates by family; they are not recommended for execution.")
         st.dataframe(_pattern_family_rows(rows, policy), width="stretch", hide_index=True)
 
 with surge:
@@ -1849,7 +1862,7 @@ with surge:
         st.info("Run the model to calculate max-commit surge weeks.")
 
 with diagnostics:
-    st.caption("All tested best candidates, including patterns rejected from the Best Patterns tab.")
+    st.caption("All tested family-level candidates, including patterns rejected from the Best Patterns tab.")
     st.info(
         "Closest Non-Recommended Pattern is the strongest near-miss candidate for that PAI. "
         "It is shown for troubleshooting and planning context, not as a recommendation. "
@@ -1861,19 +1874,23 @@ with diagnostics:
 
     failures = _failure_mode_rows(rows, policy)
     if failures:
-        st.subheader("Failure Mode Readout")
-        st.caption("This shows why rejected patterns were rejected. High counts indicate the active limiting factor.")
+        st.subheader("Not-Recommended Reason Readout")
+        st.caption("This shows why candidates were screened out. High counts indicate the active limiting factor.")
         st.dataframe(failures, width="stretch", hide_index=True)
     else:
         st.success("No rejected candidates under the current recommendation screen.")
 
     st.subheader("All Candidate Details")
+    st.caption("This includes recommendable and non-recommended candidates. Use Recommendation Screen before treating a row as viable.")
     st.dataframe(_display_rows(rows), width="stretch", hide_index=True)
 
 with detail:
     if rows:
         options = {
-            f"{row['pai']} PAI | {row['capacity_label']} | {row['model']} | {row['pattern_with_frontlines']} | {float(row['success']):.0%}": row
+            (
+                f"{_recommendation_status(row, policy)} | {row['pai']} PAI | {row['capacity_label']} | "
+                f"{row['model']} | {row['pattern_with_frontlines']} | {float(row['success']):.0%}"
+            ): row
             for row in rows
         }
         selected = options[st.selectbox("Selected Pattern", list(options))]

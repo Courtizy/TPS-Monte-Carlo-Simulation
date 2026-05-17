@@ -107,7 +107,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.21.8`
+Current model version: `0.21.10`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -193,3 +193,11 @@ flying day, such as `4x2-4x2-4x2-4x2-4x2`.
 Version `0.21.8` renames diagnostics near-miss wording from "best failed" to
 "Closest Non-Recommended Pattern" and adds an explanatory callout in the
 Diagnostics tab.
+
+Version `0.21.9` tightens user-facing output language so near-miss,
+non-recommended, and representative family candidates are not confused with
+execution recommendations.
+
+Version `0.21.10` prevents exact flat-turn patterns from being rejected as
+Friday pushes simply because Friday ties the same first-go count used every
+other flying day.
