@@ -109,7 +109,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.22.4`
+Current model version: `0.22.5`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -222,3 +222,7 @@ model-flow and feature-impact tables.
 Version `0.22.4` redesigns the About page into a guided walkthrough with a
 clear testing sequence, model logic chain, output interpretation, and optional
 deep-dive sections.
+
+Version `0.22.5` simplifies the About page further into a quick guide with only
+the core idea, logic flow, recommended workflow, interpretation rules, and three
+optional detail expanders.
