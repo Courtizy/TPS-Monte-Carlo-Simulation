@@ -8,6 +8,7 @@ This is a condensed Streamlit model for assessing whether weekly turn patterns a
 - `simulation.py`: simulation and Monte Carlo mechanics: event generation, event distribution, GA coverage, fix logic, daily MC carry-forward, weekend recovery, and success scoring.
 - `pattern_generator.py`: UTE capacity sweep, deployed UTE calculator, turn-pattern permutations, first-go/second-go splits, and pattern classification.
 - `gui_app.py`: Streamlit interface for optimization, manual pattern testing, and deployed UTE calculation.
+- `MODEL_LOGIC.md`: deeper reference explaining each model phase, feature, and output interpretation.
 - `requirements.txt`: Python package requirements.
 
 Generated output may appear in `analysis_output/`; it is not required to run the GUI.
@@ -77,6 +78,7 @@ Example:
 
 Provides the README-level explanation inside the web app, including model purpose,
 logic flow, success rules, recovery models, DSUTE logic, and tab interpretation.
+The deeper standalone reference is available in `MODEL_LOGIC.md`.
 
 ## Model Flow
 
@@ -107,7 +109,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.22.2`
+Current model version: `0.22.4`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -213,3 +215,10 @@ are not labeled as flat turns unless the exact GO split repeats every flying day
 Version `0.22.2` changes generator ordering to favor smoother, less-compressed
 patterns before Friday-recovery-heavy shapes, reducing unrealistic schedules
 with very low Friday output when a normal waterfall or flat option exists.
+
+Version `0.22.3` adds `MODEL_LOGIC.md` and expands the About page with concrete
+model-flow and feature-impact tables.
+
+Version `0.22.4` redesigns the About page into a guided walkthrough with a
+clear testing sequence, model logic chain, output interpretation, and optional
+deep-dive sections.

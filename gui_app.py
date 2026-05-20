@@ -1188,265 +1188,202 @@ def _planning_band_from_dsute(
 
 def _show_about_page() -> None:
     st.header("About / Model Logic")
-    st.caption("A plain-language guide to what the model is doing and how to read it.")
+    st.caption("A guided walkthrough of what the model does, how to test it, and how each option affects the output.")
 
-    st.subheader("Purpose")
-    st.write(
-        "This app tests whether a weekly turn pattern is likely to meet a required sortie target "
-        "while staying within commit limits, aircraft availability, recovery, and repair-backlog constraints."
+    st.info(
+        "Use this page as the quick-start guide. The deeper written reference is in MODEL_LOGIC.md in the project folder."
     )
 
-    st.subheader("How The Model Flows")
-    flow_steps = [
-        ("1. User Inputs", "PAI, sortie requirement, maintenance rates, UTE range, and model options."),
-        ("2. Policy Layer", "Applies commit rate, go limits, recovery rules, risk bands, and rounding rules."),
-        ("3. Capacity Sweep", "Calculates weekly sortie capacity for each PAI and UTE point."),
-        ("4. Pattern Generator", "Builds realistic first-go, second-go, third-go, and fourth-go candidates when enabled."),
-        ("5. Monte Carlo Engine", "Runs ground aborts, Code 3s, fixes, daily MC carry-forward, and weekend recovery."),
-        ("6. Success Scoring", "Checks sorties, daily schedule, aircraft availability, commit compliance, recovery, and backlog."),
-        ("7. App Outputs", "Shows recommendations, sustainable patterns, diagnostics, and recovery-model comparisons."),
+    st.subheader("What The Model Is Trying To Answer")
+    st.markdown(
+        """
+        The model answers three questions in order:
+
+        1. **Capacity**: How many sorties fit inside the selected PAI and UTE range?
+        2. **Pattern shape**: What realistic GO-level turn patterns can produce that sortie count?
+        3. **Sustainability**: Which patterns survive breaks, ground aborts, fixes, aircraft carry-forward, and next-Monday recovery?
+
+        A pattern is only recommendable when the capacity math, operational pattern shape, and Monte Carlo sustainability all agree.
+        """
+    )
+
+    st.subheader("Model Logic Chain")
+    logic_cols = st.columns(6)
+    logic_steps = [
+        ("1", "Inputs", "PAI, required sorties, UTE range, rates, GO limits."),
+        ("2", "Policy", "Commit cap, spares, rounding, risk bands, recovery rules."),
+        ("3", "Capacity", "Weekly sorties = floor(PAI x flying days x UTE)."),
+        ("4", "Patterns", "Builds flat, waterfall, balanced, and diagnostic shapes."),
+        ("5", "Simulation", "Runs GAs, Code 3s, fixes, daily MC, and weekend recovery."),
+        ("6", "Recommendation", "Keeps only patterns that pass success and screening rules."),
     ]
-    for title, body in flow_steps:
-        st.markdown(f"**{title}**")
-        st.write(body)
+    for column, (number, title, body) in zip(logic_cols, logic_steps):
+        with column:
+            st.metric(number, title)
+            st.caption(body)
 
-    with st.expander("Underlying Logic", expanded=True):
+    st.subheader("How To Test A Turn Pattern")
+    st.dataframe(
+        [
+            {
+                "Step": "1. Set scenario inputs",
+                "What To Do": "Choose PAI, required weekly sorties, UTE range, maintenance rates, event/fix model, and GO limits.",
+                "What To Check": "The inputs reflect the case you want to brief or test.",
+            },
+            {
+                "Step": "2. Run Optimization",
+                "What To Do": "Let the model generate candidate families across the selected UTE range.",
+                "What To Check": "Summary shows a recommendation, or a closest non-recommended pattern if nothing passes.",
+            },
+            {
+                "Step": "3. Review Best Patterns",
+                "What To Do": "Look at recommendable patterns only.",
+                "What To Check": "Pattern family, success rate, required sorties, next-Monday MC, recovery debt, and risk band.",
+            },
+            {
+                "Step": "4. Open Diagnostics",
+                "What To Do": "Inspect non-recommended and near-miss candidates.",
+                "What To Check": "Why candidates were screened out: sortie miss, recovery, backlog, shape, or surge-only posture.",
+            },
+            {
+                "Step": "5. Validate manually",
+                "What To Do": "Use Manual Turn Pattern for a known real-world schedule.",
+                "What To Check": "Whether the known pattern passes under Scheduled-Spares Only and Fleet-Flex Recovery.",
+            },
+        ],
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.subheader("Capacity, Pattern, Sustainability")
+    st.dataframe(
+        [
+            {
+                "Layer": "Capacity",
+                "Question": "What sortie counts fit the PAI and UTE range?",
+                "Main Formula": "weekly sorties = floor(PAI x flying days x UTE)",
+                "Common Mistake": "Treating capacity as proof of sustainability.",
+            },
+            {
+                "Layer": "Pattern Generator",
+                "Question": "What GO-level schedules can produce that sortie count?",
+                "Main Formula": "daily sorties = 1st go + 2nd go + 3rd go + 4th go",
+                "Common Mistake": "Calling near-flat totals flat turns when the GO split changes.",
+            },
+            {
+                "Layer": "Monte Carlo",
+                "Question": "Does the schedule survive maintenance and recovery pressure?",
+                "Main Formula": "EOD MC carries into the next day, then through the weekend to next Monday.",
+                "Common Mistake": "Treating weekly sortie success as full operational success.",
+            },
+            {
+                "Layer": "Recommendation",
+                "Question": "Is the candidate usable for routine planning?",
+                "Main Formula": "success + recovery + backlog + shape screen must pass.",
+                "Common Mistake": "Treating closest non-recommended patterns as recommendations.",
+            },
+        ],
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.subheader("What Each Major Input Changes")
+    st.dataframe(
+        [
+            {"Input": "PAI", "Changes In Model": "Capacity, commit aircraft, starting MC aircraft, recovery margin.", "Watch In Output": "Capacity Sweep, Success, Next-Monday MC."},
+            {"Input": "UTE Range", "Changes In Model": "Weekly sortie targets tested.", "Watch In Output": "Capacity points and generated pattern options."},
+            {"Input": "Required Weekly Sorties", "Changes In Model": "Minimum sortie target for success.", "Watch In Output": "Sortie Target Met vs Overall Success."},
+            {"Input": "MC Rate", "Changes In Model": "Starting mission-capable aircraft.", "Watch In Output": "Aircraft Available and recovery margin."},
+            {"Input": "GA / Break Rates", "Changes In Model": "Ground abort and Code 3 event pressure.", "Watch In Output": "Sortie loss, backlog, failure reasons."},
+            {"Input": "Fix Rates", "Changes In Model": "How quickly broken aircraft return.", "Watch In Output": "Next-Monday Recovery and Avg Backlog."},
+            {"Input": "Use Scheduled Spares", "Changes In Model": "Adds floor(first-go x 20%) spares.", "Watch In Output": "Aircraft required, GA coverage, commit compliance."},
+            {"Input": "# of GOs", "Changes In Model": "Allowed turn depth in generated and manual patterns.", "Watch In Output": "Turn pattern shape and daily sortie pressure."},
+            {"Input": "Max Day-to-Day Delta", "Changes In Model": "Smoothness of generated schedules.", "Watch In Output": "Pattern families and non-recommended reasons."},
+            {"Input": "Iterations", "Changes In Model": "Number of simulated weeks.", "Watch In Output": "Stability of probabilities, not the assumptions."},
+        ],
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.subheader("How To Read The Main Outputs")
+    st.dataframe(
+        [
+            {"Output": "Overall Success", "Meaning": "All success checks passed.", "How To Use It": "Primary sustainability probability."},
+            {"Output": "Sortie Target Met", "Meaning": "Actual sorties met required weekly sorties.", "How To Use It": "Shows output capacity, but not full sustainability by itself."},
+            {"Output": "Aircraft Available", "Meaning": "Enough MC aircraft existed for the daily requirement.", "How To Use It": "Identifies aircraft-limited patterns."},
+            {"Output": "Next-Monday Recovery", "Meaning": "Fleet recovered enough by the next Monday marker.", "How To Use It": "Shows whether the pattern can repeat."},
+            {"Output": "Avg Backlog", "Meaning": "Average open repair backlog after recovery.", "How To Use It": "Shows maintenance debt pressure."},
+            {"Output": "Recovery Debt", "Meaning": "Average next-Monday MC shortfall from starting MC.", "How To Use It": "Quick reset-health signal, not a full maintenance debt measure."},
+            {"Output": "Closest Non-Recommended", "Meaning": "Strongest near-miss when no pattern passes.", "How To Use It": "Troubleshooting only; not an execution recommendation."},
+            {"Output": "Recommendation Screen", "Meaning": "Explains why a candidate was blocked.", "How To Use It": "Use before treating any diagnostic row as viable."},
+        ],
+        width="stretch",
+        hide_index=True,
+    )
+
+    with st.expander("Pattern Family Rules", expanded=False):
         st.markdown(
             """
-            **1. Capacity math**
+            **Normal recommendation families** are generated and can become recommendations when they pass simulation:
+            Flat Turns, Waterfall, Step-Down, Front-Loaded Push, Balanced Push, Recovery Valley, Midweek Spike,
+            Multi-Spike, Sawtooth, and Step-Up.
 
-            - Commit aircraft = `floor(PAI x commit rate)`.
-            - UTE weekly sorties = `floor(PAI x flying days x UTE)`.
-            - Max surge sorties = `commit aircraft x flying days`.
-            - The model floors aircraft and sortie capacity because partial aircraft cannot be scheduled.
+            **Diagnostic-only families** are still tested but blocked from routine recommendation:
+            Reverse Waterfall, Back-Loaded Push, and Compressed Surge.
 
-            **2. Pattern generation**
-
-            - The optimizer generates Monday-Friday patterns that equal the weekly sortie count for each UTE point.
-            - Each day is split across the enabled number of GOs: 1st, 2nd, 3rd, and 4th when allowed.
-            - Patterns are constrained by daily sortie cap, commit aircraft, # of GOs limits, day-to-day delta, and human-factor preferences.
-            - Front-week and smoother patterns are favored over back-loaded Friday-heavy schedules.
-
-            **3. Event generation**
-
-            - Weekly Code 3 events are based on planned weekly sorties and break rate.
-            - Weekly ground aborts are based on planned weekly sorties and ground-abort rate.
-            - Normal TTP mode uses expected event counts.
-            - Probabilistic Monte Carlo mode rolls each sortie as a chance event.
-
-            **4. Event distribution**
-
-            - Events are randomly distributed across Monday-Friday flying days.
-            - Events are limited by available first-go exposure.
-            - If all events cannot be placed, the run is flagged for suppressed events and cannot count as clean overall success.
-
-            **5. Daily execution**
-
-            - Each day starts with available MC aircraft carried from the previous day.
-            - The model checks aircraft required, commit compliance, Code 3s, ground aborts, sortie losses, and fixes.
-            - Ground aborts may be covered by scheduled spares or fleet-flex aircraft depending on recovery model.
-            - End-of-day available aircraft carry into the next day.
-
-            **6. Repair logic**
-
-            - 8-hour fixes can return aircraft the same day.
-            - 12-hour and 24-hour fixes begin on Tuesday by default.
-            - Each event can only be repaired once.
-            - Unfixed events remain in the repair backlog.
-            - Saturday, Sunday, and next Monday continue recovery logic.
-
-            **7. Success logic**
-
-            Overall success requires more than meeting the weekly sortie count. A successful iteration must meet required sorties,
-            make the daily schedule, have enough aircraft available, stay within commit limits, recover by next Monday,
-            keep backlog within threshold, and avoid suppressed-event integrity issues.
-
-            **8. Surge logic**
-
-            - Max surge uses committed aircraft as the true front-line schedule.
-            - It is intentionally separate from normal UTE sustainment planning.
-            - Weeks 2-5 apply increasing break stress and reduced fix effectiveness.
-            - The purpose is to show when max commit starts becoming risky, not to recommend it as normal execution.
+            Flat turns are exact: `4x2-4x2-4x2-4x2-4x2` is flat. `4x2-3x2-3x2-3x2-3x2` is a waterfall.
             """
         )
 
-    with st.expander("Inputs And Policy Rules", expanded=True):
+    with st.expander("Monte Carlo Daily Logic", expanded=False):
         st.markdown(
             """
-            - **PAI**: possessed aircraft used by the scenario.
-            - **UTE planning range**: sortie output band used to generate candidate weekly sortie counts.
-            - **Required weekly sorties**: the sortie target the pattern must meet.
-            - **Commit rate**: maximum aircraft committed to the flying schedule.
-            - **Max daily sorties / # of GOs limits**: controls which patterns are considered realistic.
-            - **Maintenance rates**: MC rate, ground-abort rate, break rate, and 8/12/24-hour fix rates.
+            Each iteration runs Monday through next Monday:
+
+            1. Start with `floor(PAI x MC rate)` aircraft.
+            2. Generate weekly ground aborts and Code 3s from the selected event model.
+            3. Distribute events across flying days.
+            4. Cover ground aborts with scheduled spares or fleet-flex aircraft when allowed.
+            5. Apply 8-hour, 12-hour, and 24-hour fixes without double-counting repaired events.
+            6. Carry available aircraft into the next day.
+            7. Continue repair recovery through Saturday, Sunday, and next Monday.
+            8. Score the iteration across sorties, schedule, aircraft, commit, recovery, backlog, and event integrity.
             """
         )
 
-    with st.expander("Sidebar Options"):
+    with st.expander("Recovery Models", expanded=False):
         st.markdown(
             """
-            - **Page**: selects the major workflow: optimization, manual pattern testing, DSUTE, or this guide.
-            - **UTE Planning Range**: controls which UTE points the optimizer tests. A tighter range focuses the model near a known operating tempo.
-            - **PAI Mode**: run one possessed-aircraft value or sweep a range such as 9-12.
-            - **Required Weekly Sorties**: the sortie target the model must satisfy. Patterns can plan more than this, but not less.
-            - **Iterations**: number of Monte Carlo weeks simulated per pattern. More iterations improve stability but take longer.
-            - **Random Seed**: keeps results repeatable when comparing changes.
-            - **Event Count Model**: chooses how weekly ground aborts and Code 3s are generated.
-            - **Fix Count Model**: chooses how 8/12/24-hour fixes are generated.
-            - **Max Daily Sorties**: caps total sorties on any flying day.
-            - **# of GOs**: controls whether the optimizer and manual page use only 1st/2nd go or also allow 3rd/4th go.
-            - **Max Second/Third/Fourth-Go Sorties**: caps turn sorties in each later GO.
-            - **Max Day-to-Day Delta**: limits sharp changes between adjacent days in generated patterns.
-            - **Include Max-Commit Surge**: adds the max-commit stress case into optimization. Leave off for normal sustainment planning.
+            **Scheduled-Spares Only** is the stricter model. A ground abort can only be absorbed if a scheduled spare exists.
+
+            **Fleet-Flex Recovery** allows uncommitted MC aircraft to fill a ground abort when available. This is less strict,
+            but often closer to practical execution when extra MC aircraft exist outside the committed schedule.
             """
         )
 
-    with st.expander("Maintenance Rate Inputs"):
+    with st.expander("Tab Guide", expanded=False):
         st.markdown(
             """
-            - **MC Rate**: starting mission-capable aircraft percentage. Starting MC is rounded down because partial aircraft cannot fly.
-            - **Ground Abort Rate**: expected ground aborts generated from planned weekly sorties.
-            - **Break / Code 3 Rate**: expected aircraft breaks generated from planned weekly sorties.
-            - **8-Hour Fix Rate**: chance or modeled share of events fixed the same day.
-            - **12-Hour Fix Rate**: chance or modeled share of events fixed by the next recovery window. Long fixes begin Tuesday by default.
-            - **24-Hour Fix Rate**: chance or modeled share of events fixed by the next-day recovery window. Long fixes begin Tuesday by default.
-
-            The rates should be entered as decimals. For example, `0.265` means 26.5%.
+            - **Summary**: first stop for decision-making by PAI.
+            - **Capacity Sweep**: raw sortie math by PAI and UTE; not sustainability proof.
+            - **Best Patterns**: only candidates that passed the recommendation screen.
+            - **Max Surge Weeks**: stress test for max-commit duration, not normal planning.
+            - **Diagnostics**: explains near-misses and non-recommended candidates.
+            - **Pattern Detail**: inspect one candidate and compare recovery models.
+            - **Manual Turn Pattern**: test a known pattern exactly as entered.
+            - **DSUTE Calculator**: convert a sortie tempo into a model UTE band.
             """
         )
 
-    with st.expander("Event And Fix Model Choices"):
+    with st.expander("Common Interpretation Traps", expanded=False):
         st.markdown(
             """
-            - **Normal TTP**: calculates expected weekly event/fix counts from the input rates and distributes them through the week. This behaves closer to a planning spreadsheet.
-            - **Probabilistic Monte Carlo**: rolls events and fixes probabilistically each iteration. This adds more variation and is better for stress-testing uncertainty.
-
-            Using probabilistic events and probabilistic fixes will usually create wider result variation. Using Normal TTP for both gives a more stable planning estimate.
-            """
-        )
-
-    with st.expander("What Counts As Success"):
-        st.markdown(
-            """
-            Overall success is stricter than sortie success. A run must meet the required weekly sorties,
-            make the daily schedule, have enough aircraft available, stay within commit limits, recover
-            by next Monday, avoid unacceptable backlog, and avoid suppressed events.
-
-            A pattern that meets the sortie target but leaves the fleet unrecovered is treated as risky
-            or unsustainable rather than a clean success.
-            """
-        )
-
-    with st.expander("Output Metrics"):
-        st.markdown(
-            """
-            - **Overall Success**: all required success checks passed in the iteration.
-            - **Sortie Target Met**: actual sorties flown met or exceeded required weekly sorties.
-            - **Daily Schedule Met**: each day met its planned daily schedule, not just the weekly total.
-            - **Aircraft Available**: enough MC aircraft existed to support the scheduled requirement.
-            - **Within Commit**: daily aircraft committed stayed within the policy commit limit.
-            - **Next-Monday Recovery**: the fleet recovered enough aircraft by the next Monday marker.
-            - **Backlog Success**: repair backlog stayed within the allowed threshold.
-            - **Recovery Debt**: how far average next-Monday MC falls below starting MC.
-            - **Risk Band**: Green, Yellow, Orange, or Red based on overall success probability.
-            - **Avg Sorties / Aircraft**: planned weekly sorties divided by PAI.
-            """
-        )
-
-    with st.expander("Recovery Models"):
-        st.markdown(
-            """
-            - **Scheduled-Spares Only**: ground aborts can only be absorbed by scheduled spares.
-            - **Fleet-Flex Recovery**: uncommitted MC aircraft can also absorb a ground abort if available.
-
-            Comparing both models helps separate strict scheduling sustainability from practical fleet-flex
-            execution.
-            """
-        )
-
-    with st.expander("Optimization Dashboard Features"):
-        st.markdown(
-            """
-            - **Summary**: gives a decision brief for each PAI in the sweep. This is the first place to look.
-            - **Operating Envelope**: shows sustainable UTE min/max and maximum sustainable sorties by PAI.
-            - **PAI Decision Briefs**: show the recommendation, recommendable options, and screening reasons for each PAI.
-            - **Capacity Sweep**: shows raw sortie capacity by PAI and UTE point, including average sorties per aircraft.
-            - **Best Patterns**: only shows recommendable patterns, plus the top recommendable pattern by UTE.
-            - **Max Surge Weeks**: shows how long max-commit stress remains usable, what week it fails, and whether sorties,
-              next-Monday recovery, or repair backlog is the limiting factor.
-            - **Diagnostics**: shows non-recommended candidates too, so you can see why something was screened out.
-            - **Pattern Detail**: shows the selected pattern’s metrics and lets you compare recovery models.
-            """
-        )
-
-    with st.expander("Manual Turn Pattern Features"):
-        st.markdown(
-            """
-            Use this page when you already have a pattern in mind, such as `5x2, 4x2, 4x2, 3x2, 2x0`.
-
-            The first number is first-go aircraft/sorties. The second number is second-go turns.
-            For example, `5x2` means 5 first-go sorties and 2 second-go sorties, for 7 total sorties that day.
-
-            If the sidebar is set to 3 or 4 GOs, the manual page adds 3rd-go and 4th-go inputs.
-            Leave those as zero when the platform or location only uses 1st/2nd go.
-
-            The page runs the same pattern under both recovery models and shows an Excel-style sample iteration table.
-            """
-        )
-
-    with st.expander("DSUTE Calculator"):
-        st.markdown(
-            """
-            DSUTE is calculated on the sortie side only:
-
-            `DSUTE = scheduled or required sorties / (possessed aircraft x O&M days)`
-
-            Flying hours, average sortie duration, and deployed or operating-location hours are not used.
-            Deployed or operating-location sorties are only included if intentionally toggled into the requirement.
-
-            The **Suggested Model UTE Band** section turns the calculated DSUTE into a planning range that can be copied into the sidebar UTE Planning Range.
-            """
-        )
-
-    with st.expander("Best-Pattern Logic"):
-        st.markdown(
-            """
-            The app does not treat every generated pattern as a recommendation.
-
-            A pattern must:
-            - plan at least the required weekly sorties,
-            - meet the minimum success threshold,
-            - meet the recovery threshold,
-            - meet the backlog threshold,
-            - pass the operational-shape screen.
-
-            Non-recommended patterns remain visible in Diagnostics, but they are not shown as Best Patterns.
-            """
-        )
-
-    with st.expander("Scheduled Spares"):
-        st.markdown(
-            """
-            The sidebar **Use scheduled spares** option controls whether spares are built into each daily schedule.
-
-            - When enabled, scheduled spares are calculated as 20% of first-go aircraft.
-            - When disabled, scheduled spares are zero.
-            - Spares count toward aircraft required and can absorb ground aborts before fleet-flex recovery is used.
-
-            Fractional spare aircraft are rounded down because the model cannot schedule part of an aircraft.
-            """
-        )
-
-    with st.expander("How To Read The Tabs"):
-        st.markdown(
-            """
-            - **Summary**: decision brief by PAI, recommendable options, and screening reason readout.
-            - **Capacity Sweep**: sortie math across the selected UTE range and max-commit capacity point.
-            - **Best Patterns**: recommendable candidates only, including the top pattern by UTE.
-            - **Max Surge Weeks**: surge-only stress readout showing usable duration, trend lines, and first failure cause.
-            - **Diagnostics**: all tested family-level candidates, non-recommended patterns, and constraint pressure by PAI.
-            - **Pattern Detail**: selected pattern details, daily pressure, constraint pressure, and recovery-model comparison.
-            - **Manual Turn Pattern**: test a specific first-go / second-go schedule and compare it to optimized candidates.
+            - Capacity does not equal sustainability.
+            - Weekly sortie success does not equal overall success.
+            - Green/Yellow patterns are more useful for planning than Orange/Red patterns.
+            - Closest non-recommended means near-miss, not recommended.
+            - Diagnostic-only families are shown for context and pressure testing.
+            - Max surge is a stress posture and should not be mixed into routine sustainment decisions.
             """
         )
 
