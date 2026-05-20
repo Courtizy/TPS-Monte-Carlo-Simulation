@@ -1260,7 +1260,7 @@ def _show_about_page() -> None:
                 {"Input": "MC Rate", "Primary Effect": "Sets starting mission-capable aircraft."},
                 {"Input": "GA / Break Rates", "Primary Effect": "Adds ground abort and Code 3 pressure."},
                 {"Input": "Fix Rates", "Primary Effect": "Controls recovery speed and backlog."},
-                {"Input": "Use Scheduled Spares", "Primary Effect": "Adds 20% first-go spares, rounded down."},
+                {"Input": "Use Scheduled Spares", "Primary Effect": "Adds 20% first-go spares, rounded up."},
                 {"Input": "# of GOs", "Primary Effect": "Controls whether 2nd, 3rd, and 4th GO turns are available."},
                 {"Input": "Max Day-to-Day Delta", "Primary Effect": "Controls how smooth generated schedules must be."},
                 {"Input": "Iterations", "Primary Effect": "Controls probability stability, not the assumptions."},

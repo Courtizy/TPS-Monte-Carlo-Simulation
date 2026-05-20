@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
-from math import floor
+from math import ceil, floor
 from typing import Any, Protocol
 
 
-MODEL_VERSION = "0.22.5"
+MODEL_VERSION = "0.22.6"
 SCHEDULED_SPARES_MODEL = "Scheduled-Spares Only"
 FLEET_FLEX_MODEL = "Fleet-Flex Recovery"
 
@@ -86,6 +86,10 @@ def floor_count(value: float) -> int:
     return max(0, floor(value))
 
 
+def ceil_count(value: float) -> int:
+    return max(0, ceil(value))
+
+
 def commit_aircraft(pai: int, policy: TtpPolicy = DEFAULT_TTP_POLICY) -> int:
     return floor_count(pai * policy.commit_rate)
 
@@ -96,7 +100,7 @@ def calculated_spares(
     spare_rate: float | None = None,
 ) -> int:
     rate = policy.spare_rate if spare_rate is None else spare_rate
-    return floor_count(first_go * rate)
+    return ceil_count(first_go * rate)
 
 
 def aircraft_required(

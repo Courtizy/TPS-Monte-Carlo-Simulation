@@ -109,7 +109,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.22.5`
+Current model version: `0.22.6`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -226,3 +226,6 @@ deep-dive sections.
 Version `0.22.5` simplifies the About page further into a quick guide with only
 the core idea, logic flow, recommended workflow, interpretation rules, and three
 optional detail expanders.
+
+Version `0.22.6` changes scheduled spare calculation to round up, while keeping
+commit aircraft and UTE capacity rounded down.

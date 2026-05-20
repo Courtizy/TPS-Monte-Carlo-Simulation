@@ -37,10 +37,10 @@ Key examples:
 
 ```text
 Commit aircraft = floor(PAI x commit rate)
-Scheduled spares = floor(first-go aircraft x spare rate)
+Scheduled spares = ceil(first-go aircraft x spare rate)
 ```
 
-Aircraft counts are rounded down because partial aircraft cannot be scheduled.
+Commit aircraft and capacity are rounded down because partial aircraft cannot be scheduled. Scheduled spares are rounded up because a partial spare requirement still requires a whole aircraft.
 
 ## 2. Capacity Sweep
 
@@ -142,7 +142,7 @@ spares = 0
 When enabled:
 
 ```text
-spares = floor(first_go_aircraft x 0.20)
+spares = ceil(first_go_aircraft x 0.20)
 ```
 
 Spares count toward aircraft required. They can cover ground aborts before
@@ -152,7 +152,7 @@ Example:
 
 ```text
 5 first-go aircraft x 20% = 1 spare
-4 first-go aircraft x 20% = 0 spares
+4 first-go aircraft x 20% = 1 spare
 ```
 
 ## 6. Monte Carlo Simulation
