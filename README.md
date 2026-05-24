@@ -110,7 +110,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.23.1`
+Current model version: `0.23.3`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -245,3 +245,9 @@ with detailed mechanics moved into expandable methodology sections.
 
 Version `0.23.1` adds the selected Option 6A logo assets and uses them for the
 web app header and page icon.
+
+Version `0.23.2` adds a lightweight SVG logo fallback so Streamlit Cloud can
+display selected branding even if the binary `assets/` folder is not deployed.
+
+Version `0.23.3` moves selected branding from the main content header to the
+sidebar so the dashboard starts with the model title and working content.

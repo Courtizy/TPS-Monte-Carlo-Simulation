@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 from dataclasses import replace
 from pathlib import Path
 from random import Random
@@ -33,12 +34,50 @@ LOGO_LOCKUP_PATH = ASSET_DIR / "logo_option_6a_lockup.png"
 LOGO_ICON_PATH = ASSET_DIR / "logo_option_6a_icon.png"
 
 
+LOGO_FALLBACK_SVG = """
+<svg viewBox="0 0 780 190" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Turn Pattern Sustainability Monte Carlo Model logo">
+  <rect width="780" height="190" fill="white"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M35 90 C65 20 145 20 190 88 C235 156 315 156 350 90 C315 24 235 24 190 92 C145 160 65 160 35 90"
+          stroke="#08284a" stroke-width="13"/>
+    <path d="M190 92 C235 24 315 24 350 90" stroke="#168f92" stroke-width="13"/>
+    <path d="M215 70 C255 36 300 34 335 64" stroke="#168f92" stroke-width="5"/>
+    <path d="M318 35 L358 52 L318 68 L329 53 Z" fill="#08284a" stroke="#08284a" stroke-width="3"/>
+  </g>
+  <g>
+    <circle cx="70" cy="92" r="5" fill="#168f92"/>
+    <circle cx="100" cy="92" r="5" fill="#168f92"/>
+    <circle cx="130" cy="92" r="5" fill="#88939d"/>
+    <circle cx="160" cy="92" r="5" fill="#88939d"/>
+    <circle cx="260" cy="92" r="5" fill="#e0a047"/>
+    <circle cx="290" cy="92" r="5" fill="#e0a047"/>
+    <circle cx="320" cy="92" r="5" fill="#d9821f"/>
+    <circle cx="350" cy="92" r="5" fill="#d9821f"/>
+  </g>
+  <text x="190" y="158" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#168f92">TPS-MCM</text>
+  <line x1="390" y1="25" x2="390" y2="165" stroke="#c4c9ce" stroke-width="2"/>
+  <text x="420" y="70" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="800" letter-spacing="4" fill="#08284a">TURN PATTERN</text>
+  <text x="420" y="122" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="800" letter-spacing="4" fill="#08284a">SUSTAINABILITY</text>
+  <line x1="420" y1="154" x2="455" y2="154" stroke="#168f92" stroke-width="3"/>
+  <text x="470" y="162" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600" letter-spacing="5" fill="#168f92">MONTE CARLO MODEL</text>
+  <line x1="705" y1="154" x2="745" y2="154" stroke="#d9821f" stroke-width="3"/>
+</svg>
+"""
+
+
+def _logo_bytes(path: Path) -> bytes | None:
+    if path.exists():
+        return path.read_bytes()
+    return None
+
+
 def _page_icon() -> object | None:
-    if not LOGO_ICON_PATH.exists():
+    icon_bytes = _logo_bytes(LOGO_ICON_PATH)
+    if icon_bytes is None:
         return None
     if Image is None:
-        return str(LOGO_ICON_PATH)
-    return Image.open(LOGO_ICON_PATH)
+        return None
+    return Image.open(BytesIO(icon_bytes))
 
 
 _page_config = {"page_title": "Turn Pattern Sustainability Monte Carlo Model", "layout": "wide"}
@@ -1388,13 +1427,16 @@ def _show_about_page() -> None:
     st.write(f"Current model version: {MODEL_VERSION}")
 
 
-if LOGO_LOCKUP_PATH.exists():
-    st.image(str(LOGO_LOCKUP_PATH), width=520)
-else:
-    st.title("Turn Pattern Sustainability Monte Carlo Model")
+st.title("Turn Pattern Sustainability Monte Carlo Model")
 st.caption("Monte Carlo turn-pattern planning dashboard")
 
 with st.sidebar:
+    _logo_lockup = _logo_bytes(LOGO_LOCKUP_PATH)
+    if _logo_lockup is not None:
+        st.image(_logo_lockup, width=260)
+    else:
+        st.markdown("### TPS-MCM")
+    st.divider()
     st.header("Scenario")
     st.caption(f"Version: {MODEL_VERSION}")
     page = st.radio(
