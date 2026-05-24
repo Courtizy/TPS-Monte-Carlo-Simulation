@@ -110,7 +110,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.23.9`
+Current model version: `0.23.10`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -272,3 +272,6 @@ white/red version in the Streamlit sidebar.
 Version `0.23.9` regenerates the recolored Option 6A assets with cleaner
 two-color processing to remove stray color artifacts, and uses the clean
 white/red logo in the Streamlit sidebar.
+
+Version `0.23.10` adds stronger visual risk-band treatment in the Streamlit
+app with colored Green, Yellow, and Red badges plus clearer table labels.

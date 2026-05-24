@@ -106,6 +106,55 @@ if _icon is not None:
     _page_config["page_icon"] = _icon
 st.set_page_config(**_page_config)
 
+st.markdown(
+    """
+    <style>
+    .risk-badge {
+        display: inline-block;
+        min-width: 88px;
+        padding: 0.28rem 0.62rem;
+        border-radius: 999px;
+        color: #ffffff;
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-align: center;
+        text-transform: uppercase;
+    }
+    .risk-green {
+        background: #16803c;
+        border: 1px solid #0f5f2b;
+    }
+    .risk-yellow {
+        background: #b7791f;
+        border: 1px solid #8a5a16;
+        color: #111827;
+    }
+    .risk-red {
+        background: #b91c1c;
+        border: 1px solid #7f1d1d;
+    }
+    .risk-strip {
+        border-left: 0.55rem solid #9ca3af;
+        border-radius: 0.45rem;
+        padding: 0.55rem 0.8rem;
+        margin: 0.35rem 0 0.85rem 0;
+        background: #f9fafb;
+    }
+    .risk-strip-green {
+        border-left-color: #16803c;
+    }
+    .risk-strip-yellow {
+        border-left-color: #b7791f;
+    }
+    .risk-strip-red {
+        border-left-color: #b91c1c;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 @st.cache_data(show_spinner=False)
 def run_best_fit(
@@ -670,6 +719,46 @@ def _manual_assessment(summary: SimulationSummary) -> str:
     return "Not recommended"
 
 
+def _risk_key(value: object) -> str:
+    text = str(value).strip().lower()
+    if "green" in text:
+        return "green"
+    if "yellow" in text:
+        return "yellow"
+    if "red" in text:
+        return "red"
+    return "red"
+
+
+def _risk_text(value: object) -> str:
+    key = _risk_key(value)
+    return {
+        "green": "GREEN RISK",
+        "yellow": "YELLOW RISK",
+        "red": "RED RISK",
+    }[key]
+
+
+def _risk_badge(value: object) -> str:
+    key = _risk_key(value)
+    return f'<span class="risk-badge risk-{key}">{_risk_text(value)}</span>'
+
+
+def _risk_strip(value: object, text: str) -> str:
+    key = _risk_key(value)
+    return f'<div class="risk-strip risk-strip-{key}">{_risk_badge(value)}&nbsp;&nbsp;{text}</div>'
+
+
+def _risk_legend() -> str:
+    return (
+        '<div style="margin: 0.35rem 0 0.8rem 0;">'
+        f'{_risk_badge("Green")}&nbsp; Best modeled risk &nbsp;&nbsp;'
+        f'{_risk_badge("Yellow")}&nbsp; Usable with watch items &nbsp;&nbsp;'
+        f'{_risk_badge("Red")}&nbsp; Not recommended'
+        "</div>"
+    )
+
+
 def _manual_interpretation(model_name: str, summary: SimulationSummary) -> str:
     if summary.probability_success >= 0.85:
         return (
@@ -705,7 +794,7 @@ def _display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
             "Avg Next-Monday MC": f"{float(row['avg_next_monday']):.1f}",
             "Recovery Debt": f"{float(row['recovery_debt']):.1f}",
             "Recommendation Screen": row.get("recommendation_flags", "Pass"),
-            "Risk": row["risk_band"],
+            "Risk": _risk_text(row["risk_band"]),
         }
         for row in rows
     ]
@@ -845,7 +934,7 @@ def _summary_decision_rows(rows: list[dict[str, object]], policy: TtpPolicy) -> 
                 "Success": _pct(float(selected["success"])),
                 "Recovery": _pct(float(selected["recovery_success"])),
                 "Backlog": _pct(float(selected["backlog_success"])),
-                "Risk": selected["risk_band"],
+                "Risk": _risk_text(selected["risk_band"]),
                 "Limiter": _recommendation_blocker(selected),
             }
         )
@@ -1014,7 +1103,7 @@ def _surge_display_rows(rows: list[dict[str, object]]) -> list[dict[str, object]
             "Next-Monday Recovery": _pct(float(row["Next-Monday Recovery"])),
             "Avg Next-Monday MC": f"{float(row['Avg Next-Monday MC']):.1f}",
             "Avg Backlog": f"{float(row['Avg Backlog']):.1f}",
-            "Risk": row["Risk"],
+            "Risk": _risk_text(row["Risk"]),
             "Primary Failure": row["Primary Failure"],
         }
         for row in rows
@@ -1214,7 +1303,7 @@ def _detail_rows(row: dict[str, object]) -> list[dict[str, str]]:
         {"Metric": "Recovery Debt", "Value": f"{float(row['recovery_debt']):.1f}"},
         {"Metric": "Primary Failure", "Value": str(row["failure_mode"])},
         {"Metric": "Recommendation Screen", "Value": str(row.get("recommendation_flags", "Pass"))},
-        {"Metric": "Risk", "Value": str(row["risk_band"])},
+        {"Metric": "Risk", "Value": _risk_text(row["risk_band"])},
     ]
 
 
@@ -1644,6 +1733,7 @@ with summary:
     if not rows:
         st.warning("No valid patterns were generated for these inputs.")
     else:
+        st.markdown(_risk_legend(), unsafe_allow_html=True)
         for pai_value in _pai_values(rows):
             pai_rows = _rows_for_pai(rows, pai_value)
             viable = _recommendable_rows(pai_rows, policy)
@@ -1655,7 +1745,15 @@ with summary:
                 col1.metric(label, recommended["pattern_with_frontlines"])
                 col2.metric("Success", f"{float(recommended['success']):.1%}")
                 col3.metric("Next Mon MC", f"{float(recommended['avg_next_monday']):.1f}")
-                col4.metric("Risk", recommended["risk_band"])
+                col4.markdown("**Risk**")
+                col4.markdown(_risk_badge(recommended["risk_band"]), unsafe_allow_html=True)
+                st.markdown(
+                    _risk_strip(
+                        recommended["risk_band"],
+                        "Green is strongest, Yellow is usable with watch items, and Red is not recommended under the current assumptions.",
+                    ),
+                    unsafe_allow_html=True,
+                )
                 if not viable:
                     st.info(
                         "This row is shown because no recommendable pattern passed the current screen for this PAI. "
@@ -1685,6 +1783,7 @@ with capacity:
 with patterns:
     recommendable = _recommendable_rows(rows, policy)
     coverage_rows = result.get("family_coverage_rows", [])
+    st.markdown(_risk_legend(), unsafe_allow_html=True)
     if coverage_rows:
         st.subheader("Pattern Family Coverage")
         st.caption(
@@ -1719,6 +1818,7 @@ with surge:
         "later weeks show whether recovery, backlog, or maintenance stress makes that posture unsustainable."
     )
     if surge_rows:
+        st.markdown(_risk_legend(), unsafe_allow_html=True)
         st.subheader("Surge Sustainability Summary")
         st.caption(
             "Sustained Through Week is the last consecutive week that met the surge screen: overall success, "
@@ -1795,6 +1895,13 @@ with detail:
         }
         selected = options[st.selectbox("Selected Pattern", list(options))]
         st.subheader("Selected Pattern Diagnostic")
+        st.markdown(
+            _risk_strip(
+                selected["risk_band"],
+                f"{selected['pattern_with_frontlines']} at {float(selected['success']):.1%} overall success.",
+            ),
+            unsafe_allow_html=True,
+        )
         diag_col, schedule_col = st.columns(2)
         with diag_col:
             st.caption("Component probabilities show which success dimension is carrying or limiting the pattern.")

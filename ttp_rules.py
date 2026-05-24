@@ -7,7 +7,7 @@ from math import ceil, floor
 from typing import Any, Protocol
 
 
-MODEL_VERSION = "0.23.9"
+MODEL_VERSION = "0.23.10"
 SCHEDULED_SPARES_MODEL = "Scheduled-Spares Only"
 FLEET_FLEX_MODEL = "Fleet-Flex Recovery"
 
