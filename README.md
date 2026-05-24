@@ -8,6 +8,7 @@ This is a condensed Streamlit Monte Carlo model for assessing whether weekly tur
 - `simulation.py`: simulation and Monte Carlo mechanics: event generation, event distribution, GA coverage, fix logic, daily MC carry-forward, weekend recovery, and success scoring.
 - `pattern_generator.py`: UTE capacity sweep, DSUTE calculator, turn-pattern permutations, GO-level splits, and pattern classification.
 - `gui_app.py`: Streamlit interface for optimization, manual pattern testing, and DSUTE calculation.
+- `assets/`: application logo files based on selected Option 6A branding.
 - `MODEL_LOGIC.md`: deeper reference explaining each model phase, feature, and output interpretation.
 - `requirements.txt`: Python package requirements.
 
@@ -109,7 +110,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.22.9`
+Current model version: `0.23.1`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -238,3 +239,9 @@ and examples of other fields where it is used.
 
 Version `0.22.9` cleans up user-facing grammar, capitalization, punctuation,
 and wording across the app and documentation.
+
+Version `0.23.0` refocuses the About page into a shorter user-facing overview
+with detailed mechanics moved into expandable methodology sections.
+
+Version `0.23.1` adds the selected Option 6A logo assets and uses them for the
+web app header and page icon.

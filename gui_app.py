@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 from random import Random
 
 import streamlit as st
+
+try:
+    from PIL import Image
+except ImportError:  # Streamlit installs Pillow, but keep local checks graceful.
+    Image = None
 
 from pattern_generator import (
     PatternConstraints,
@@ -22,7 +28,24 @@ from ttp_rules import (
 from simulation import AircraftInventory, DaySchedule, HomestationData, Scenario, SimulationSummary, simulate
 
 
-st.set_page_config(page_title="Turn Pattern Sustainability Monte Carlo Model", layout="wide")
+ASSET_DIR = Path(__file__).parent / "assets"
+LOGO_LOCKUP_PATH = ASSET_DIR / "logo_option_6a_lockup.png"
+LOGO_ICON_PATH = ASSET_DIR / "logo_option_6a_icon.png"
+
+
+def _page_icon() -> object | None:
+    if not LOGO_ICON_PATH.exists():
+        return None
+    if Image is None:
+        return str(LOGO_ICON_PATH)
+    return Image.open(LOGO_ICON_PATH)
+
+
+_page_config = {"page_title": "Turn Pattern Sustainability Monte Carlo Model", "layout": "wide"}
+_icon = _page_icon()
+if _icon is not None:
+    _page_config["page_icon"] = _icon
+st.set_page_config(**_page_config)
 
 
 @st.cache_data(show_spinner=False)
@@ -1187,120 +1210,160 @@ def _planning_band_from_dsute(
 
 
 def _show_about_page() -> None:
-    st.header("About / Model Logic")
-    st.caption("Quick guide for understanding what the model does and how to test a turn pattern.")
+    st.header("About")
+    st.caption("A quick guide to what the app does, how to use it, and how to interpret the results.")
 
-    st.info("The full reference is in MODEL_LOGIC.md. This page keeps only the essentials.")
-
-    st.subheader("The Core Idea")
+    st.subheader("Turn Pattern Sustainability Monte Carlo Model")
     st.markdown(
         """
-        The model does **not** simply ask whether a sortie number is possible. It checks whether a weekly turn pattern can:
+        The Turn Pattern Sustainability Monte Carlo Model is a planning tool that helps evaluate whether a weekly
+        aircraft schedule is executable, supportable, and sustainable.
 
-        - fit inside PAI, UTE, GO, and commit rules,
-        - survive ground aborts and Code 3s,
-        - recover aircraft through the weekend,
-        - and return usable aircraft by next Monday.
-
-        A pattern is recommendable only when **capacity**, **pattern shape**, and **Monte Carlo sustainability** all pass.
+        Instead of only asking whether the required sorties can be scheduled, the model estimates the probability
+        that a proposed turn pattern can survive maintenance uncertainty, aircraft availability limits, ground
+        aborts, and repair timelines.
         """
     )
 
-    st.subheader("Logic Flow")
+    st.info(
+        "Core question: Can this weekly turn pattern meet the sortie requirement without overcommitting the fleet "
+        "or creating unacceptable recovery risk for next week?"
+    )
+
+    st.subheader("What the App Does")
     st.markdown(
         """
-        ```text
-        Inputs -> Policy Rules -> Capacity Sweep -> Pattern Generator -> Monte Carlo -> Recommendation Screen
-        ```
+        This application uses Monte Carlo simulation to test weekly turn patterns against user-defined planning
+        assumptions, including:
+
+        - possessed aircraft and mission-capable rate,
+        - required sorties and UTE planning range,
+        - break rates and ground-abort rates,
+        - scheduled-spare assumptions,
+        - 8-hour, 12-hour, and 24-hour repair outcomes,
+        - commit limits and next-week recovery expectations.
+
+        The model runs the same schedule many times under different maintenance outcomes. It then reports how often
+        the plan succeeds, where it fails, and whether the fleet recovers enough for follow-on execution.
+        """
+    )
+
+    st.subheader("What the Results Mean")
+    st.markdown(
+        """
+        The app does **not** provide a single right answer. It provides a probability-based risk assessment.
+
+        A turn pattern may generate the required sorties but still be risky if it depends on excessive aircraft
+        commit, weak spare coverage, unrealistic repair recovery, or leaves too much maintenance backlog heading
+        into the next week.
         """
     )
     st.dataframe(
         [
-            {"Phase": "Inputs", "Meaning": "PAI, UTE range, required sorties, maintenance rates, GO limits."},
-            {"Phase": "Policy Rules", "Meaning": "Commit cap, spares, rounding, risk bands, and recovery rules."},
-            {"Phase": "Capacity Sweep", "Meaning": "Calculates sortie targets using floor(PAI x flying days x UTE)."},
-            {"Phase": "Pattern Generator", "Meaning": "Builds GO-level flat, waterfall, balanced, and diagnostic patterns."},
-            {"Phase": "Monte Carlo", "Meaning": "Runs ground aborts, Code 3s, fixes, daily MC carry-forward, and weekend recovery."},
-            {"Phase": "Recommendation", "Meaning": "Keeps only patterns that pass success, recovery, backlog, and shape screens."},
+            {"Output": "Overall Success Probability", "Meaning": "How often the full plan succeeds across all modeled constraints."},
+            {"Output": "Sortie Target Met", "Meaning": "How often the required weekly sorties are achieved."},
+            {"Output": "Aircraft Availability", "Meaning": "Whether enough mission-capable aircraft are available each day."},
+            {"Output": "Commit Compliance", "Meaning": "Whether the plan stays within the modeled commit limit."},
+            {"Output": "Next-Monday Recovery", "Meaning": "Whether the fleet recovers enough to begin the next week."},
+            {"Output": "Backlog Risk", "Meaning": "Whether unresolved maintenance accumulates during execution."},
         ],
         width="stretch",
         hide_index=True,
     )
 
-    st.subheader("What Monte Carlo Means")
+    st.subheader("How to Use It")
     st.markdown(
         """
-        Monte Carlo modeling runs the same problem many times with uncertainty included. Instead of returning one
-        perfect answer, it returns probabilities based on many simulated outcomes.
+        Use the model to compare different weekly schedules before execution. It is most useful when comparing
+        multiple options, not when treating one output as a perfect forecast.
 
-        In this model, each iteration is one possible flying week. Across hundreds or thousands of iterations, the
-        model estimates how often a pattern meets sorties, has enough aircraft, stays within commit limits, and
-        recovers by next Monday.
+        It is especially useful for answering questions like:
+
+        - Which turn pattern gives the best chance of meeting the requirement?
+        - Is this schedule too compressed early or late in the week?
+        - How much does the plan depend on scheduled spares?
+        - Does the fleet recover enough by next Monday?
+        - Is the requirement supportable under the current MC rate and expected break rates?
+        - What happens if repair recovery is worse than expected?
         """
     )
-    st.caption(
-        "Monte Carlo methods are also used in finance, weather and climate modeling, engineering reliability, "
-        "project risk, insurance, supply-chain planning, health modeling, and operations research."
-    )
 
-    st.subheader("Recommended Workflow")
+    st.subheader("Important Limitations")
     st.markdown(
         """
-        1. Use **DSUTE Calculator** if you need to set the UTE band from known sortie tempo.
-        2. Use **Optimization Dashboard** to run the PAI/UTE sweep.
-        3. Start with **Summary** to see whether each PAI has a recommendable pattern.
-        4. Use **Best Patterns** for patterns that passed the screen.
-        5. Use **Diagnostics** only to understand near-misses and rejected shapes.
-        6. Use **Manual Turn Pattern** to validate a known real-world schedule.
+        This model is a decision-support tool, not a replacement for maintenance production judgment, aircraft
+        status review, or tail-by-tail scheduling.
+
+        It does not predict exactly which aircraft will break or when. It estimates the likelihood that a schedule
+        can survive under the assumptions provided by the user. The quality of the output depends on the quality of
+        the inputs, especially break rates, abort rates, repair timelines, MC aircraft, and sortie requirements.
         """
     )
 
-    st.subheader("Most Important Interpretation Rules")
+    st.subheader("Bottom Line")
     st.markdown(
         """
-        - **Capacity is not sustainability.** Capacity only says what sortie count fits the UTE math.
-        - **Sortie success is not overall success.** A pattern can make sorties and still fail recovery.
-        - **Closest Non-Recommended is not a recommendation.** It is a troubleshooting near-miss.
-        - **Diagnostic-only families are context.** Reverse waterfalls, back-loaded pushes, and compressed surges are not routine recommendations.
-        - **Max surge is a stress test.** Do not mix it with normal sustainment planning.
-        - **Flat turns are exact.** `4x2-4x2-4x2-4x2-4x2` is flat; `4x2-3x2-3x2-3x2-3x2` is waterfall.
+        This app helps planners move beyond **"Can we schedule it?"** and toward a better question:
+
+        **Can we execute this turn pattern, absorb expected maintenance disruption, and still preserve enough fleet
+        health for the next week?**
         """
     )
 
-    with st.expander("Input Effects", expanded=False):
+    with st.expander("What Monte Carlo Means", expanded=False):
+        st.markdown(
+            """
+            Monte Carlo modeling runs the same problem many times with uncertainty included. Instead of returning
+            one perfect answer, it returns probabilities based on many simulated outcomes.
+
+            In this model, each iteration is one possible flying week. Across hundreds or thousands of iterations,
+            the model estimates how often a pattern meets sorties, has enough aircraft, stays within commit limits,
+            and recovers by next Monday.
+
+            Monte Carlo methods are also used in finance, weather and climate modeling, engineering reliability,
+            project risk, insurance, supply-chain planning, health modeling, and operations research.
+            """
+        )
+
+    with st.expander("Methodology: Model Flow", expanded=False):
+        st.markdown(
+            """
+            ```text
+            Inputs -> Policy Rules -> Capacity Sweep -> Pattern Generator -> Monte Carlo -> Recommendation Screen
+            ```
+            """
+        )
         st.dataframe(
             [
-                {"Input": "PAI", "Primary Effect": "Changes capacity, commit aircraft, starting MC, and recovery margin."},
-                {"Input": "UTE Range", "Primary Effect": "Changes weekly sortie targets and generated pattern options."},
-                {"Input": "Required Sorties", "Primary Effect": "Sets the sortie target for success."},
-                {"Input": "MC Rate", "Primary Effect": "Sets starting mission-capable aircraft."},
-                {"Input": "Ground Abort / Break Rates", "Primary Effect": "Adds ground abort and Code 3 pressure."},
-                {"Input": "Fix Rates", "Primary Effect": "Controls recovery speed and backlog."},
-                {"Input": "Use Scheduled Spares", "Primary Effect": "Adds 20% first-go spares, rounded up."},
-                {"Input": "# of GOs", "Primary Effect": "Controls whether 2nd, 3rd, and 4th GO turns are available."},
-                {"Input": "Max Day-to-Day Delta", "Primary Effect": "Controls how smooth generated schedules must be."},
-                {"Input": "Iterations", "Primary Effect": "Controls probability stability, not the assumptions."},
+                {"Phase": "Inputs", "Meaning": "PAI, UTE range, required sorties, maintenance rates, GO limits."},
+                {"Phase": "Policy Rules", "Meaning": "Commit cap, spares, rounding, risk bands, and recovery rules."},
+                {"Phase": "Capacity Sweep", "Meaning": "Calculates sortie targets using floor(PAI x flying days x UTE)."},
+                {"Phase": "Pattern Generator", "Meaning": "Builds GO-level flat, waterfall, balanced, and diagnostic patterns."},
+                {"Phase": "Monte Carlo", "Meaning": "Runs ground aborts, Code 3s, fixes, daily MC carry-forward, and weekend recovery."},
+                {"Phase": "Recommendation", "Meaning": "Keeps only patterns that pass success, recovery, backlog, and shape screens."},
             ],
             width="stretch",
             hide_index=True,
         )
 
-    with st.expander("Output Meanings", expanded=False):
+    with st.expander("Methodology: Inputs and Outputs", expanded=False):
         st.dataframe(
             [
-                {"Output": "Overall Success", "Meaning": "All success checks passed."},
-                {"Output": "Sortie Target Met", "Meaning": "Actual sorties met required weekly sorties."},
-                {"Output": "Aircraft Available", "Meaning": "Enough MC aircraft existed for the schedule."},
-                {"Output": "Next-Monday Recovery", "Meaning": "Fleet recovered enough to start the next week."},
-                {"Output": "Avg Backlog", "Meaning": "Average open repair backlog after recovery."},
-                {"Output": "Recovery Debt", "Meaning": "Average next-Monday MC shortfall from starting MC."},
-                {"Output": "Recommendation Screen", "Meaning": "Why a candidate passed or was blocked."},
+                {"Feature": "PAI", "Primary Effect": "Changes capacity, commit aircraft, starting MC, and recovery margin."},
+                {"Feature": "UTE Range", "Primary Effect": "Changes weekly sortie targets and generated pattern options."},
+                {"Feature": "Required Sorties", "Primary Effect": "Sets the sortie target for success."},
+                {"Feature": "MC Rate", "Primary Effect": "Sets starting mission-capable aircraft."},
+                {"Feature": "Ground Abort / Break Rates", "Primary Effect": "Adds ground abort and Code 3 pressure."},
+                {"Feature": "Fix Rates", "Primary Effect": "Controls recovery speed and backlog."},
+                {"Feature": "Use Scheduled Spares", "Primary Effect": "Adds 20% first-go spares, rounded up."},
+                {"Feature": "# of GOs", "Primary Effect": "Controls whether 2nd, 3rd, and 4th GO turns are available."},
+                {"Feature": "Iterations", "Primary Effect": "Controls probability stability, not the assumptions."},
             ],
             width="stretch",
             hide_index=True,
         )
 
-    with st.expander("Deeper Mechanics", expanded=False):
+    with st.expander("Methodology: Recommendation Rules", expanded=False):
         st.markdown(
             """
             **Pattern families**: Normal families can be recommended if they pass simulation. Diagnostic-only families are tested for context but blocked from routine recommendation.
@@ -1310,6 +1373,14 @@ def _show_about_page() -> None:
             **Recovery models**: Scheduled-Spares Only is stricter. Fleet-Flex Recovery allows uncommitted MC aircraft to absorb ground aborts when available.
 
             **Success screen**: Overall success requires sortie success, daily schedule success, aircraft availability, commit compliance, recovery, backlog control, and clean event integrity.
+
+            **Important interpretation rules**:
+
+            - Capacity is not sustainability.
+            - Sortie success is not overall success.
+            - Closest Non-Recommended is a troubleshooting near-miss, not a recommendation.
+            - Max surge is a stress test, not normal sustainment planning.
+            - Flat turns require the exact same GO split every flying day.
             """
         )
 
@@ -1317,7 +1388,10 @@ def _show_about_page() -> None:
     st.write(f"Current model version: {MODEL_VERSION}")
 
 
-st.title("Turn Pattern Sustainability Monte Carlo Model")
+if LOGO_LOCKUP_PATH.exists():
+    st.image(str(LOGO_LOCKUP_PATH), width=520)
+else:
+    st.title("Turn Pattern Sustainability Monte Carlo Model")
 st.caption("Monte Carlo turn-pattern planning dashboard")
 
 with st.sidebar:
