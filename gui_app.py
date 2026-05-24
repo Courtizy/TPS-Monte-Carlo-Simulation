@@ -753,24 +753,66 @@ def _risk_cell_style(value: object) -> str:
     return styles[key]
 
 
+def _recommendation_cell_style(value: object) -> str:
+    text = str(value).strip().lower()
+    if (
+        "not recommended" in text
+        or "non-recommended" in text
+        or "no recommendable" in text
+        or "fails" in text
+        or "rejected" in text
+    ):
+        return "background-color: #b91c1c; color: white; font-weight: 800;"
+    if (
+        "recommendable" in text
+        or text == "pass"
+        or "passes" in text
+        or "sustainable" in text
+    ):
+        return "background-color: #16803c; color: white; font-weight: 800;"
+    if "closest" in text or "watch" in text or "risk" in text:
+        return "background-color: #f6d365; color: #111827; font-weight: 800;"
+    return ""
+
+
 def _styled_dataframe(data: object) -> object:
     if pd is None:
         return data
     frame = pd.DataFrame(data)
     if frame.empty:
         return frame
-    styler = frame.style
     risk_columns = [column for column in frame.columns if str(column).lower() == "risk"]
+    if risk_columns:
+        ordered_columns = risk_columns + [column for column in frame.columns if column not in risk_columns]
+        frame = frame[ordered_columns]
+    styler = frame.style
     for column in risk_columns:
         if hasattr(styler, "map"):
             styler = styler.map(_risk_cell_style, subset=[column])
         else:
             styler = styler.applymap(_risk_cell_style, subset=[column])
+    recommendation_columns = [
+        column for column in frame.columns
+        if str(column).lower() in {
+            "status",
+            "recommendation status",
+            "recommendation screen",
+            "assessment",
+        }
+    ]
+    for column in recommendation_columns:
+        if hasattr(styler, "map"):
+            styler = styler.map(_recommendation_cell_style, subset=[column])
+        else:
+            styler = styler.applymap(_recommendation_cell_style, subset=[column])
     if {"Metric", "Value"}.issubset(set(frame.columns)):
         def style_metric_row(row: object) -> list[str]:
             is_risk_row = str(row.get("Metric", "")).lower() == "risk"
             if is_risk_row:
                 return [_risk_cell_style(row.get("Value", "")) for _ in row]
+            is_recommendation_row = str(row.get("Metric", "")).lower() == "recommendation screen"
+            if is_recommendation_row:
+                return [_recommendation_cell_style(row.get("Value", "")) for _ in row]
             return ["" for _ in row]
 
         styler = styler.apply(style_metric_row, axis=1)
