@@ -109,7 +109,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.22.7`
+Current model version: `0.22.8`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -232,3 +232,6 @@ commit aircraft and UTE capacity rounded down.
 
 Version `0.22.7` renames the project and web app to Turn Pattern Sustainability
 Monte Carlo Model.
+
+Version `0.22.8` adds a concise About-page explanation of Monte Carlo modeling
+and examples of other fields where it is used.

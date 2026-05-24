@@ -1227,6 +1227,22 @@ def _show_about_page() -> None:
         hide_index=True,
     )
 
+    st.subheader("What Monte Carlo Means")
+    st.markdown(
+        """
+        Monte Carlo modeling runs the same problem many times with uncertainty included. Instead of returning one
+        perfect answer, it returns probabilities based on many simulated outcomes.
+
+        In this model, each iteration is one possible flying week. Across hundreds or thousands of iterations, the
+        model estimates how often a pattern meets sorties, has enough aircraft, stays within commit limits, and
+        recovers by next Monday.
+        """
+    )
+    st.caption(
+        "Monte Carlo methods are also used in finance, weather and climate modeling, engineering reliability, "
+        "project risk, insurance, supply-chain planning, health modeling, and operations research."
+    )
+
     st.subheader("Recommended Workflow")
     st.markdown(
         """
