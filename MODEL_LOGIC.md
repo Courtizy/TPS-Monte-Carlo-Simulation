@@ -1,6 +1,6 @@
 # Model Logic Reference
 
-This file explains how the Turn Pattern Sustainability Modeler works from input
+This file explains how the Turn Pattern Sustainability Monte Carlo Model works from input
 to recommendation. The short version is:
 
 ```text

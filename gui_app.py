@@ -22,7 +22,7 @@ from ttp_rules import (
 from simulation import AircraftInventory, DaySchedule, HomestationData, Scenario, SimulationSummary, simulate
 
 
-st.set_page_config(page_title="Turn Pattern Sustainability Modeler", layout="wide")
+st.set_page_config(page_title="Turn Pattern Sustainability Monte Carlo Model", layout="wide")
 
 
 @st.cache_data(show_spinner=False)
@@ -1301,7 +1301,7 @@ def _show_about_page() -> None:
     st.write(f"Current model version: {MODEL_VERSION}")
 
 
-st.title("Turn Pattern Sustainability Modeler")
+st.title("Turn Pattern Sustainability Monte Carlo Model")
 st.caption("Monte Carlo turn-pattern planning dashboard")
 
 with st.sidebar:

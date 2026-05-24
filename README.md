@@ -1,6 +1,6 @@
-# Turn Pattern Sustainability Modeler
+# Turn Pattern Sustainability Monte Carlo Model
 
-This is a condensed Streamlit model for assessing whether weekly turn patterns are sustainable under TTP commit limits, UTE planning bands, maintenance event rates, and repair assumptions.
+This is a condensed Streamlit Monte Carlo model for assessing whether weekly turn patterns are sustainable under TTP commit limits, UTE planning bands, maintenance event rates, and repair assumptions.
 
 ## Files
 
@@ -109,7 +109,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.22.6`
+Current model version: `0.22.7`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -229,3 +229,6 @@ optional detail expanders.
 
 Version `0.22.6` changes scheduled spare calculation to round up, while keeping
 commit aircraft and UTE capacity rounded down.
+
+Version `0.22.7` renames the project and web app to Turn Pattern Sustainability
+Monte Carlo Model.
