@@ -32,6 +32,7 @@ from simulation import AircraftInventory, DaySchedule, HomestationData, Scenario
 ASSET_DIR = Path(__file__).parent / "assets"
 LOGO_LOCKUP_PATH = ASSET_DIR / "logo_option_6a_lockup.png"
 LOGO_ICON_PATH = ASSET_DIR / "logo_option_6a_icon.png"
+MODEL_LOGIC_PATH = Path(__file__).parent / "MODEL_LOGIC.md"
 
 
 LOGO_FALLBACK_SVG = """
@@ -78,6 +79,12 @@ def _page_icon() -> object | None:
     if Image is None:
         return None
     return Image.open(BytesIO(icon_bytes))
+
+
+def _model_logic_markdown() -> str:
+    if MODEL_LOGIC_PATH.exists():
+        return MODEL_LOGIC_PATH.read_text(encoding="utf-8")
+    return "MODEL_LOGIC.md was not found in the app folder."
 
 
 _page_config = {"page_title": "Turn Pattern Sustainability Monte Carlo Model", "layout": "wide"}
@@ -1339,15 +1346,17 @@ def _show_about_page() -> None:
         """
     )
 
-    st.subheader("Bottom Line")
-    st.markdown(
-        """
-        This app helps planners move beyond **"Can we schedule it?"** and toward a better question:
+    with st.expander("Bottom Line and Full Model Logic", expanded=False):
+        st.markdown(
+            """
+            This app helps planners move beyond **"Can we schedule it?"** and toward a better question:
 
-        **Can we execute this turn pattern, absorb expected maintenance disruption, and still preserve enough fleet
-        health for the next week?**
-        """
-    )
+            **Can we execute this turn pattern, absorb expected maintenance disruption, and still preserve enough
+            fleet health for the next week?**
+            """
+        )
+        st.divider()
+        st.markdown(_model_logic_markdown())
 
     with st.expander("What Monte Carlo Means", expanded=False):
         st.markdown(

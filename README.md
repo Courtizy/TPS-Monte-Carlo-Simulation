@@ -110,7 +110,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.23.3`
+Current model version: `0.23.4`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -251,3 +251,6 @@ display selected branding even if the binary `assets/` folder is not deployed.
 
 Version `0.23.3` moves selected branding from the main content header to the
 sidebar so the dashboard starts with the model title and working content.
+
+Version `0.23.4` changes the About page bottom-line section into an expander
+that displays the full `MODEL_LOGIC.md` reference inside the app.
