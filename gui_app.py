@@ -1220,7 +1220,7 @@ def _show_about_page() -> None:
             {"Phase": "Policy Rules", "Meaning": "Commit cap, spares, rounding, risk bands, and recovery rules."},
             {"Phase": "Capacity Sweep", "Meaning": "Calculates sortie targets using floor(PAI x flying days x UTE)."},
             {"Phase": "Pattern Generator", "Meaning": "Builds GO-level flat, waterfall, balanced, and diagnostic patterns."},
-            {"Phase": "Monte Carlo", "Meaning": "Runs GAs, Code 3s, fixes, daily MC carry-forward, and weekend recovery."},
+            {"Phase": "Monte Carlo", "Meaning": "Runs ground aborts, Code 3s, fixes, daily MC carry-forward, and weekend recovery."},
             {"Phase": "Recommendation", "Meaning": "Keeps only patterns that pass success, recovery, backlog, and shape screens."},
         ],
         width="stretch",
@@ -1274,7 +1274,7 @@ def _show_about_page() -> None:
                 {"Input": "UTE Range", "Primary Effect": "Changes weekly sortie targets and generated pattern options."},
                 {"Input": "Required Sorties", "Primary Effect": "Sets the sortie target for success."},
                 {"Input": "MC Rate", "Primary Effect": "Sets starting mission-capable aircraft."},
-                {"Input": "GA / Break Rates", "Primary Effect": "Adds ground abort and Code 3 pressure."},
+                {"Input": "Ground Abort / Break Rates", "Primary Effect": "Adds ground abort and Code 3 pressure."},
                 {"Input": "Fix Rates", "Primary Effect": "Controls recovery speed and backlog."},
                 {"Input": "Use Scheduled Spares", "Primary Effect": "Adds 20% first-go spares, rounded up."},
                 {"Input": "# of GOs", "Primary Effect": "Controls whether 2nd, 3rd, and 4th GO turns are available."},
@@ -1387,7 +1387,7 @@ if page == "DSUTE Calculator":
     st.header("DSUTE Calculator")
     st.caption(
         "DSUTE is calculated on the sortie side only: scheduled or required sorties / "
-        "(possessed aircraft x operating and maintenance days)."
+        "(possessed aircraft x O&M days)."
     )
     col1, col2, col3 = st.columns(3)
     om_days = int(col1.number_input("O&M Days", min_value=1, value=7, step=1))
@@ -1449,7 +1449,7 @@ if page == "DSUTE Calculator":
     st.info(
         f"Recommended sidebar setting: set UTE Planning Range to "
         f"{suggested_band['lower']:.2f}-{suggested_band['upper']:.2f} if you want the model "
-        "to evaluate patterns near the observed deployed/location sortie tempo."
+        "to evaluate patterns near the observed deployed or operating-location sortie tempo."
     )
     st.stop()
 
@@ -1633,7 +1633,7 @@ with summary:
                 if viable:
                     st.dataframe(_display_rows(_top_pattern_rows(viable)), width="stretch", hide_index=True)
                 else:
-                    st.info("No Green/Yellow sustainable options met the current requirement and recovery rules.")
+                    st.info("No Green/Yellow recommendable options met the current requirement and recovery rules.")
 
                 st.markdown("**Why Candidates Were Not Recommended**")
                 st.dataframe(_failure_readout_rows(pai_rows), width="stretch", hide_index=True)
@@ -1711,7 +1711,7 @@ with surge:
                 color="Series",
             )
 
-        st.subheader("Why It Fails Or Passes")
+        st.subheader("Why It Fails or Passes")
         st.caption(
             "This isolates the first unacceptable week for each PAI and recovery model. If no week fails, "
             "the weakest modeled week is shown as a watch item."
@@ -1735,7 +1735,7 @@ with diagnostics:
         "Use the reason column to see whether it missed because of sortie success, recovery, backlog, "
         "or the operational-shape screen."
     )
-    st.subheader("Candidate Pass / Reject Summary")
+    st.subheader("Candidate Pass/Reject Summary")
     st.dataframe(_diagnostic_pai_rows(rows, policy), width="stretch", hide_index=True)
 
     failures = _failure_mode_rows(rows, policy)

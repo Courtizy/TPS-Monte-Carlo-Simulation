@@ -6,8 +6,8 @@ This is a condensed Streamlit Monte Carlo model for assessing whether weekly tur
 
 - `ttp_rules.py`: TTP/policy assumptions, model version, validation, risk bands, commit-rate math, spare rules, and recovery model names.
 - `simulation.py`: simulation and Monte Carlo mechanics: event generation, event distribution, GA coverage, fix logic, daily MC carry-forward, weekend recovery, and success scoring.
-- `pattern_generator.py`: UTE capacity sweep, deployed UTE calculator, turn-pattern permutations, first-go/second-go splits, and pattern classification.
-- `gui_app.py`: Streamlit interface for optimization, manual pattern testing, and deployed UTE calculation.
+- `pattern_generator.py`: UTE capacity sweep, DSUTE calculator, turn-pattern permutations, GO-level splits, and pattern classification.
+- `gui_app.py`: Streamlit interface for optimization, manual pattern testing, and DSUTE calculation.
 - `MODEL_LOGIC.md`: deeper reference explaining each model phase, feature, and output interpretation.
 - `requirements.txt`: Python package requirements.
 
@@ -26,7 +26,7 @@ streamlit run gui_app.py
 
 ### Optimization Dashboard
 
-Runs generated Monday-Friday first-go/second-go turn patterns through the Monte Carlo simulation.
+Runs generated Monday-Friday GO-level turn patterns through the Monte Carlo simulation.
 
 The UTE sweep always includes every target from `0.40` through `0.52`, plus a separate `55% Commit Surge` capacity point. Weekly sortie counts round down because partial aircraft/sorties are not usable planning capacity, so adjacent UTE targets may produce the same sortie count at smaller PAI.
 
@@ -42,7 +42,7 @@ Outputs include:
 
 ### Manual Turn Pattern
 
-Lets you enter a specific first-go/second-go split, such as:
+Lets you enter a specific GO-level split, such as:
 
 ```text
 5x2, 4x2, 4x2, 3x2, 2x0
@@ -76,8 +76,8 @@ Example:
 
 ### About / Model Logic
 
-Provides the README-level explanation inside the web app, including model purpose,
-logic flow, success rules, recovery models, DSUTE logic, and tab interpretation.
+Provides a concise in-app guide to the model purpose, logic flow, Monte Carlo concept,
+success rules, recovery models, DSUTE logic, and tab interpretation.
 The deeper standalone reference is available in `MODEL_LOGIC.md`.
 
 ## Model Flow
@@ -86,7 +86,7 @@ The deeper standalone reference is available in `MODEL_LOGIC.md`.
 flowchart TD
     A["User Inputs"] --> B["TTP Policy Layer"]
     B --> C["Capacity Sweep: 0.40-0.52 UTE plus 55% surge"]
-    C --> D["Pattern Generator: first-go and second-go splits"]
+    C --> D["Pattern Generator: GO-level turn-pattern splits"]
     D --> E["Monte Carlo Simulation"]
     E --> F["Daily MC Carry-Forward and Repair Logic"]
     F --> G["Success Scoring"]
@@ -109,7 +109,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.22.8`
+Current model version: `0.22.9`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -235,3 +235,6 @@ Monte Carlo Model.
 
 Version `0.22.8` adds a concise About-page explanation of Monte Carlo modeling
 and examples of other fields where it is used.
+
+Version `0.22.9` cleans up user-facing grammar, capitalization, punctuation,
+and wording across the app and documentation.

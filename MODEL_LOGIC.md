@@ -1,7 +1,7 @@
 # Model Logic Reference
 
-This file explains how the Turn Pattern Sustainability Monte Carlo Model works from input
-to recommendation. The short version is:
+This file explains how the Turn Pattern Sustainability Monte Carlo Model moves from inputs
+to recommendations. The short version is:
 
 ```text
 Policy rules -> Capacity sweep -> Pattern generation -> Monte Carlo simulation -> Recommendation screen -> Reports
@@ -119,15 +119,15 @@ Example:
 
 Rules:
 
-- later GOs cannot exceed first-go aircraft
-- third go cannot exist without second go
-- fourth go cannot exist without third go
-- each GO must stay within the sidebar max-go limits
-- daily aircraft required must stay within commit cap
-- daily sorties must stay within max daily sortie cap
+- Later GOs cannot exceed first-go aircraft.
+- Third GO cannot exist without second GO.
+- Fourth GO cannot exist without third GO.
+- Each GO must stay within the sidebar max-GO limits.
+- Daily aircraft required must stay within the commit cap.
+- Daily sorties must stay within the max daily sortie cap.
 
-If the sidebar allows only 1st and 2nd go, the generator will not use 3rd or 4th
-go patterns.
+If the sidebar allows only 1st and 2nd GO, the generator will not use 3rd- or 4th-GO
+patterns.
 
 ## 5. Spares
 
@@ -184,7 +184,7 @@ Each iteration:
 10. Continues recovery through Saturday, Sunday, and next Monday.
 11. Scores the iteration across all success dimensions.
 
-## 7. Event And Fix Modes
+## 7. Event and Fix Modes
 
 Event count model:
 
@@ -218,13 +218,13 @@ Fleet-Flex Recovery
 
 Scheduled-Spares Only:
 
-- ground aborts can only be covered by scheduled spares
-- more conservative
+- Ground aborts can only be covered by scheduled spares.
+- More conservative.
 
 Fleet-Flex Recovery:
 
-- uncommitted MC aircraft can cover a ground abort if available
-- shows practical schedule flexibility
+- Uncommitted MC aircraft can cover a ground abort if available.
+- Shows practical schedule flexibility.
 
 ## 9. Success Logic
 
@@ -257,11 +257,11 @@ After simulation, the app decides whether a candidate is recommendable.
 A recommendable pattern must:
 
 - plan at least the required weekly sorties
-- meet the success threshold
-- meet the recovery threshold
-- meet the backlog threshold
-- avoid diagnostic-only family status
-- pass operational-shape screening
+- Meet the success threshold.
+- Meet the recovery threshold.
+- Meet the backlog threshold.
+- Avoid diagnostic-only family status.
+- Pass operational-shape screening.
 
 Non-recommended patterns remain visible in diagnostics so the user can understand
 what almost worked and why it was screened out.
@@ -280,7 +280,7 @@ Red    = < 55%
 Green and Yellow are the normal planning range. Orange and Red are warning
 states.
 
-## 12. Tabs And Outputs
+## 12. Tabs and Outputs
 
 ### Summary
 
