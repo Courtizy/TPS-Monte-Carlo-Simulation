@@ -31,7 +31,8 @@ from simulation import AircraftInventory, DaySchedule, HomestationData, Scenario
 
 ASSET_DIR = Path(__file__).parent / "assets"
 LOGO_LOCKUP_PATH = ASSET_DIR / "logo_option_6a_lockup.png"
-LOGO_ICON_PATH = ASSET_DIR / "logo_option_6a_icon.png"
+LOGO_ICON_PATH = ASSET_DIR / "logo_option_6a_clean_white_red_icon.png"
+SIDEBAR_LOGO_PATH = ASSET_DIR / "logo_option_6a_clean_white_red_lockup.png"
 MODEL_LOGIC_PATH = Path(__file__).parent / "MODEL_LOGIC.md"
 
 
@@ -70,6 +71,18 @@ def _logo_bytes(path: Path) -> bytes | None:
     if path.exists():
         return path.read_bytes()
     return None
+
+
+def _display_logo(path: Path, *, width: int = 260) -> None:
+    if path.exists() and path.suffix.lower() == ".svg":
+        svg = path.read_text(encoding="utf-8")
+        st.markdown(f'<div style="max-width: {width}px;">{svg}</div>', unsafe_allow_html=True)
+        return
+    logo_bytes = _logo_bytes(path)
+    if logo_bytes is not None:
+        st.image(logo_bytes, width=width)
+        return
+    st.markdown("### TPS-MCM")
 
 
 def _page_icon() -> object | None:
@@ -1340,11 +1353,7 @@ st.title("Turn Pattern Sustainability Monte Carlo Model")
 st.caption("Monte Carlo turn-pattern planning dashboard")
 
 with st.sidebar:
-    _logo_lockup = _logo_bytes(LOGO_LOCKUP_PATH)
-    if _logo_lockup is not None:
-        st.image(_logo_lockup, width=260)
-    else:
-        st.markdown("### TPS-MCM")
+    _display_logo(SIDEBAR_LOGO_PATH, width=260)
     st.divider()
     st.header("Scenario")
     st.caption(f"Version: {MODEL_VERSION}")

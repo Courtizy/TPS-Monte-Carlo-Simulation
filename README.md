@@ -8,7 +8,7 @@ This is a condensed Streamlit Monte Carlo model for assessing whether weekly tur
 - `simulation.py`: simulation and Monte Carlo mechanics: event generation, event distribution, GA coverage, fix logic, daily MC carry-forward, weekend recovery, and success scoring.
 - `pattern_generator.py`: UTE capacity sweep, DSUTE calculator, turn-pattern permutations, GO-level splits, and pattern classification.
 - `gui_app.py`: Streamlit interface for optimization, manual pattern testing, and DSUTE calculation.
-- `assets/`: application logo files based on selected Option 6A branding.
+- `assets/`: application logo files based on selected Option 6A branding, including exact raster recolors.
 - `MODEL_LOGIC.md`: deeper reference explaining each model phase, feature, and output interpretation.
 - `requirements.txt`: Python package requirements.
 
@@ -110,7 +110,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.23.5`
+Current model version: `0.23.9`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -258,3 +258,17 @@ that displays the full `MODEL_LOGIC.md` reference inside the app.
 Version `0.23.5` simplifies the About page by removing duplicate guidance and
 methodology sections, leaving one `Model Logic` expander sourced from
 `MODEL_LOGIC.md`.
+
+Version `0.23.6` adds a black/red/white logo variant and uses it in the
+Streamlit sidebar.
+
+Version `0.23.7` adds a white/red logo variant and switches the Streamlit
+sidebar branding to that lighter version.
+
+Version `0.23.8` replaces the earlier redrawn logo variants with exact
+recolored versions of the selected Option 6A PNG artwork and uses the exact
+white/red version in the Streamlit sidebar.
+
+Version `0.23.9` regenerates the recolored Option 6A assets with cleaner
+two-color processing to remove stray color artifacts, and uses the clean
+white/red logo in the Streamlit sidebar.
