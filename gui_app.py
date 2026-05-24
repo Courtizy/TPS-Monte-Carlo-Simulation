@@ -1317,23 +1317,6 @@ def _show_about_page() -> None:
         hide_index=True,
     )
 
-    st.subheader("How to Use It")
-    st.markdown(
-        """
-        Use the model to compare different weekly schedules before execution. It is most useful when comparing
-        multiple options, not when treating one output as a perfect forecast.
-
-        It is especially useful for answering questions like:
-
-        - Which turn pattern gives the best chance of meeting the requirement?
-        - Is this schedule too compressed early or late in the week?
-        - How much does the plan depend on scheduled spares?
-        - Does the fleet recover enough by next Monday?
-        - Is the requirement supportable under the current MC rate and expected break rates?
-        - What happens if repair recovery is worse than expected?
-        """
-    )
-
     st.subheader("Important Limitations")
     st.markdown(
         """
@@ -1346,91 +1329,8 @@ def _show_about_page() -> None:
         """
     )
 
-    with st.expander("Bottom Line and Full Model Logic", expanded=False):
-        st.markdown(
-            """
-            This app helps planners move beyond **"Can we schedule it?"** and toward a better question:
-
-            **Can we execute this turn pattern, absorb expected maintenance disruption, and still preserve enough
-            fleet health for the next week?**
-            """
-        )
-        st.divider()
+    with st.expander("Model Logic", expanded=False):
         st.markdown(_model_logic_markdown())
-
-    with st.expander("What Monte Carlo Means", expanded=False):
-        st.markdown(
-            """
-            Monte Carlo modeling runs the same problem many times with uncertainty included. Instead of returning
-            one perfect answer, it returns probabilities based on many simulated outcomes.
-
-            In this model, each iteration is one possible flying week. Across hundreds or thousands of iterations,
-            the model estimates how often a pattern meets sorties, has enough aircraft, stays within commit limits,
-            and recovers by next Monday.
-
-            Monte Carlo methods are also used in finance, weather and climate modeling, engineering reliability,
-            project risk, insurance, supply-chain planning, health modeling, and operations research.
-            """
-        )
-
-    with st.expander("Methodology: Model Flow", expanded=False):
-        st.markdown(
-            """
-            ```text
-            Inputs -> Policy Rules -> Capacity Sweep -> Pattern Generator -> Monte Carlo -> Recommendation Screen
-            ```
-            """
-        )
-        st.dataframe(
-            [
-                {"Phase": "Inputs", "Meaning": "PAI, UTE range, required sorties, maintenance rates, GO limits."},
-                {"Phase": "Policy Rules", "Meaning": "Commit cap, spares, rounding, risk bands, and recovery rules."},
-                {"Phase": "Capacity Sweep", "Meaning": "Calculates sortie targets using floor(PAI x flying days x UTE)."},
-                {"Phase": "Pattern Generator", "Meaning": "Builds GO-level flat, waterfall, balanced, and diagnostic patterns."},
-                {"Phase": "Monte Carlo", "Meaning": "Runs ground aborts, Code 3s, fixes, daily MC carry-forward, and weekend recovery."},
-                {"Phase": "Recommendation", "Meaning": "Keeps only patterns that pass success, recovery, backlog, and shape screens."},
-            ],
-            width="stretch",
-            hide_index=True,
-        )
-
-    with st.expander("Methodology: Inputs and Outputs", expanded=False):
-        st.dataframe(
-            [
-                {"Feature": "PAI", "Primary Effect": "Changes capacity, commit aircraft, starting MC, and recovery margin."},
-                {"Feature": "UTE Range", "Primary Effect": "Changes weekly sortie targets and generated pattern options."},
-                {"Feature": "Required Sorties", "Primary Effect": "Sets the sortie target for success."},
-                {"Feature": "MC Rate", "Primary Effect": "Sets starting mission-capable aircraft."},
-                {"Feature": "Ground Abort / Break Rates", "Primary Effect": "Adds ground abort and Code 3 pressure."},
-                {"Feature": "Fix Rates", "Primary Effect": "Controls recovery speed and backlog."},
-                {"Feature": "Use Scheduled Spares", "Primary Effect": "Adds 20% first-go spares, rounded up."},
-                {"Feature": "# of GOs", "Primary Effect": "Controls whether 2nd, 3rd, and 4th GO turns are available."},
-                {"Feature": "Iterations", "Primary Effect": "Controls probability stability, not the assumptions."},
-            ],
-            width="stretch",
-            hide_index=True,
-        )
-
-    with st.expander("Methodology: Recommendation Rules", expanded=False):
-        st.markdown(
-            """
-            **Pattern families**: Normal families can be recommended if they pass simulation. Diagnostic-only families are tested for context but blocked from routine recommendation.
-
-            **Monte Carlo**: Each iteration runs Monday through next Monday, generating events, applying fixes, carrying MC aircraft forward, and scoring the result.
-
-            **Recovery models**: Scheduled-Spares Only is stricter. Fleet-Flex Recovery allows uncommitted MC aircraft to absorb ground aborts when available.
-
-            **Success screen**: Overall success requires sortie success, daily schedule success, aircraft availability, commit compliance, recovery, backlog control, and clean event integrity.
-
-            **Important interpretation rules**:
-
-            - Capacity is not sustainability.
-            - Sortie success is not overall success.
-            - Closest Non-Recommended is a troubleshooting near-miss, not a recommendation.
-            - Max surge is a stress test, not normal sustainment planning.
-            - Flat turns require the exact same GO split every flying day.
-            """
-        )
 
     st.subheader("Version")
     st.write(f"Current model version: {MODEL_VERSION}")
