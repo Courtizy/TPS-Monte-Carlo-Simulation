@@ -966,48 +966,22 @@ def _combined_interpretation(row: dict[str, object], policy: TtpPolicy) -> str:
     return "Both probability and recommendation screening are unfavorable under the current assumptions."
 
 
-def _pattern_interpretation_rows(row: dict[str, object], policy: TtpPolicy) -> list[dict[str, object]]:
+def _pattern_interpretation_text(row: dict[str, object], policy: TtpPolicy) -> str:
     weakest_name, weakest_value = _weakest_success_dimension(row)
     blocker = _recommendation_blocker(row)
-    return [
-        {
-            "Risk": _risk_text(row["risk_band"]),
-            "Recommendation Status": _recommendation_status(row, policy),
-            "Topic": "Plain-English Meaning",
-            "Interpretation": _combined_interpretation(row, policy),
-        },
-        {
-            "Risk": _risk_text(row["risk_band"]),
-            "Recommendation Status": _recommendation_status(row, policy),
-            "Topic": "Risk Band",
-            "Interpretation": _risk_meaning(row),
-        },
-        {
-            "Risk": _risk_text(row["risk_band"]),
-            "Recommendation Status": _recommendation_status(row, policy),
-            "Topic": "Recommendation Screen",
-            "Interpretation": _recommendation_meaning(row, policy),
-        },
-        {
-            "Risk": _risk_text(row["risk_band"]),
-            "Recommendation Status": _recommendation_status(row, policy),
-            "Topic": "Main Limiter / Watch Item",
-            "Interpretation": (
-                blocker if blocker != "Passed recommendation screen"
-                else f"Lowest modeled dimension is {weakest_name} at {_pct(weakest_value)}."
-            ),
-        },
-        {
-            "Risk": _risk_text(row["risk_band"]),
-            "Recommendation Status": _recommendation_status(row, policy),
-            "Topic": "How to Use This Row",
-            "Interpretation": (
-                "Compare it against other recommendable candidates at the same PAI and UTE."
-                if _is_recommendable(row, policy)
-                else "Use it to understand what the model rejected and why; do not treat it as the execution recommendation."
-            ),
-        },
-    ]
+    watch_item = (
+        blocker if blocker != "Passed recommendation screen"
+        else f"lowest modeled dimension is {weakest_name} at {_pct(weakest_value)}"
+    )
+    use_note = (
+        "Compare it against other recommendable candidates at the same PAI and UTE."
+        if _is_recommendable(row, policy)
+        else "Use it for context or troubleshooting rather than as the execution recommendation."
+    )
+    return (
+        f"{_combined_interpretation(row, policy)} {_risk_meaning(row)} "
+        f"{_recommendation_meaning(row, policy)} Main watch item: {watch_item}. {use_note}"
+    )
 
 
 def _pai_values(rows: list[dict[str, object]]) -> list[int]:
@@ -1020,6 +994,24 @@ def _rows_for_pai(rows: list[dict[str, object]], pai: int) -> list[dict[str, obj
 
 def _top_pattern_rows(rows: list[dict[str, object]], limit: int = 5) -> list[dict[str, object]]:
     return sorted(rows, key=_rank, reverse=True)[:limit]
+
+
+def _same_pattern_row(left: dict[str, object], right: dict[str, object]) -> bool:
+    return (
+        left.get("pai") == right.get("pai")
+        and left.get("capacity_label") == right.get("capacity_label")
+        and left.get("model") == right.get("model")
+        and left.get("pattern_index") == right.get("pattern_index")
+    )
+
+
+def _closest_other_option_rows(
+    rows: list[dict[str, object]],
+    selected: dict[str, object],
+    limit: int = 5,
+) -> list[dict[str, object]]:
+    alternatives = [row for row in rows if not _same_pattern_row(row, selected)]
+    return _top_pattern_rows(alternatives, limit=limit)
 
 
 def _best_by_ute_rows(
@@ -1934,8 +1926,12 @@ with summary:
                 else:
                     st.info("No Green/Yellow recommendable options met the current requirement and recovery rules.")
 
-                st.markdown("**Why Candidates Were Not Recommended**")
-                _show_dataframe(_failure_readout_rows(pai_rows), width="stretch", hide_index=True)
+                st.markdown("**Closest Other Option Patterns**")
+                other_options = _closest_other_option_rows(pai_rows, recommended)
+                if other_options:
+                    _show_dataframe(_display_rows(other_options), width="stretch", hide_index=True)
+                else:
+                    st.info("No other candidate patterns were available for this PAI under the current filters.")
 
 with capacity:
     st.subheader("Capacity Readout")
@@ -2062,7 +2058,7 @@ with detail:
         st.subheader("Selected Pattern Diagnostic")
         st.markdown(_risk_badge(selected["risk_band"]), unsafe_allow_html=True)
         st.subheader("Plain-English Interpretation")
-        _show_dataframe(_pattern_interpretation_rows(selected, policy), width="stretch", hide_index=True)
+        st.info(_pattern_interpretation_text(selected, policy))
         diag_col, schedule_col = st.columns(2)
         with diag_col:
             st.caption("Component probabilities show which success dimension is carrying or limiting the pattern.")
