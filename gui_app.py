@@ -1508,18 +1508,32 @@ def _dsute_calculation(
 
 def _planning_band_from_dsute(
     dsute: float,
-    upper_spread: float,
-    floor_value: float,
-    ceiling_value: float,
+    possessed_aircraft: int,
+    policy: TtpPolicy,
+    safety_margin: float,
 ) -> dict[str, float]:
-    lower = max(floor_value, dsute)
-    upper = min(ceiling_value, dsute + upper_spread)
+    committed_aircraft = commit_aircraft(possessed_aircraft, policy)
+    flying_day_count = len(policy.flying_days)
+    max_commit_weekly_sorties = committed_aircraft * flying_day_count
+    max_commit_ute = (
+        max_commit_weekly_sorties / (possessed_aircraft * flying_day_count)
+        if possessed_aircraft > 0 and flying_day_count > 0
+        else 0.0
+    )
+    upper_target = max_commit_ute - safety_margin
+    lower = dsute
+    upper = max(lower, upper_target)
     if upper < lower:
         upper = lower
     return {
         "lower": lower,
         "upper": upper,
         "spread": upper - lower,
+        "commit_aircraft": committed_aircraft,
+        "flying_days": flying_day_count,
+        "max_commit_weekly_sorties": max_commit_weekly_sorties,
+        "max_commit_ute": max_commit_ute,
+        "safety_margin": safety_margin,
     }
 
 
@@ -1718,27 +1732,57 @@ if page == "DSUTE Calculator":
     )
     st.subheader("Suggested Model UTE Band")
     st.caption(
-        "Use this to translate the observed DSUTE into a planning range for the model. "
-        "The lower bound starts at the calculated DSUTE; the upper bound adds a planning buffer."
+        "Use this to translate observed DSUTE into model limits. The lower bound equals the calculated DSUTE; "
+        "the upper bound is based on max-commit UTE just short of the 55% commit posture."
     )
-    band_cols = st.columns(3)
-    band_floor = float(band_cols[0].number_input("Minimum Allowed UTE", min_value=0.0, max_value=1.0, value=0.0, step=0.01))
-    band_ceiling = float(band_cols[1].number_input("Maximum Allowed UTE", min_value=0.0, max_value=1.0, value=0.52, step=0.01))
-    upper_spread = float(band_cols[2].number_input("Upper Planning Spread", min_value=0.0, max_value=1.0, value=0.12, step=0.01))
+    safety_margin = float(
+        st.number_input(
+            "Max-Commit Safety Margin",
+            min_value=0.0,
+            max_value=0.10,
+            value=0.02,
+            step=0.01,
+            help="Subtracts a small buffer from the calculated max-commit UTE so the suggested upper band stays short of the 55% posture.",
+        )
+    )
     suggested_band = _planning_band_from_dsute(
         float(deployed["dsute"]),
-        upper_spread=upper_spread,
-        floor_value=band_floor,
-        ceiling_value=band_ceiling,
+        possessed_aircraft=possessed_aircraft,
+        policy=DEFAULT_TTP_POLICY,
+        safety_margin=safety_margin,
     )
-    band_metric_cols = st.columns(3)
+    band_metric_cols = st.columns(5)
     band_metric_cols[0].metric("Suggested UTE Lower", f"{suggested_band['lower']:.2f}")
     band_metric_cols[1].metric("Suggested UTE Upper", f"{suggested_band['upper']:.2f}")
     band_metric_cols[2].metric("Band Width", f"{suggested_band['spread']:.2f}")
+    band_metric_cols[3].metric("55% Commit Aircraft", int(suggested_band["commit_aircraft"]))
+    band_metric_cols[4].metric("Max-Commit UTE", f"{suggested_band['max_commit_ute']:.2f}")
+    _show_dataframe(
+        [
+            {"Metric": "Lower UTE", "Value": f"{suggested_band['lower']:.2f}", "Meaning": "Equals calculated DSUTE."},
+            {
+                "Metric": "Upper UTE",
+                "Value": f"{suggested_band['upper']:.2f}",
+                "Meaning": "Max-commit UTE minus safety margin.",
+            },
+            {
+                "Metric": "Max-Commit Sorties",
+                "Value": int(suggested_band["max_commit_weekly_sorties"]),
+                "Meaning": "Commit aircraft x model flying days.",
+            },
+            {
+                "Metric": "Safety Margin",
+                "Value": f"{suggested_band['safety_margin']:.2f}",
+                "Meaning": "Buffer below max-commit UTE.",
+            },
+        ],
+        width="stretch",
+        hide_index=True,
+    )
     st.info(
         f"Recommended sidebar setting: set UTE Planning Range to "
         f"{suggested_band['lower']:.2f}-{suggested_band['upper']:.2f} if you want the model "
-        "to evaluate patterns near the observed deployed or operating-location sortie tempo."
+        "to evaluate patterns from observed deployed or operating-location sortie tempo up to just short of max commit."
     )
     st.stop()
 

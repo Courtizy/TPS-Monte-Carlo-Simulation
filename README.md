@@ -110,7 +110,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.23.16`
+Current model version: `0.23.17`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -297,3 +297,7 @@ the selected row.
 Version `0.23.16` condenses Pattern Detail interpretation into one plain-English
 paragraph and changes the Summary page to show closest other option patterns
 instead of the candidate failure-reason table.
+
+Version `0.23.17` updates the DSUTE calculator so the suggested lower UTE equals
+calculated DSUTE and the suggested upper UTE is derived from max-commit UTE less
+a configurable safety margin.
