@@ -110,7 +110,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.23.13`
+Current model version: `0.23.14`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -286,3 +286,6 @@ non-recommended outputs.
 Version `0.23.13` updates the Pattern Detail selector to match table language,
 sorting options by risk and recommendation status and showing risk first in the
 dropdown label.
+
+Version `0.23.14` fixes Pattern Detail selector sorting by handling the tuple
+rank correctly on Streamlit Cloud.

@@ -908,10 +908,11 @@ def _pattern_select_label(row: dict[str, object], policy: TtpPolicy) -> str:
     )
 
 
-def _pattern_select_sort_key(row: dict[str, object], policy: TtpPolicy) -> tuple[int, int, float]:
+def _pattern_select_sort_key(row: dict[str, object], policy: TtpPolicy) -> tuple[float, ...]:
     risk_order = {"green": 0, "yellow": 1, "red": 2}
     recommendation_order = 0 if _is_recommendable(row, policy) else 1
-    return (risk_order[_risk_key(row["risk_band"])], recommendation_order, -_rank(row))
+    rank_values = tuple(-value for value in _rank(row))
+    return (risk_order[_risk_key(row["risk_band"])], recommendation_order, *rank_values)
 
 
 def _pai_values(rows: list[dict[str, object]]) -> list[int]:
