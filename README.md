@@ -110,7 +110,7 @@ flowchart TD
 
 ## Version
 
-Current model version: `0.23.12`
+Current model version: `0.23.13`
 
 Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
 sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
@@ -282,3 +282,7 @@ removes the large colored callout strip from decision sections.
 Version `0.23.12` moves the Risk column to the first column in styled tables
 and color-codes recommendation/status cells for recommended and
 non-recommended outputs.
+
+Version `0.23.13` updates the Pattern Detail selector to match table language,
+sorting options by risk and recommendation status and showing risk first in the
+dropdown label.

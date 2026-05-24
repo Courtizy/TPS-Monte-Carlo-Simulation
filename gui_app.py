@@ -900,6 +900,20 @@ def _recommendation_status(row: dict[str, object], policy: TtpPolicy) -> str:
     return "Recommendable" if _is_recommendable(row, policy) else "Not recommended"
 
 
+def _pattern_select_label(row: dict[str, object], policy: TtpPolicy) -> str:
+    return (
+        f"{_risk_text(row['risk_band'])} | {_recommendation_status(row, policy)} | "
+        f"{row['pai']} PAI | {row['capacity_label']} | {row['model']} | "
+        f"{row['pattern_with_frontlines']} | Success {float(row['success']):.0%}"
+    )
+
+
+def _pattern_select_sort_key(row: dict[str, object], policy: TtpPolicy) -> tuple[int, int, float]:
+    risk_order = {"green": 0, "yellow": 1, "red": 2}
+    recommendation_order = 0 if _is_recommendable(row, policy) else 1
+    return (risk_order[_risk_key(row["risk_band"])], recommendation_order, -_rank(row))
+
+
 def _pai_values(rows: list[dict[str, object]]) -> list[int]:
     return sorted({int(row["pai"]) for row in rows})
 
@@ -1943,12 +1957,10 @@ with diagnostics:
 
 with detail:
     if rows:
+        sorted_detail_rows = sorted(rows, key=lambda row: _pattern_select_sort_key(row, policy))
         options = {
-            (
-                f"{_recommendation_status(row, policy)} | {row['pai']} PAI | {row['capacity_label']} | "
-                f"{row['model']} | {row['pattern_with_frontlines']} | {float(row['success']):.0%}"
-            ): row
-            for row in rows
+            _pattern_select_label(row, policy): row
+            for row in sorted_detail_rows
         }
         selected = options[st.selectbox("Selected Pattern", list(options))]
         st.subheader("Selected Pattern Diagnostic")
