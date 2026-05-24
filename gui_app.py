@@ -795,6 +795,7 @@ def _styled_dataframe(data: object) -> object:
         column for column in frame.columns
         if str(column).lower() in {
             "status",
+            "recommendation",
             "recommendation status",
             "recommendation screen",
             "assessment",
@@ -913,6 +914,100 @@ def _pattern_select_sort_key(row: dict[str, object], policy: TtpPolicy) -> tuple
     recommendation_order = 0 if _is_recommendable(row, policy) else 1
     rank_values = tuple(-value for value in _rank(row))
     return (risk_order[_risk_key(row["risk_band"])], recommendation_order, *rank_values)
+
+
+def _weakest_success_dimension(row: dict[str, object]) -> tuple[str, float]:
+    dimensions = {
+        "Overall success": float(row["success"]),
+        "Sortie target": float(row["sortie_success"]),
+        "Aircraft availability": float(row["aircraft_success"]),
+        "Commit compliance": float(row["commit_success"]),
+        "Next-Monday recovery": float(row["recovery_success"]),
+        "Backlog control": float(row["backlog_success"]),
+    }
+    return min(dimensions.items(), key=lambda item: item[1])
+
+
+def _risk_meaning(row: dict[str, object]) -> str:
+    key = _risk_key(row["risk_band"])
+    if key == "green":
+        return "The modeled probability is strong under the current assumptions."
+    if key == "yellow":
+        return "The modeled probability is usable, but it should be treated as a watch item."
+    return "The modeled probability is below the normal planning threshold."
+
+
+def _recommendation_meaning(row: dict[str, object], policy: TtpPolicy) -> str:
+    if _is_recommendable(row, policy):
+        return (
+            "This pattern passes the recommendation screen: sortie requirement, aircraft availability, "
+            "commit compliance, recovery, backlog, and operational-shape checks."
+        )
+    return (
+        "This pattern is screened out even if some probabilities look strong. Use it for troubleshooting "
+        "or context, not as the primary recommended pattern."
+    )
+
+
+def _combined_interpretation(row: dict[str, object], policy: TtpPolicy) -> str:
+    recommendable = _is_recommendable(row, policy)
+    risk_key = _risk_key(row["risk_band"])
+    if recommendable and risk_key == "green":
+        return "Best planning posture: high probability and passes the recommendation screen."
+    if recommendable and risk_key == "yellow":
+        return "Usable planning posture: passes the screen, but the margin is thinner."
+    if recommendable:
+        return "Passes the screen but carries low modeled probability; review before using."
+    if risk_key in ("green", "yellow"):
+        return (
+            "Probability is not the issue. The model is blocking this because of a separate recommendation "
+            "screen, usually shape, surge posture, recovery preference, or another operational rule."
+        )
+    return "Both probability and recommendation screening are unfavorable under the current assumptions."
+
+
+def _pattern_interpretation_rows(row: dict[str, object], policy: TtpPolicy) -> list[dict[str, object]]:
+    weakest_name, weakest_value = _weakest_success_dimension(row)
+    blocker = _recommendation_blocker(row)
+    return [
+        {
+            "Risk": _risk_text(row["risk_band"]),
+            "Recommendation Status": _recommendation_status(row, policy),
+            "Topic": "Plain-English Meaning",
+            "Interpretation": _combined_interpretation(row, policy),
+        },
+        {
+            "Risk": _risk_text(row["risk_band"]),
+            "Recommendation Status": _recommendation_status(row, policy),
+            "Topic": "Risk Band",
+            "Interpretation": _risk_meaning(row),
+        },
+        {
+            "Risk": _risk_text(row["risk_band"]),
+            "Recommendation Status": _recommendation_status(row, policy),
+            "Topic": "Recommendation Screen",
+            "Interpretation": _recommendation_meaning(row, policy),
+        },
+        {
+            "Risk": _risk_text(row["risk_band"]),
+            "Recommendation Status": _recommendation_status(row, policy),
+            "Topic": "Main Limiter / Watch Item",
+            "Interpretation": (
+                blocker if blocker != "Passed recommendation screen"
+                else f"Lowest modeled dimension is {weakest_name} at {_pct(weakest_value)}."
+            ),
+        },
+        {
+            "Risk": _risk_text(row["risk_band"]),
+            "Recommendation Status": _recommendation_status(row, policy),
+            "Topic": "How to Use This Row",
+            "Interpretation": (
+                "Compare it against other recommendable candidates at the same PAI and UTE."
+                if _is_recommendable(row, policy)
+                else "Use it to understand what the model rejected and why; do not treat it as the execution recommendation."
+            ),
+        },
+    ]
 
 
 def _pai_values(rows: list[dict[str, object]]) -> list[int]:
@@ -1966,6 +2061,8 @@ with detail:
         selected = options[st.selectbox("Selected Pattern", list(options))]
         st.subheader("Selected Pattern Diagnostic")
         st.markdown(_risk_badge(selected["risk_band"]), unsafe_allow_html=True)
+        st.subheader("Plain-English Interpretation")
+        _show_dataframe(_pattern_interpretation_rows(selected, policy), width="stretch", hide_index=True)
         diag_col, schedule_col = st.columns(2)
         with diag_col:
             st.caption("Component probabilities show which success dimension is carrying or limiting the pattern.")
