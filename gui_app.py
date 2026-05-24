@@ -8,6 +8,11 @@ from random import Random
 import streamlit as st
 
 try:
+    import pandas as pd
+except ImportError:  # Streamlit Cloud includes pandas; local syntax checks may not.
+    pd = None
+
+try:
     from PIL import Image
 except ImportError:  # Streamlit installs Pillow, but keep local checks graceful.
     Image = None
@@ -133,22 +138,6 @@ st.markdown(
     .risk-red {
         background: #b91c1c;
         border: 1px solid #7f1d1d;
-    }
-    .risk-strip {
-        border-left: 0.55rem solid #9ca3af;
-        border-radius: 0.45rem;
-        padding: 0.55rem 0.8rem;
-        margin: 0.35rem 0 0.85rem 0;
-        background: #f9fafb;
-    }
-    .risk-strip-green {
-        border-left-color: #16803c;
-    }
-    .risk-strip-yellow {
-        border-left-color: #b7791f;
-    }
-    .risk-strip-red {
-        border-left-color: #b91c1c;
     }
     </style>
     """,
@@ -744,11 +733,6 @@ def _risk_badge(value: object) -> str:
     return f'<span class="risk-badge risk-{key}">{_risk_text(value)}</span>'
 
 
-def _risk_strip(value: object, text: str) -> str:
-    key = _risk_key(value)
-    return f'<div class="risk-strip risk-strip-{key}">{_risk_badge(value)}&nbsp;&nbsp;{text}</div>'
-
-
 def _risk_legend() -> str:
     return (
         '<div style="margin: 0.35rem 0 0.8rem 0;">'
@@ -757,6 +741,44 @@ def _risk_legend() -> str:
         f'{_risk_badge("Red")}&nbsp; Not recommended'
         "</div>"
     )
+
+
+def _risk_cell_style(value: object) -> str:
+    key = _risk_key(value)
+    styles = {
+        "green": "background-color: #16803c; color: white; font-weight: 800;",
+        "yellow": "background-color: #f6d365; color: #111827; font-weight: 800;",
+        "red": "background-color: #b91c1c; color: white; font-weight: 800;",
+    }
+    return styles[key]
+
+
+def _styled_dataframe(data: object) -> object:
+    if pd is None:
+        return data
+    frame = pd.DataFrame(data)
+    if frame.empty:
+        return frame
+    styler = frame.style
+    risk_columns = [column for column in frame.columns if str(column).lower() == "risk"]
+    for column in risk_columns:
+        if hasattr(styler, "map"):
+            styler = styler.map(_risk_cell_style, subset=[column])
+        else:
+            styler = styler.applymap(_risk_cell_style, subset=[column])
+    if {"Metric", "Value"}.issubset(set(frame.columns)):
+        def style_metric_row(row: object) -> list[str]:
+            is_risk_row = str(row.get("Metric", "")).lower() == "risk"
+            if is_risk_row:
+                return [_risk_cell_style(row.get("Value", "")) for _ in row]
+            return ["" for _ in row]
+
+        styler = styler.apply(style_metric_row, axis=1)
+    return styler
+
+
+def _show_dataframe(data: object, *, width: str = "stretch", hide_index: bool = True) -> None:
+    st.dataframe(_styled_dataframe(data), width=width, hide_index=hide_index)
 
 
 def _manual_interpretation(model_name: str, summary: SimulationSummary) -> str:
@@ -1406,7 +1428,7 @@ def _show_about_page() -> None:
         into the next week.
         """
     )
-    st.dataframe(
+    _show_dataframe(
         [
             {"Output": "Overall Success Probability", "Meaning": "How often the full plan succeeds across all modeled constraints."},
             {"Output": "Sortie Target Met", "Meaning": "How often the required weekly sorties are achieved."},
@@ -1639,14 +1661,14 @@ if page == "Manual Turn Pattern":
             st.warning(result["warnings"])
 
         st.subheader("Results")
-        st.dataframe(_summary_rows(result["summaries"]), width="stretch", hide_index=True)
+        _show_dataframe(_summary_rows(result["summaries"]), width="stretch", hide_index=True)
 
         st.subheader("Interpretation")
-        st.dataframe(_manual_interpretation_rows(result["summaries"]), width="stretch", hide_index=True)
+        _show_dataframe(_manual_interpretation_rows(result["summaries"]), width="stretch", hide_index=True)
 
         st.subheader("Sample Iteration Table")
         selected_model = st.selectbox("Sample Iteration Model", list(result["summaries"]))
-        st.dataframe(
+        _show_dataframe(
             _excel_iteration_table(result["summaries"][selected_model]),
             width="stretch",
             hide_index=True,
@@ -1747,13 +1769,6 @@ with summary:
                 col3.metric("Next Mon MC", f"{float(recommended['avg_next_monday']):.1f}")
                 col4.markdown("**Risk**")
                 col4.markdown(_risk_badge(recommended["risk_band"]), unsafe_allow_html=True)
-                st.markdown(
-                    _risk_strip(
-                        recommended["risk_band"],
-                        "Green is strongest, Yellow is usable with watch items, and Red is not recommended under the current assumptions.",
-                    ),
-                    unsafe_allow_html=True,
-                )
                 if not viable:
                     st.info(
                         "This row is shown because no recommendable pattern passed the current screen for this PAI. "
@@ -1763,12 +1778,12 @@ with summary:
 
                 st.markdown("**Recommendable Options**")
                 if viable:
-                    st.dataframe(_display_rows(_top_pattern_rows(viable)), width="stretch", hide_index=True)
+                    _show_dataframe(_display_rows(_top_pattern_rows(viable)), width="stretch", hide_index=True)
                 else:
                     st.info("No Green/Yellow recommendable options met the current requirement and recovery rules.")
 
                 st.markdown("**Why Candidates Were Not Recommended**")
-                st.dataframe(_failure_readout_rows(pai_rows), width="stretch", hide_index=True)
+                _show_dataframe(_failure_readout_rows(pai_rows), width="stretch", hide_index=True)
 
 with capacity:
     st.subheader("Capacity Readout")
@@ -1776,9 +1791,9 @@ with capacity:
         "This is pure capacity math before Monte Carlo sustainability. Use it to see the normal planning band "
         "and keep max-commit separate from routine sustainment."
     )
-    st.dataframe(_capacity_interpretation_rows(result["capacity_rows"]), width="stretch", hide_index=True)
+    _show_dataframe(_capacity_interpretation_rows(result["capacity_rows"]), width="stretch", hide_index=True)
     st.subheader("Detailed Capacity Table")
-    st.dataframe(_capacity_display_rows(result["capacity_rows"]), width="stretch", hide_index=True)
+    _show_dataframe(_capacity_display_rows(result["capacity_rows"]), width="stretch", hide_index=True)
 
 with patterns:
     recommendable = _recommendable_rows(rows, policy)
@@ -1789,28 +1804,28 @@ with patterns:
         st.caption(
             "This confirms which generated pattern families were included in the candidate set before Monte Carlo ranking."
         )
-        st.dataframe(coverage_rows, width="stretch", hide_index=True)
+        _show_dataframe(coverage_rows, width="stretch", hide_index=True)
     if recommendable:
         st.subheader("Pattern Family Comparison")
         st.caption(
             "This groups candidates by pattern family. If a family has no recommendable option, the representative "
             "pattern is the strongest near-miss from that family and is shown only for context."
         )
-        st.dataframe(_pattern_family_rows(rows, policy), width="stretch", hide_index=True)
+        _show_dataframe(_pattern_family_rows(rows, policy), width="stretch", hide_index=True)
 
         st.subheader("Top Recommendable Pattern by UTE")
         st.caption("One top-scoring pattern per PAI and UTE point after the recommendation screen.")
         best_by_ute = _best_by_ute_rows(rows, policy)
-        st.dataframe(_display_rows(best_by_ute), width="stretch", hide_index=True)
+        _show_dataframe(_display_rows(best_by_ute), width="stretch", hide_index=True)
 
         st.subheader("All Recommendable Pattern Candidates")
         st.caption("These patterns passed the success, recovery, backlog, commit, and operational-shape screens.")
-        st.dataframe(_display_rows(recommendable), width="stretch", hide_index=True)
+        _show_dataframe(_display_rows(recommendable), width="stretch", hide_index=True)
     else:
         st.warning("No recommendable patterns were found under the current assumptions.")
         st.subheader("Pattern Family Near-Miss Readout")
         st.caption("These are representative near-miss candidates by family; they are not recommended for execution.")
-        st.dataframe(_pattern_family_rows(rows, policy), width="stretch", hide_index=True)
+        _show_dataframe(_pattern_family_rows(rows, policy), width="stretch", hide_index=True)
 
 with surge:
     st.info(
@@ -1824,7 +1839,7 @@ with surge:
             "Sustained Through Week is the last consecutive week that met the surge screen: overall success, "
             "next-Monday recovery, and backlog control."
         )
-        st.dataframe(_surge_summary_rows(surge_rows, policy), width="stretch", hide_index=True)
+        _show_dataframe(_surge_summary_rows(surge_rows, policy), width="stretch", hide_index=True)
 
         st.subheader("Visual Trend")
         success_chart, recovery_chart = st.columns(2)
@@ -1850,14 +1865,14 @@ with surge:
             "This isolates the first unacceptable week for each PAI and recovery model. If no week fails, "
             "the weakest modeled week is shown as a watch item."
         )
-        st.dataframe(_surge_failure_rows(surge_rows, policy), width="stretch", hide_index=True)
+        _show_dataframe(_surge_failure_rows(surge_rows, policy), width="stretch", hide_index=True)
 
         st.subheader("Week-by-Week Detail")
         st.caption(
             "Max surge uses true max-commit front-line scheduling: committed aircraft x flying days. "
             "Weeks 2-5 apply increasing break stress and reduced fix effectiveness."
         )
-        st.dataframe(_surge_display_rows(surge_rows), width="stretch", hide_index=True)
+        _show_dataframe(_surge_display_rows(surge_rows), width="stretch", hide_index=True)
     else:
         st.info("Run the model to calculate max-commit surge weeks.")
 
@@ -1870,19 +1885,19 @@ with diagnostics:
         "or the operational-shape screen."
     )
     st.subheader("Candidate Pass/Reject Summary")
-    st.dataframe(_diagnostic_pai_rows(rows, policy), width="stretch", hide_index=True)
+    _show_dataframe(_diagnostic_pai_rows(rows, policy), width="stretch", hide_index=True)
 
     failures = _failure_mode_rows(rows, policy)
     if failures:
         st.subheader("Not-Recommended Reason Readout")
         st.caption("This shows why candidates were screened out. High counts indicate the active limiting factor.")
-        st.dataframe(failures, width="stretch", hide_index=True)
+        _show_dataframe(failures, width="stretch", hide_index=True)
     else:
         st.success("No rejected candidates under the current recommendation screen.")
 
     st.subheader("All Candidate Details")
     st.caption("This includes recommendable and non-recommended candidates. Use Recommendation Screen before treating a row as viable.")
-    st.dataframe(_display_rows(rows), width="stretch", hide_index=True)
+    _show_dataframe(_display_rows(rows), width="stretch", hide_index=True)
 
 with detail:
     if rows:
@@ -1895,17 +1910,11 @@ with detail:
         }
         selected = options[st.selectbox("Selected Pattern", list(options))]
         st.subheader("Selected Pattern Diagnostic")
-        st.markdown(
-            _risk_strip(
-                selected["risk_band"],
-                f"{selected['pattern_with_frontlines']} at {float(selected['success']):.1%} overall success.",
-            ),
-            unsafe_allow_html=True,
-        )
+        st.markdown(_risk_badge(selected["risk_band"]), unsafe_allow_html=True)
         diag_col, schedule_col = st.columns(2)
         with diag_col:
             st.caption("Component probabilities show which success dimension is carrying or limiting the pattern.")
-            st.dataframe(
+            _show_dataframe(
                 [
                     {"Metric": row["Metric"], "Probability": _pct(float(row["Probability"]))}
                     for row in _detail_probability_rows(selected)
@@ -1918,7 +1927,7 @@ with detail:
             st.bar_chart(_detail_daily_sortie_rows(selected, policy), x="Day", y="Daily Sorties")
 
         st.subheader("Selected Pattern Metrics")
-        st.dataframe(_detail_rows(selected), width="stretch", hide_index=True)
+        _show_dataframe(_detail_rows(selected), width="stretch", hide_index=True)
 
         st.subheader("Recovery Model Comparison")
         st.caption("Reruns the selected pattern under both recovery assumptions using the current sidebar inputs.")
@@ -1952,4 +1961,4 @@ with detail:
 
         comparison = st.session_state.get("detail_recovery_comparison")
         if comparison:
-            st.dataframe(_recovery_delta_rows(comparison["summaries"]), width="stretch", hide_index=True)
+            _show_dataframe(_recovery_delta_rows(comparison["summaries"]), width="stretch", hide_index=True)
