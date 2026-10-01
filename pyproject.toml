@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tps-core"
+dynamic = ["version"]
+description = "Turn Pattern Sustainability model: go-level Monte Carlo of a weekly flying schedule."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools]
+packages = ["tps_core"]
+
+[tool.setuptools.dynamic]
+version = { attr = "tps_core.version.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests_core"]

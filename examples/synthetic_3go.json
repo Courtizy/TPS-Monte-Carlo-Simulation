@@ -1,0 +1,108 @@
+{
+  "schema": "tps-core/1",
+  "name": "Synthetic 3-go unit",
+  "notes": "SYNTHETIC VALUES ONLY. A 3-go day with short turns, to show the go profile and short fix windows.",
+  "inventory": {
+    "pai": 24
+  },
+  "rates": {
+    "mc_rate": 0.72,
+    "break_rate": 0.2,
+    "ground_abort_rate": 0.04,
+    "fix_windows": [
+      {
+        "hours": 2,
+        "rate": 0.25
+      },
+      {
+        "hours": 4,
+        "rate": 0.42
+      },
+      {
+        "hours": 8,
+        "rate": 0.6
+      },
+      {
+        "hours": 12,
+        "rate": 0.7
+      },
+      {
+        "hours": 24,
+        "rate": 0.82
+      }
+    ]
+  },
+  "rules": {
+    "commit_rate": 0.55,
+    "spare_rate": 0.15,
+    "flying_days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+    ],
+    "recovery_days": [
+      "Sat",
+      "Sun",
+      "Next Mon"
+    ],
+    "long_fix_start_day": "Tue",
+    "first_day_fix_hours": 8
+  },
+  "schedule": {
+    "Mon": {
+      "first_go": 6,
+      "second_go": 4,
+      "third_go": 2
+    },
+    "Tue": {
+      "first_go": 6,
+      "second_go": 4,
+      "third_go": 2
+    },
+    "Wed": {
+      "first_go": 6,
+      "second_go": 4,
+      "third_go": 2
+    },
+    "Thu": {
+      "first_go": 6,
+      "second_go": 4,
+      "third_go": 2
+    },
+    "Fri": {
+      "first_go": 6,
+      "second_go": 4,
+      "third_go": 2
+    }
+  },
+  "sute": {
+    "monthly_sorties_per_aircraft": 12,
+    "om_days": 30,
+    "surge_ceiling": null
+  },
+  "success": {
+    "minimum_monday_aircraft": null,
+    "backlog_threshold": null
+  },
+  "options": {
+    "event_mode": "Fixed Count Random Placement",
+    "fix_mode": "Random",
+    "allow_2407_adds": false,
+    "weekend_coverage_hours": {
+      "Sat": 8,
+      "Sun": 0
+    },
+    "repeat_rate": 0.05,
+    "recur_rate": 0.05,
+    "go_profile": {
+      "goes_per_day": 3,
+      "sortie_hours": 1.5,
+      "turn_hours": 3
+    }
+  },
+  "sources": {
+    "everything": "Synthetic placeholder values for illustration."
+  }
+}
