@@ -146,7 +146,8 @@ def _counts(values) -> dict[str, int]:
 
 
 def summarize(weeks: list[tuple[list[dict], dict]], flying_days: tuple[str, ...], all_days: tuple[str, ...],
-              sute_target: float | None = None, sute_ceiling: float | None = None) -> dict[str, Any]:
+              sute_target: float | None = None, sute_ceiling: float | None = None,
+              sute_basis: str = "sute") -> dict[str, Any]:
     """Metrics for a run. Contains no timestamps, so it can be fingerprinted."""
     scores = [score_week(days, week, flying_days) for days, week in weeks]
     n = len(scores)
@@ -226,7 +227,7 @@ def summarize(weeks: list[tuple[list[dict], dict]], flying_days: tuple[str, ...]
         "causes": _causes(scores, failed),
         "weakest_day": _weakest_day(daily, flying_days),
         "goes": _by_go(weeks, flying_days, scores),
-        "sute": _sute(weeks, flying_days, scores, sute_target, sute_ceiling),
+        "sute": _sute(weeks, flying_days, scores, sute_target, sute_ceiling, sute_basis),
     }
     metrics["summary_text"] = plain_summary(metrics)
     return metrics
@@ -260,12 +261,15 @@ def _by_go(weeks, flying_days, scores) -> dict[str, Any]:
 
 
 # [M-7]
-def _sute(weeks, flying_days, scores, target, ceiling) -> dict[str, Any]:
-    """Daily SUTE per PAI across the flying days: scheduled and actually flown."""
+def _sute(weeks, flying_days, scores, target, ceiling, basis="sute") -> dict[str, Any]:
+    """Daily SUTE per PAI across the flying days, and sorties per aircraft per week [M-7] [M-9]."""
+    from tps_core.tempo import DAYS_PER_WEEK, home_requirements
     pai = weeks[0][0][0]["pai"]
     per = pai * len(flying_days)
     flown = [s["total_sorties"] / per for s in scores]
     planned = scores[0]["planned_sorties"] / per
+    per_aircraft = [s["total_sorties"] / pai for s in scores]
+    deployed_per_aircraft = target * DAYS_PER_WEEK if target else None
     return {
         "planned": planned,
         "flown": _distribution(flown),
@@ -273,6 +277,15 @@ def _sute(weeks, flying_days, scores, target, ceiling) -> dict[str, Any]:
         "ceiling": ceiling,
         "share_weeks_meeting_target": _share(f >= target - 1e-9 for f in flown) if target else None,
         "planned_above_ceiling": planned > ceiling + 1e-9 if ceiling else None,
+        "per_aircraft": {
+            "planned": scores[0]["planned_sorties"] / pai,
+            "flown": _distribution(per_aircraft),
+            "deployed": deployed_per_aircraft,
+            "share_weeks_meeting_deployed": _share(p >= deployed_per_aircraft - 1e-9 for p in per_aircraft)
+            if deployed_per_aircraft else None,
+        },
+        "requirements": home_requirements(target, pai, len(flying_days)) if target else None,
+        "requirement_basis": basis,
     }
 
 

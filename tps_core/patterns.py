@@ -285,6 +285,7 @@ def _candidate(family, totals, splits, style, target, days, per_day_pai, weekly)
         "target": target,
         "weekly_sorties": weekly,
         "sute": weekly / per_day_pai,
+        "per_aircraft": weekly / (per_day_pai / len(days)),
         "patch": {
             "schedule": {d: {**{GO_NAMES[i]: s[i] for i in range(4)}, "spares": None} for d, s in zip(days, splits)},
             # [P-5]

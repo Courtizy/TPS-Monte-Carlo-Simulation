@@ -43,9 +43,27 @@ Each config describes one unit's pattern. The three synthetic examples show a 2-
 | `rates.fix_windows` | Cumulative fix rates as `[{"hours": 4, "rate": 0.45}, ...]`. Any hours, rising. Not fixed within the longest window means down for the week. The older `fix_8hr_rate`/`fix_12hr_rate`/`fix_24hr_rate` fields still work. |
 | `rules.first_day_fix_hours` | On the first flying day, fixes longer than this wait for the next day (8 by default). |
 | `rules.standard_patterns` | Optional MAJCOM standard turn patterns, like `[[8, 6, 4], [6, 4]]`. When set, plans are checked against them and the sustainable-plan search tries only these. |
-| `sute` | `monthly_sorties_per_aircraft` and `om_days` set the deployed daily SUTE; `surge_ceiling` is optional. Leave out `required_sorties` to work the weekly requirement out as SUTE × PAI × flying days. |
+| `sute` | Deployed tempo from any figures you have: `possessed_aircraft`, `om_days`, `sorties`, `possessed_aircraft_days`, `sorties_per_om_day`, `avg_sorties_per_aircraft` (or `monthly_sorties_per_aircraft`), or `sute` itself. Any set that pins down the SUTE works; three independent figures recover aircraft, days, and sorties too. `surge_ceiling` is optional. Leave out `required_sorties` to set the weekly requirement from the tempo; `requirement_basis` chooses matching SUTE (`"sute"`, the default) or sorties per aircraft (`"per_aircraft"`). Results show both side by side. |
 
 Day-based patterns only for now: every sortie launches and lands at home the same day. Long sorties that cross midnight or leave the aircraft off-station (mobility, bomber) are a later phase.
+
+## Page layout
+
+Setup sections (weekly plan, how your unit flies, deployed tempo, rates, rules, how the week plays out) are collapsible; each shows a one-line summary when closed, and the weekly plan starts open. After a run, the setup folds into a single line with an **Edit plan** button so the results use the full width.
+
+Deployed tempo takes three inputs: deployed aircraft (PAA), O&M days, and sorties. SUTE, aircraft days, sorties per O&M day, and average sorties per aircraft are calculated and shown. Configs that recorded other figures still load; their worked-out aircraft, days, and sorties appear greyed in the inputs.
+
+## Three views of the same run
+
+A toggle at the top of the results switches depth without changing the run:
+
+| View | Shows |
+| --- | --- |
+| Leadership | A decision brief: the verdict, what to change ranked by payoff (fixes run automatically), and where resources matter; plus where the plan runs tight and the fixes table. |
+| Planner (default) | Everything: summary, where the plan runs tight (with goes and SUTE), why sorties are lost, watch a week, fixes, and the turn-pattern search. |
+| Analyst | Everything in the planner view, plus inputs and their sources, the run record, and all the numbers opened up. |
+
+Anyone can switch views at any time, and every view shows the same seed and model version, so a recommendation can always be traced to its evidence. The choice is remembered in the browser.
 
 ## Reading the results
 

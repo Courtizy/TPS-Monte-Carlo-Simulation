@@ -1,6 +1,6 @@
 # TPS Model Logic
 
-**Turn Pattern Sustainability, model `tps_core` 0.5**
+**Turn Pattern Sustainability, model `tps_core` 0.7**
 
 TPS answers one planning question: **can this unit fly this weekly schedule, week after week, without running out of aircraft?** It plays the week out thousands of times. Each time, breaks, aborts, and fixes land differently, and the model counts how often the plan holds up and why it fails when it doesn't.
 
@@ -310,20 +310,44 @@ The go with the lowest share flown is reported as the weakest go.
 **Test:** `test_per_go_counts_and_turn_success`.
 
 ### M-7: Training tempo (SUTE)
-**Source:** Unit convention: train like you fight, flying at or slightly above the deployed tempo at home, measured per PAI. Command supplements define UTE as average sorties per PAI.
-**Rule:**
+**Source:** Unit convention: train like you fight, flying at or slightly above the deployed tempo at home, measured per PAI; show the match by SUTE and by sorties per aircraft side by side. Command supplements define UTE as average sorties per PAI.
+**Rule:** The deployed SUTE comes from whatever figures are given (M-9). At home:
 
-$$SUTE_{deployed} = \frac{\text{sorties per aircraft per month}}{\text{O\&M days}}, \qquad SUTE_{home} = \frac{\text{weekly sorties}}{PAI \times \text{flying days}}$$
+$$SUTE_{home} = \frac{\text{weekly sorties}}{PAI \times \text{flying days}}, \qquad \text{per aircraft}_{home} = \frac{\text{weekly sorties}}{PAI}$$
 
-If the weekly requirement isn't entered, it's worked out as $\lceil SUTE_{deployed} \times PAI \times \text{flying days} \rceil$. Results show planned SUTE, the SUTE actually flown, and how often flown SUTE meets the deployed target. A surge ceiling is an optional input; plans above it get a warning.
-**Code:** `schemas.py` → `deployed_sute`, `required_from_sute`; `metrics.py` → `_sute`.
-**Test:** `test_sute_math_and_derived_requirement`.
+Deployed operations run every O&M day, so deployed sorties per aircraft per week is $SUTE_{deployed} \times 7$. Two weekly requirements follow:
+
+$$\text{match SUTE} = \lceil SUTE_{deployed} \times PAI \times \text{flying days} \rceil, \qquad \text{match per aircraft} = \lceil SUTE_{deployed} \times 7 \times PAI \rceil$$
+
+If the requirement isn't entered, the chosen basis (SUTE by default) sets it. Results show deployed, planned, and flown values side by side for both measures, and how often each is met. A surge ceiling is an optional input; plans above it get a warning.
+**Code:** `schemas.py` → `deployed_sute`, `required_from_sute`; `tempo.py` → `home_requirements`; `metrics.py` → `_sute`.
+**Test:** `test_sute_math_and_derived_requirement`, `test_both_home_requirements`.
 
 ### M-8: Risk labels
 **Source:** Unit convention (risk bands carried over from the original TPS) and model choice (day-risk shading).
 **Rule:** Overall success is labeled Green (85% or more), Yellow (70% or more), Orange (55% or more), or Red. The day-risk strip shades each day by its chance of missing its plan: under 2% low, 2–10% watch, 10% or more high. The weakest day is the flying day most likely to miss its plan.
 **Code:** `rules.py` → `risk_band`; `metrics.py` → `_weakest_day`.
 **Test:** `test_risk_bands`.
+
+### M-9: Deployed tempo from aircraft, O&M days, and sorties
+**Source:** Unit convention: deployed aircraft (PAA), O&M days, and sorties are the easiest figures to gather; the rest are calculated from them.
+**Rule:** The form asks for deployed aircraft *A* (the PAA that deployed), O&M days *D*, and sorties *S*, and shows the calculated figures: SUTE $= S / (A \times D)$, aircraft days $= A \times D$, sorties per O&M day $= S / D$, and avg sorties per aircraft $= S / A$. For example, 11 aircraft, 7 days, and 31 sorties give 77 aircraft days, 4.4 sorties per day, 2.8 per aircraft, and SUTE 0.40.
+
+Configs that recorded other figures still work. Each figure ties together *A*, *D*, and *S*, and in logs each becomes a straight line:
+
+| Figure | Means | In logs |
+| --- | --- | --- |
+| Possessed aircraft | *A* | *a* |
+| O&M days | *D* | *d* |
+| Sorties | *S* | *s* |
+| Possessed aircraft days | *A × D* | *a + d* |
+| Sorties per O&M day | *S / D* | *s − d* |
+| Avg sorties per aircraft | *S / A* | *s − a* |
+| SUTE | *S / (A × D)* | *s − a − d* |
+
+Any figures whose lines combine to *s − a − d* give the SUTE; three independent figures also recover *A*, *D*, and *S*. Rounded report figures that disagree are fit by least squares and the largest disagreement is shown. Figures that can't pin down a SUTE are rejected with a note saying what to add. The older "sorties per aircraft per month" input is the same as avg sorties per aircraft.
+**Code:** `tempo.py` → `solve_tempo`; `schemas.py` → `_validate_sute`.
+**Test:** `test_tempo_from_any_figures`.
 
 ---
 

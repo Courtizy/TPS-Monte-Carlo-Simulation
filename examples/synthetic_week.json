@@ -68,8 +68,9 @@
     }
   },
   "sute": {
-    "monthly_sorties_per_aircraft": 12,
+    "possessed_aircraft": 18,
     "om_days": 30,
+    "sorties": 216,
     "surge_ceiling": 0.52
   },
   "success": {
@@ -93,6 +94,7 @@
     }
   },
   "sources": {
-    "everything": "Synthetic placeholder values for illustration."
+    "everything": "Synthetic placeholder values for illustration.",
+    "sute": "Synthetic deployed figures: aircraft (PAA), O&M days, and sorties."
   }
 }

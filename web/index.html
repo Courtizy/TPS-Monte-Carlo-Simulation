@@ -36,8 +36,18 @@
 
   <main class="layout">
     <section class="plan no-print" aria-labelledby="plan-heading">
-      <h2 id="plan-heading">Weekly plan</h2>
-
+      <div class="plan-bar" id="plan-bar">
+        <div class="plan-bar-text">
+          <span class="plan-bar-name" id="plan-bar-name"></span>
+          <span class="plan-bar-sum" id="plan-bar-sum"></span>
+        </div>
+        <button type="button" id="edit-plan" class="secondary">Edit plan</button>
+      </div>
+      <div class="plan-body">
+      <h2 id="plan-heading">Plan setup</h2>
+      <details class="section" data-sec="plan" open>
+        <summary><span class="sec-title">Weekly plan</span><span class="sec-sum" id="sum-plan"></span></summary>
+        <div class="sec-body">
       <div class="row-fields">
         <label class="field field-wide">Plan name
           <input id="name" type="text" autocomplete="off">
@@ -46,7 +56,6 @@
           <select id="example-picker"></select>
         </label>
       </div>
-
       <div class="row-fields">
         <label class="field">Aircraft assigned (PAI)
           <input id="pai" type="number" min="1" step="1" inputmode="numeric">
@@ -56,9 +65,19 @@
         </label>
         <label class="check align-end"><input id="required_from_sute" type="checkbox"> Work out from SUTE</label>
       </div>
-
-      <fieldset>
-        <legend>How your unit flies</legend>
+      <div class="board-wrap">
+        <table class="plan-grid" aria-describedby="grid-note">
+          <thead><tr id="grid-head"></tr></thead>
+          <tbody id="grid-body"></tbody>
+          <tfoot><tr id="grid-foot"></tr></tfoot>
+        </table>
+        <p id="grid-note" class="note">Grey spares are worked out from the spare rate; type a number to override. Later goes fly with aircraft from earlier goes that day.</p>
+      </div>
+        </div>
+      </details>
+      <details class="section" data-sec="unit">
+        <summary><span class="sec-title">How your unit flies</span><span class="sec-sum" id="sum-unit"></span></summary>
+        <div class="sec-body">
         <div class="rate-grid">
           <label class="field">Goes per day
             <select id="goes_per_day">
@@ -73,35 +92,38 @@
           </label>
         </div>
         <p id="go-times-note" class="note"></p>
-      </fieldset>
-
-      <div class="board-wrap">
-        <table class="plan-grid" aria-describedby="grid-note">
-          <thead><tr id="grid-head"></tr></thead>
-          <tbody id="grid-body"></tbody>
-          <tfoot><tr id="grid-foot"></tr></tfoot>
-        </table>
-        <p id="grid-note" class="note">Grey spares are worked out from the spare rate; type a number to override. Later goes fly with aircraft from earlier goes that day.</p>
-      </div>
-
-      <fieldset>
-        <legend>Training tempo (SUTE)</legend>
+        </div>
+      </details>
+      <details class="section" data-sec="tempo">
+        <summary><span class="sec-title">Deployed tempo (SUTE)</span><span class="sec-sum" id="sum-tempo"></span></summary>
+        <div class="sec-body">
+        <p class="note">Enter the deployed aircraft (PAA), O&amp;M days, and sorties. The rest is calculated.</p>
         <div class="rate-grid">
-          <label class="field">Sorties per aircraft per month, deployed
-            <input id="sute_monthly" type="number" min="0" step="0.5" inputmode="decimal">
+          <label class="field">Deployed aircraft (PAA)
+            <input id="t_possessed_aircraft" data-tempo="possessed_aircraft" type="number" min="0" step="1" inputmode="numeric">
           </label>
-          <label class="field">O&amp;M days per month, deployed
-            <input id="sute_days" type="number" min="1" step="1" inputmode="numeric">
+          <label class="field">O&amp;M days
+            <input id="t_om_days" data-tempo="om_days" type="number" min="0" step="1" inputmode="numeric">
+          </label>
+          <label class="field">Sorties
+            <input id="t_sorties" data-tempo="sorties" type="number" min="0" step="1" inputmode="numeric">
           </label>
           <label class="field">Surge ceiling (optional)
             <input id="sute_ceiling" type="number" min="0" step="0.01" inputmode="decimal" placeholder="None">
           </label>
+          <label class="field">Home requirement matches
+            <select id="sute_basis">
+              <option value="sute">Deployed SUTE</option>
+              <option value="per_aircraft">Deployed sorties per aircraft</option>
+            </select>
+          </label>
         </div>
-        <p id="sute-note" class="note"></p>
-      </fieldset>
-
-      <fieldset>
-        <legend>Rates (monthly averages)</legend>
+        <div id="tempo-out" class="tempo-out" aria-live="polite"></div>
+        </div>
+      </details>
+      <details class="section" data-sec="rates">
+        <summary><span class="sec-title">Rates (monthly averages)</span><span class="sec-sum" id="sum-rates"></span></summary>
+        <div class="sec-body">
         <div class="rate-grid">
           <label class="field">Mission capable
             <span class="pct"><input id="mc_rate" type="number" min="0" max="100" step="0.1" inputmode="decimal"><span>%</span></span>
@@ -120,10 +142,11 @@
           <tbody id="window-body"></tbody>
         </table>
         <button type="button" id="add-window" class="secondary small">Add a fix window</button>
-      </fieldset>
-
-      <fieldset>
-        <legend>Rules</legend>
+        </div>
+      </details>
+      <details class="section" data-sec="rules">
+        <summary><span class="sec-title">Rules</span><span class="sec-sum" id="sum-rules"></span></summary>
+        <div class="sec-body">
         <div class="rate-grid">
           <label class="field">Commit rate
             <span class="pct"><input id="commit_rate" type="number" min="0" max="100" step="0.1" inputmode="decimal"><span>%</span></span>
@@ -135,10 +158,11 @@
             <input id="first_day_fix_hours" type="number" min="0" step="1" inputmode="numeric">
           </label>
         </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>How the week plays out</legend>
+        </div>
+      </details>
+      <details class="section" data-sec="week">
+        <summary><span class="sec-title">How the week plays out</span><span class="sec-sum" id="sum-week"></span></summary>
+        <div class="sec-body">
         <div class="rate-grid">
           <label class="field">Where breaks land
             <select id="event_mode">
@@ -167,8 +191,8 @@
           </label>
         </div>
         <label class="check"><input id="allow_2407_adds" type="checkbox"> Allow 2407 adds (unplanned aircraft cover losses)</label>
-      </fieldset>
-
+        </div>
+      </details>
       <details class="advanced">
         <summary>Edit the full config</summary>
         <p class="note">Everything the model uses, including fields not shown above. Apply to load it into the form.</p>
@@ -179,9 +203,6 @@
           <label class="secondary file-button">Open a config file<input id="open-config" type="file" accept=".json,application/json"></label>
         </div>
       </details>
-
-      <div id="messages" class="messages" aria-live="polite"></div>
-
       <div class="run-bar">
         <label class="field">Weeks to simulate
           <select id="iterations">
@@ -195,6 +216,8 @@
         </label>
         <button type="button" id="run" class="primary" disabled>Simulate 10,000 weeks</button>
       </div>
+      </div>
+      <div id="messages" class="messages" aria-live="polite"></div>
     </section>
 
     <section class="results" aria-labelledby="results-heading">

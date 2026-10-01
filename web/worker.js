@@ -23,12 +23,13 @@ self.onmessage = async (event) => {
     let text;
     if (type === "info") text = api.build_info();
     else if (type === "check") text = api.check(payload.config);
-    else if (type === "run") text = api.run(payload.config, payload.iterations, payload.seed ?? null);
+    else if (type === "run") text = api.run(payload.config, payload.iterations, payload.seed ?? undefined);
     else if (type === "verify") text = api.verify(payload.record);
-    else if (type === "sweep_jobs") text = api.sweep_jobs(payload.config, payload.variants, payload.seed ?? null);
+    else if (type === "sweep_jobs") text = api.sweep_jobs(payload.config, payload.variants, payload.seed ?? undefined);
     else if (type === "levers") text = api.levers(payload.config, payload.metrics);
     else if (type === "candidates") text = api.candidates(payload.config);
     else if (type === "patterns_generate") text = api.patterns_generate(payload.config, payload.options);
+    else if (type === "tempo") text = api.tempo(payload.sute, payload.pai, payload.days);
     else if (type === "replay") text = api.replay(payload.config, payload.seed, payload.week);
     else if (type === "patterns_analyze") text = api.patterns_analyze(payload.config, payload.results, payload.target);
     else throw new Error(`Unknown request: ${type}`);

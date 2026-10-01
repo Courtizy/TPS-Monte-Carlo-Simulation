@@ -104,7 +104,8 @@ class Scenario:
     options: Options = field(default_factory=Options)
     minimum_monday_aircraft: int | None = None
     backlog_threshold: int | None = None  # None = backlog reported, not pass/fail
-    sute_target: float | None = None      # deployed daily SUTE: monthly sorties per aircraft / O&M days
+    sute_target: float | None = None      # deployed daily SUTE, from whatever figures were given [M-9]
+    sute_basis: str = "sute"              # what the home requirement matches: "sute" or "per_aircraft"
     sute_ceiling: float | None = None     # surge capacity, if the unit sets one
     required_from_sute: bool = False
 
@@ -353,16 +354,26 @@ def _validate_profile(profile: Any) -> list[str]:
 
 
 def _validate_sute(sute: Any) -> list[str]:
+    """Deployed tempo may be given by any figures that pin down a SUTE [M-9]."""
+    from tps_core.tempo import ALIASES, FIGURES, solve_tempo
     if sute is None:
         return []
-    if not isinstance(sute, dict) or set(sute) - {"monthly_sorties_per_aircraft", "om_days", "surge_ceiling"}:
-        return ["sute may hold monthly_sorties_per_aircraft, om_days, and surge_ceiling"]
+    allowed = set(FIGURES) | set(ALIASES) | {"surge_ceiling", "requirement_basis"}
+    if not isinstance(sute, dict) or set(sute) - allowed:
+        return ["sute may hold possessed_aircraft, om_days, sorties, possessed_aircraft_days, sorties_per_om_day, "
+                "avg_sorties_per_aircraft (or monthly_sorties_per_aircraft), sute, surge_ceiling, and requirement_basis"]
     errors = []
-    for key in ("monthly_sorties_per_aircraft", "om_days"):
-        if not (_num(sute.get(key)) and sute[key] > 0):
+    for key, value in sute.items():
+        if key in ("surge_ceiling", "requirement_basis"):
+            continue
+        if value is not None and not (_num(value) and value > 0):
             errors.append(f"sute.{key} must be a positive number")
     if sute.get("surge_ceiling") is not None and not (_num(sute["surge_ceiling"]) and sute["surge_ceiling"] > 0):
         errors.append("sute.surge_ceiling must be a positive number or null")
+    if sute.get("requirement_basis", "sute") not in ("sute", "per_aircraft"):
+        errors.append('sute.requirement_basis must be "sute" or "per_aircraft"')
+    if not errors and solve_tempo(sute)["sute"] is None:
+        errors.append("These deployed figures don't pin down a SUTE. Add one more, such as O&M days or possessed aircraft.")
     return errors
 
 
@@ -379,14 +390,18 @@ def profile_go_times(goes: int, sortie_hours: float, turn_hours: float) -> tuple
 
 # [M-7]
 def deployed_sute(config: dict[str, Any]) -> float | None:
+    from tps_core.tempo import solve_tempo
     sute = config.get("sute")
-    return None if not sute else sute["monthly_sorties_per_aircraft"] / sute["om_days"]
+    return None if not sute else solve_tempo(sute)["sute"]
 
 
 def required_from_sute(config: dict[str, Any]) -> int:
-    """Weekly required sorties at the deployed daily SUTE: SUTE x PAI x flying days."""
+    """Weekly required sorties at the deployed tempo, matched by SUTE (default) or by sorties per aircraft [M-7]."""
+    from tps_core.tempo import home_requirements
     days = len(config.get("rules", {}).get("flying_days", DEFAULT_FLYING_DAYS))
-    return math.ceil(round(deployed_sute(config) * config["inventory"]["pai"] * days, 9))
+    both = home_requirements(deployed_sute(config), config["inventory"]["pai"], days)
+    basis = (config.get("sute") or {}).get("requirement_basis", "sute")
+    return both["match_per_aircraft" if basis == "per_aircraft" else "match_sute"]
 
 
 # ---------------------------------------------------------------- loading
@@ -426,6 +441,7 @@ def load_scenario(config: dict[str, Any]) -> Scenario:
         backlog_threshold=success.get("backlog_threshold"),
         sute_target=deployed_sute(config),
         sute_ceiling=(config.get("sute") or {}).get("surge_ceiling"),
+        sute_basis=(config.get("sute") or {}).get("requirement_basis", "sute"),
         required_from_sute="required_sorties" not in config,
     )
 

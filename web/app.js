@@ -173,10 +173,17 @@ function configToForm(cfg) {
   $("goes_per_day").value = String(profile.goes_per_day);
   $("sortie_hours").value = profile.sortie_hours;
   $("turn_hours").value = profile.turn_hours;
-  const sute = cfg.sute || {};
-  $("sute_monthly").value = sute.monthly_sorties_per_aircraft ?? "";
-  $("sute_days").value = sute.om_days ?? "";
+  const sute = { ...(cfg.sute || {}) };
+  if (sute.paa !== undefined && sute.possessed_aircraft === undefined) sute.possessed_aircraft = sute.paa;
+  if (sute.deployed_aircraft !== undefined && sute.possessed_aircraft === undefined) sute.possessed_aircraft = sute.deployed_aircraft;
+  document.querySelectorAll("[data-tempo]").forEach((input) => { input.value = sute[input.dataset.tempo] ?? ""; });
+  // Configs that recorded other figures keep them until the three inputs are typed in.
+  preservedTempo = {};
+  if (![...document.querySelectorAll("[data-tempo]")].some((i) => i.value !== "")) {
+    for (const [k, v] of Object.entries(cfg.sute || {})) if (!["surge_ceiling", "requirement_basis"].includes(k) && v !== null) preservedTempo[k] = v;
+  }
   $("sute_ceiling").value = sute.surge_ceiling ?? "";
+  $("sute_basis").value = sute.requirement_basis || "sute";
   const derived = !("required_sorties" in cfg) && Boolean(cfg.sute);
   $("required_from_sute").checked = derived;
   $("required").value = derived ? "" : (cfg.required_sorties ?? "");
@@ -214,9 +221,9 @@ function formToConfig() {
   delete cfg.options.go_times;
   cfg.options.go_profile = { goes_per_day: goes, sortie_hours: numberOr("sortie_hours", 0), turn_hours: numberOr("turn_hours", 0) };
 
-  const monthly = numberOr("sute_monthly", null), days = numberOr("sute_days", null);
-  if (monthly !== null && days !== null) {
-    cfg.sute = { monthly_sorties_per_aircraft: monthly, om_days: days, surge_ceiling: numberOr("sute_ceiling", null) };
+  const tempo = tempoBlock();
+  if (Object.keys(tempo).length) {
+    cfg.sute = { ...tempo, surge_ceiling: numberOr("sute_ceiling", null), requirement_basis: $("sute_basis").value };
   } else {
     delete cfg.sute;
   }
@@ -289,21 +296,110 @@ function updateTotals() {
     ? `These goes need ${dayLength} hours, more than one day. Shorten the sorties or turns.`
     : `Launches at ${times.map(([launch]) => clock(launch)).join(", ")} after the first launch; the last go lands at ${clock(dayLength)}.`;
 
-  const monthly = numberOr("sute_monthly", null), omDays = numberOr("sute_days", null);
-  const ceiling = numberOr("sute_ceiling", null);
   const derivedBox = $("required_from_sute");
-  derivedBox.disabled = monthly === null || omDays === null;
-  if (derivedBox.disabled) derivedBox.checked = false;
-  $("required").disabled = derivedBox.checked;
-  if (monthly !== null && omDays) {
-    const target = monthly / omDays;
-    const required = Math.ceil(Math.round(target * pai * days * 1e9) / 1e9);
-    if (derivedBox.checked) $("required").value = String(required);
-    $("sute-note").textContent = `Deployed SUTE ${target.toFixed(2)}, so ${required} sorties a week at home. This plan: ${planned.toFixed(2)}` +
-      (ceiling ? `, ${planned > ceiling ? "above" : "within"} the ${ceiling.toFixed(2)} surge ceiling.` : ".");
-  } else {
-    $("sute-note").textContent = `This plan flies a daily SUTE of ${planned.toFixed(2)} per PAI. Add the deployed tempo to compare.`;
-  }
+  const hasTempo = Object.keys(tempoBlock()).length > 0;
+  derivedBox.disabled = !hasTempo;   // keep the choice while the fields are being retyped
+  $("required").disabled = derivedBox.checked && hasTempo;
+  scheduleTempo(planned, weekly, pai, days);
+  updateSummaries();
+}
+
+let preservedTempo = {};
+let lastTempo = null;
+function updateSummaries() {
+  const set = (id, text) => { const node = $(id); if (node) node.textContent = text; };
+  const goes = Number($("goes_per_day").value);
+  let weekly = 0;
+  $("grid-body").querySelectorAll("input").forEach((i) => { if (i.dataset.field !== "spares") weekly += Number(i.value || 0); });
+  const pai = numberOr("pai", 0);
+  const required = $("required").value;
+  set("sum-plan", `${pai} PAI, ${weekly} sorties, ${required ? `${required} required` : "no requirement set"}`);
+  set("sum-unit", `${goes} go${goes > 1 ? "es" : ""}, ${$("sortie_hours").value}-hr sorties, ${$("turn_hours").value}-hr turns`);
+  set("sum-tempo", lastTempo && lastTempo.sute
+    ? `SUTE ${lastTempo.sute.toFixed(2)}` + (lastTempo.possessed_aircraft && lastTempo.om_days && lastTempo.sorties
+      ? ` from ${fix2(lastTempo.possessed_aircraft)} PAA, ${fix2(lastTempo.om_days)} days, ${fix2(lastTempo.sorties)} sorties` : "")
+    : "Not set");
+  const windows = [...$("window-body").querySelectorAll("tr")].map((r) => [r.querySelector('[data-window="hours"]').value, r.querySelector('[data-window="rate"]').value]);
+  set("sum-rates", `MC ${$("mc_rate").value}%, break ${$("break_rate").value}%, abort ${$("ground_abort_rate").value}%, fix ${windows.map((w) => w[1]).join("/")}% at ${windows.map((w) => w[0]).join("/")} hr`);
+  set("sum-rules", `Commit ${$("commit_rate").value}%, spares ${$("spare_rate").value}%, first day ${$("first_day_fix_hours").value} hr`);
+  const hours = (id) => ({ 0: "none", 8: "8 hr", 12: "12 hr", 16: "16 hr", 24: "24 hr" }[$(id).value] || `${$(id).value} hr`);
+  set("sum-week", `${$("event_mode").selectedOptions[0].text}; 2407 ${$("allow_2407_adds").checked ? "on" : "off"}; Sat ${hours("sat_hours")}, Sun ${hours("sun_hours")}`);
+  set("plan-bar-name", $("name").value || "Untitled plan");
+  const sute = pai ? (weekly / (pai * flyingDays(config || {}).length)).toFixed(2) : "0";
+  set("plan-bar-sum", `${pai} PAI, ${goes} go${goes > 1 ? "es" : ""}, ${weekly} sorties, SUTE ${sute}`);
+}
+
+function setPlanCollapsed(collapsed) {
+  document.body.classList.toggle("plan-collapsed", collapsed);
+  if (!collapsed) $("plan-heading").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function tempoBlock() {
+  const block = {};
+  document.querySelectorAll("[data-tempo]").forEach((input) => {
+    const text = input.value.trim();
+    if (text !== "") block[input.dataset.tempo] = Number(text);
+  });
+  return Object.keys(block).length ? block : { ...preservedTempo };
+}
+
+const fix2 = (v) => (v === null || v === undefined ? "?" : (Math.round(v * 100) / 100).toString());
+let tempoTimer = null;
+function scheduleTempo(planned, weekly, pai, days) {
+  clearTimeout(tempoTimer);
+  tempoTimer = setTimeout(async () => {
+    const out = $("tempo-out");
+    const block = tempoBlock();
+    const ceiling = numberOr("sute_ceiling", null);
+    const homePerAircraft = pai ? weekly / pai : 0;
+    if (!Object.keys(block).length) {
+      lastTempo = null; updateSummaries();
+      out.replaceChildren(el("p", { class: "note", text: `This plan: SUTE ${planned.toFixed(2)}, ${homePerAircraft.toFixed(2)} sorties per aircraft a week. Add deployed figures to compare.` }));
+      return;
+    }
+    let t;
+    try { t = await main.request("tempo", { sute: JSON.stringify(block), pai, days }); } catch { return; }
+    if (!t.sute) {
+      lastTempo = null; updateSummaries();
+      document.querySelectorAll("[data-tempo]").forEach((input) => { input.placeholder = ""; });
+      out.replaceChildren(el("p", { class: "message message-warn", text: "These figures don't pin down the deployed tempo yet. Add one more, such as O&M days or possessed aircraft." }));
+      return;
+    }
+    // Show what the figures work out to in the boxes left empty.
+    document.querySelectorAll("[data-tempo]").forEach((input) => {
+      const value = t[input.dataset.tempo];
+      input.placeholder = input.value.trim() === "" && value ? fix2(value) : "";
+    });
+    const basis = $("sute_basis").value;
+    const req = t.requirements || {};
+    if ($("required_from_sute").checked) $("required").value = String(basis === "per_aircraft" ? req.match_per_aircraft : req.match_sute);
+    lastTempo = t;
+    updateSummaries();
+    const mismatch = t.mismatch > 0.02 ? `The figures disagree by up to ${(t.mismatch * 100).toFixed(1)}%, likely from rounding.` : "";
+    const calc = [
+      ["Deployed SUTE", t.sute.toFixed(3)],
+      ["Aircraft days", fix2(t.possessed_aircraft_days)],
+      ["Sorties per O&M day", fix2(t.sorties_per_om_day)],
+      ["Avg sorties per aircraft", fix2(t.avg_sorties_per_aircraft)],
+      ["Sorties per aircraft a week", fix2(t.per_aircraft_week)],
+    ];
+    out.replaceChildren(
+      el("dl", { class: "calc-grid" }, calc.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })])),
+      Object.keys(preservedTempo).length && ![...document.querySelectorAll("[data-tempo]")].some((i) => i.value !== "")
+        ? el("p", { class: "note", text: "This config recorded other deployed figures; the greyed values are worked out from them. Type the three inputs to replace them." }) : null,
+      mismatch ? el("p", { class: "note", text: mismatch }) : null,
+      el("div", { class: "table-wrap" }, el("table", { class: "data-table tempo-table" },
+        el("thead", {}, el("tr", {}, ["To match deployed", "Sorties a week", "Per aircraft", ""].map((h) => el("th", { text: h })))),
+        el("tbody", {},
+          el("tr", { class: basis === "sute" ? "base-row" : "" }, el("td", { text: "SUTE" }), el("td", { text: String(req.match_sute ?? "") }),
+            el("td", { text: pai ? (req.match_sute / pai).toFixed(2) : "" }), el("td", { class: "note", text: basis === "sute" ? "Used as the requirement" : "" })),
+          el("tr", { class: basis === "per_aircraft" ? "base-row" : "" }, el("td", { text: "Sorties per aircraft" }), el("td", { text: String(req.match_per_aircraft ?? "") }),
+            el("td", { text: pai ? (req.match_per_aircraft / pai).toFixed(2) : "" }), el("td", { class: "note", text: basis === "per_aircraft" ? "Used as the requirement" : "" })),
+          el("tr", {}, el("td", { text: "This plan" }), el("td", { text: String(weekly) }), el("td", { text: homePerAircraft.toFixed(2) }),
+            el("td", { class: "note", text: `SUTE ${planned.toFixed(2)}${ceiling ? (planned > ceiling ? `, above the ${ceiling.toFixed(2)} ceiling` : `, within the ${ceiling.toFixed(2)} ceiling`) : ""}` })),
+        ))),
+    );
+  }, 250);
 }
 
 /* ------------------------------------------------------------ messages */
@@ -376,10 +472,14 @@ async function runPlan() {
     lastRecord = record;
     saveToHistory(record);
     renderResult(record);
+    setPlanCollapsed(true);
+    $("result").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     showMessages({ errors: [`The run stopped: ${error.message}`] });
   } finally {
     setBusy(false);
+    // The leadership view tests fixes as soon as a run finishes.
+    if (lastRecord && currentView() === "lead" && !insight.fixes) testFixes(lastRecord);
   }
 }
 
@@ -539,6 +639,16 @@ function suteView(m) {
     el("p", { class: "chart-note", text: sute.target
       ? `The SUTE actually flown meets the deployed target in ${pctText(sute.share_weeks_meeting_target)} of weeks.` + (sute.planned_above_ceiling ? " The plan is above the surge ceiling." : "")
       : "Add the deployed tempo in the plan to compare against a target." }),
+    sute.per_aircraft ? el("div", { class: "table-wrap" }, el("table", { class: "data-table tempo-table" },
+      el("thead", {}, el("tr", {}, ["Side by side", "SUTE", "Sorties per aircraft a week"].map((h) => el("th", { text: h })))),
+      el("tbody", {},
+        sute.target ? el("tr", {}, el("td", { text: "Deployed" }), el("td", { text: sute.target.toFixed(2) }), el("td", { text: sute.per_aircraft.deployed.toFixed(2) })) : null,
+        el("tr", {}, el("td", { text: "Planned at home" }), el("td", { text: sute.planned.toFixed(2) }), el("td", { text: sute.per_aircraft.planned.toFixed(2) })),
+        el("tr", {}, el("td", { text: "Flown at home (typical)" }), el("td", { text: sute.flown.p50.toFixed(2) }), el("td", { text: sute.per_aircraft.flown.p50.toFixed(2) })),
+        sute.target ? el("tr", {}, el("td", { text: "Weeks meeting deployed" }), el("td", { text: pctText(sute.share_weeks_meeting_target) }),
+          el("td", { text: pctText(sute.per_aircraft.share_weeks_meeting_deployed) })) : null,
+      ))) : null,
+    sute.requirements ? el("p", { class: "note", text: `To match the deployed tempo: ${sute.requirements.match_sute} sorties a week by SUTE, or ${sute.requirements.match_per_aircraft} by sorties per aircraft. The requirement uses ${sute.requirement_basis === "per_aircraft" ? "sorties per aircraft" : "SUTE"}.` }) : null,
   ];
 }
 
@@ -733,10 +843,11 @@ function renderSearch(record) {
     )),
     el("h3", { text: "Best pattern at each weekly target" }),
     el("div", { class: "table-wrap" }, el("table", { class: "data-table" },
-      el("thead", {}, el("tr", {}, ["Sorties / week", "SUTE", "Best recommendable pattern", "Success", `Meets ${pctText(analysis.success_target)}`].map((t) => el("th", { text: t })))),
+      el("thead", {}, el("tr", {}, ["Sorties / week", "SUTE", "Per aircraft", "Best recommendable pattern", "Success", `Meets ${pctText(analysis.success_target)}`].map((t) => el("th", { text: t })))),
       el("tbody", {}, analysis.per_target.map((row) => el("tr", { class: row.weekly_sorties === analysis.required_sorties ? "base-row" : "" },
         el("td", { text: `${row.weekly_sorties}${row.weekly_sorties === analysis.required_sorties ? " (required)" : ""}` }),
         el("td", { text: row.sute.toFixed(2) }),
+        el("td", { text: (row.weekly_sorties / record.config.inventory.pai).toFixed(2) }),
         el("td", {}, row.best ? el("span", {}, `${row.best.family} `, patternButton(row.best)) : "None fit"),
         el("td", { text: row.best ? pctText(row.best.success) : "" }),
         el("td", { class: row.meets ? "meets" : "misses", text: row.meets ? "Yes" : "No" }),
@@ -868,8 +979,148 @@ function watchSection(record) {
   );
 }
 
+/* ------------------------------------------------------------ views: one run, three depths */
+const VIEWS = [["lead", "Leadership"], ["plan", "Planner"], ["ana", "Analyst"]];
+const VIEW_NOTES = {
+  lead: "What to change and where to put resources.",
+  plan: "What happens, where it breaks, and what to change.",
+  ana: "Everything, plus the inputs and evidence behind it.",
+};
+function currentView() {
+  try { const v = localStorage.getItem("tps.view"); if (VIEWS.some(([k]) => k === v)) return v; } catch { /* default */ }
+  return "plan";
+}
+function viewToggle() {
+  const v = currentView();
+  return el("div", { class: "view-bar" },
+    el("div", { class: "view-toggle", role: "group", "aria-label": "View" },
+      VIEWS.map(([key, label]) => el("button", { type: "button", "data-view": key, "aria-pressed": String(key === v), text: label,
+        onclick: () => { try { localStorage.setItem("tps.view", key); } catch { /* not saved */ } applyView(lastRecord); } }))),
+    el("p", { id: "view-note", class: "note", text: `${VIEW_NOTES[v]} Same run in every view.` }));
+}
+function applyView(record) {
+  const v = currentView();
+  document.body.dataset.view = v;
+  document.querySelectorAll(".view-toggle button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
+  const note = $("view-note");
+  if (note) note.textContent = `${VIEW_NOTES[v]} Same run in every view.`;
+  const details = $("all-numbers");
+  if (details) details.open = v === "ana";
+  if (v === "lead" && record && !insight.fixes && !busy) testFixes(record);
+}
+
+const CAUSE_FOCUS = {
+  lost_abort_uncovered: ["Launch readiness", "ground aborts"],
+  lost_turn_short: ["Turn recovery", "breaks not fixed before the next go"],
+  lost_first_go_short: ["Aircraft availability", "days starting short of aircraft"],
+};
+
+function renderBrief(record) {
+  const box = $("brief");
+  if (!box) return;
+  const m = record.metrics;
+  const weakest = m.weakest_day;
+  const verdict = m.probability_success >= 0.85 ? "The plan holds."
+    : m.probability_success >= 0.55 ? "The plan holds most weeks, with real risk." : "The plan doesn't hold as written.";
+  const dayNames = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday" };
+  const goNote = m.goes && m.goes.by_go.length > 1 && m.goes.weakest_go ? ` Go ${m.goes.weakest_go} loses the most sorties across the week.` : "";
+  const where = weakest ? ` The riskiest day is ${dayNames[weakest] || weakest}.${goNote}` : "";
+
+  const changes = [];
+  if (insight.fixes) {
+    const base = insight.fixes[0].record.metrics.probability_success;
+    insight.fixes.slice(1)
+      .map((f) => ({ ...f, delta: (f.record.metrics.probability_success - base) * 100 }))
+      .filter((f) => f.delta > 0.5).sort((a, b) => b.delta - a.delta).slice(0, 3)
+      .forEach((f) => changes.push(el("div", { class: "brief-row" },
+        el("span", {}, f.label, el("span", { class: "brief-sub", text: f.cost })),
+        el("span", { class: "delta up", text: `+${f.delta.toFixed(1)} pts` }))));
+    if (!changes.length) changes.push(el("p", { class: "note", text: "No single change tested moves the plan by more than half a point." }));
+  } else {
+    changes.push(el("p", { class: "note", role: "status", text: "Testing changes…" }));
+  }
+
+  const resources = [];
+  const all = m.causes.all_weeks;
+  if (all.lost_sorties && m.causes.main_cause) {
+    const [area, words] = CAUSE_FOCUS[m.causes.main_cause];
+    resources.push(el("div", { class: "brief-row" }, el("span", { text: `${area}: ${words} cause ${pctText(all.shares[m.causes.main_cause])} of lost sorties` }), el("span", { class: "tag-focus", text: "Focus" })));
+  }
+  if (m.reported.mean_2407_adds_per_week >= 0.05) {
+    resources.push(el("div", { class: "brief-row" }, el("span", { text: `The plan relies on ${m.reported.mean_2407_adds_per_week.toFixed(1)} 2407 adds a week` }), el("span", { class: "tag-watch", text: "Watch" })));
+  }
+  if (insight.fixes) {
+    const base = insight.fixes[0].record.metrics.probability_success;
+    const weekend = insight.fixes.find((f) => /weekend/i.test(f.label));
+    if (weekend) {
+      const d = (weekend.record.metrics.probability_success - base) * 100;
+      resources.push(el("div", { class: "brief-row" }, el("span", { text: "More weekend repair hours" }),
+        el("span", { class: d > 2 ? "tag-focus" : "tag-low", text: d > 2 ? `+${d.toFixed(1)} pts` : "Low payoff" })));
+    }
+  }
+  if (insight.search && insight.search.analysis.max_sustained) {
+    const top = insight.search.analysis.max_sustained;
+    const gap = top.weekly_sorties - m.plan.planned_sorties;
+    resources.push(el("div", { class: "brief-row" }, el("span", { text: `Ceiling: ${top.weekly_sorties} sorties a week at the ${pctText(insight.search.analysis.success_target)} bar` }),
+      el("span", { class: "tag-low", text: gap >= 0 ? `${gap} above plan` : `${-gap} below plan` })));
+  }
+  if (m.sute && m.sute.target) {
+    const pa = m.sute.per_aircraft;
+    resources.push(el("div", { class: "brief-row" }, el("span", { text: `Training tempo meets the deployed SUTE in ${pctText(m.sute.share_weeks_meeting_target)} of weeks` +
+      (pa && pa.deployed ? `; ${pa.flown.p50.toFixed(1)} sorties per aircraft a week vs ${pa.deployed.toFixed(1)} deployed` : "") }),
+      el("span", { class: m.sute.share_weeks_meeting_target >= 0.85 ? "tag-low" : "tag-watch", text: `${m.sute.flown.p50.toFixed(2)} flown` })));
+  }
+
+  box.replaceChildren(
+    el("div", { class: "summary-head" },
+      el("div", {}, el("h2", { class: "summary-title", text: record.name || "Untitled plan" }),
+        el("p", { class: "note", text: `${whole(m.iterations)} simulated weeks, run ${new Date(record.created_at).toLocaleString()}` })),
+      el("button", { type: "button", class: "secondary no-print", text: "Print one-page summary", onclick: () => window.print() })),
+    el("div", { class: "headline" },
+      el("span", { class: "big-number", text: pctText(m.probability_success) }),
+      el("span", { class: `band band-${m.risk_band}`, text: m.risk_band }),
+      el("span", { class: "headline-label", text: `${verdict}${where}` })),
+    el("h3", { text: "What to change" }), ...changes,
+    resources.length ? el("h3", { text: "Where resources matter" }) : null, ...resources,
+    el("p", { class: "note brief-why" }, "Why? ",
+      el("button", { type: "button", class: "link-button", text: "See the planner view", onclick: () => { try { localStorage.setItem("tps.view", "plan"); } catch { /* */ } applyView(record); } })),
+  );
+}
+
+function inputsView(record) {
+  const c = record.config;
+  const pct = (v) => (v === undefined || v === null ? "Not set" : pctText(v, 1));
+  const windows = (c.rates.fix_windows || [["fix_8hr_rate", 8], ["fix_12hr_rate", 12], ["fix_24hr_rate", 24]]
+    .filter(([k]) => k in c.rates).map(([k, h]) => ({ hours: h, rate: c.rates[k] })));
+  const o = c.options || {};
+  const weekend = o.weekend_coverage_hours || {};
+  const rows = [
+    ["Aircraft assigned (PAI)", String(c.inventory.pai)],
+    ["Mission capable", pct(c.rates.mc_rate)],
+    ["Break / ground abort", `${pct(c.rates.break_rate)} / ${pct(c.rates.ground_abort_rate)}`],
+    ["Fixed within", windows.map((w) => `${w.hours} hr ${pct(w.rate)}`).join(", ")],
+    ["Commit / spare rate", `${pct(c.rules.commit_rate)} / ${pct(c.rules.spare_rate)}`],
+    ["First flying day: longest fix worked", `${c.rules.first_day_fix_hours ?? 8} hr`],
+    ["Goes per day", String(record.goes_per_day ?? "")],
+    ["2407 adds", o.allow_2407_adds ? "Allowed" : "Not allowed"],
+    ["Weekend repair hours", `Sat ${weekend.Sat ?? 24}, Sun ${weekend.Sun ?? 24}`],
+    ["Repeat / recur", `${pct(o.repeat_rate ?? 0)} / ${pct(o.recur_rate ?? 0)}`],
+    ["Breaks placed / fixes", `${o.event_mode || "Fixed Count Random Placement"} / ${o.fix_mode || "Random"}`],
+    ["Required sorties", `${record.required_sorties ?? c.required_sorties}${record.required_from_sute ? " (from SUTE)" : ""}`],
+  ];
+  const sources = Object.entries(c.sources || {});
+  return [
+    el("h3", { id: "inputs-h", text: "Inputs and sources" }),
+    el("div", { class: "table-wrap" }, el("table", { class: "data-table" }, el("tbody", {},
+      rows.map(([k, v]) => el("tr", {}, el("td", { text: k }), el("td", { text: v })))))),
+    sources.length ? el("dl", { class: "record-facts" }, sources.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })])) : null,
+    el("p", { class: "note", text: `Model ${record.model_version}, build ${String(record.build_commit).slice(0, 7)}, seed ${record.seed}, config fingerprint ${record.config_fingerprint.slice(0, 16)}. Every rule is described in MODEL_LOGIC.md.` }),
+  ];
+}
+
 /* ------------------------------------------------------------ leadership summary */
 function renderSummary(record) {
+  renderBrief(record);
   const m = record.metrics;
   const weakest = m.weakest_day;
   const nm = m.distributions.next_monday_ready;
@@ -983,26 +1234,29 @@ function renderResult(record) {
   });
 
   $("result").replaceChildren(
-    el("section", { id: "summary", class: "card summary-card", "aria-label": "Summary" }),
+    viewToggle(),
+    el("section", { id: "brief", class: "card brief-card", "data-views": "lead", "aria-label": "Decision brief" }),
+    el("section", { id: "summary", class: "card summary-card", "data-views": "plan ana", "aria-label": "Summary" }),
     el("section", { class: "card", "aria-labelledby": "where-h" },
       el("h3", { id: "where-h", text: "Where the plan runs tight" }),
       marginChart(record),
       riskStrip(record),
-      goesView(m),
-      suteView(m),
+      el("div", { "data-views": "plan ana" }, goesView(m), suteView(m)),
     ),
-    el("section", { class: "card", "aria-labelledby": "why-h" },
+    el("section", { class: "card", "data-views": "plan ana", "aria-labelledby": "why-h" },
       el("h3", { id: "why-h", text: "Why sorties are lost" }),
       causesView(m),
     ),
-    watchSection(record),
+    el("div", { "data-views": "plan ana" }, watchSection(record)),
     el("section", { class: "card no-print", "aria-labelledby": "fix-h" },
       el("h3", { id: "fix-h", text: "What would fix it" }),
-      el("p", { class: "note", text: "Test the changes a planner can make, ranked by how much each one helps." }),
+      el("p", { class: "note", text: "Changes a planner can make, ranked by how much each one helps." }),
       el("div", { class: "button-row no-print" },
         el("button", { type: "button", class: "secondary", "data-needs-idle": true, text: "Test fixes", onclick: () => testFixes(record) })),
       el("div", { id: "fixes-out" }),
-      el("h3", { text: "Test turn patterns" }),
+    ),
+    el("section", { class: "card no-print", "data-views": "plan ana", "aria-labelledby": "patterns-h" },
+      el("h3", { id: "patterns-h", text: "Test turn patterns" }),
       el("p", { class: "note", text: "Generates weeks in families leadership will recognize (waterfall, flat, recovery valley, and more), tests each one, and reports what works at the sortie levels that matter." }),
       el("div", { class: "row-fields no-print" },
         el("label", { class: "field" }, "Success bar", targetSelect),
@@ -1017,8 +1271,9 @@ function renderResult(record) {
         el("button", { type: "button", class: "primary align-end", "data-needs-idle": true, text: "Test turn patterns", onclick: () => testPatterns(record) })),
       el("div", { id: "search-out" }),
     ),
-    el("section", { class: "card no-print", "aria-label": "Example week" }, weekBoard(record)),
-    el("details", { class: "card details no-print" },
+    el("section", { class: "card", "data-views": "ana", "aria-labelledby": "inputs-h" }, inputsView(record)),
+    el("section", { class: "card no-print", "data-views": "ana", "aria-label": "Example week" }, weekBoard(record)),
+    el("details", { id: "all-numbers", class: "card details no-print", "data-views": "plan ana" },
       el("summary", { text: "All the numbers" }),
       el("h3", { text: "How often each check passed" }),
       barList(Object.entries(COMPONENT_NAMES).map(([k, label]) => [label, m.components[k]])),
@@ -1060,6 +1315,7 @@ function renderResult(record) {
     ),
   );
   renderSummary(record);
+  applyView(record);
   watch.replay = null;
   const picks = record.replay_weeks || {};
   const first = picks.typical_failure ?? picks.typical;
@@ -1137,6 +1393,7 @@ async function verifyFile(input) {
 }
 
 function loadConfig(cfg) {
+  document.body.classList.remove("plan-collapsed");
   config = structuredClone(cfg);
   configToForm(config);
   scheduleCheck();
@@ -1168,6 +1425,7 @@ function wireForm() {
     scheduleCheck();
   });
   $("required_from_sute").addEventListener("change", () => { updateTotals(); scheduleCheck(); });
+  $("edit-plan").addEventListener("click", () => setPlanCollapsed(false));
   $("add-window").addEventListener("click", () => {
     const rows = [...$("window-body").querySelectorAll("tr")];
     const last = rows.length ? Number(rows[rows.length - 1].querySelector('[data-window="hours"]').value || 0) : 0;

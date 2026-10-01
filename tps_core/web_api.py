@@ -13,6 +13,14 @@ from tps_core.sweep import plan_sweep
 from tps_core.version import __version__
 
 
+def _optional_int(value) -> int | None:
+    """A whole number, or None for missing. In Pyodide, a JavaScript null or undefined
+    arrives as a JsNull / JsUndefined object rather than None, so treat those as missing too."""
+    if value is None or type(value).__name__ in ("JsNull", "JsUndefined"):
+        return None
+    return int(value)
+
+
 def build_info() -> str:
     return json.dumps({"model_version": __version__, "build_commit": _build.COMMIT, "built_at": _build.BUILT_AT})
 
@@ -29,7 +37,7 @@ def check(config_json: str) -> str:
 
 def run(config_json: str, iterations: int, seed) -> str:
     try:
-        record = run_plan(json.loads(config_json), int(iterations), None if seed is None else int(seed))
+        record = run_plan(json.loads(config_json), int(iterations), _optional_int(seed))
     except ConfigError as error:
         return json.dumps({"errors": error.errors})
     return json.dumps(record)
@@ -43,7 +51,7 @@ def verify(record_json: str) -> str:
 
 
 def sweep_jobs(config_json: str, variants_json: str, seed) -> str:
-    return json.dumps(plan_sweep(json.loads(config_json), json.loads(variants_json), None if seed is None else int(seed)))
+    return json.dumps(plan_sweep(json.loads(config_json), json.loads(variants_json), _optional_int(seed)))
 
 
 def levers(config_json: str, metrics_json: str) -> str:
@@ -75,3 +83,12 @@ def replay(config_json: str, seed: int, week_index: int) -> str:
         return json.dumps(replay_week(json.loads(config_json), int(seed), int(week_index)))
     except (ConfigError, ValueError) as error:
         return json.dumps({"errors": getattr(error, "errors", [str(error)])})
+
+
+def tempo(sute_json: str, pai: int, flying_days: int) -> str:
+    """Live check for the form: what the deployed figures work out to [M-9]."""
+    from tps_core.tempo import home_requirements, solve_tempo
+    result = solve_tempo(json.loads(sute_json))
+    if result["sute"] and pai:
+        result["requirements"] = home_requirements(result["sute"], int(pai), int(flying_days))
+    return json.dumps(result)

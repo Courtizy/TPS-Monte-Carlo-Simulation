@@ -47,7 +47,8 @@ def run_plan(config: dict[str, Any], iterations: int = 10_000, seed: int | None 
     config = copy.deepcopy(config)
     weeks, scenario = simulate(config, int(iterations), seed)
     metrics = summarize(weeks, scenario.rules.flying_days, scenario.rules.all_days,
-                        sute_target=scenario.sute_target, sute_ceiling=scenario.sute_ceiling)
+                        sute_target=scenario.sute_target, sute_ceiling=scenario.sute_ceiling,
+                        sute_basis=scenario.sute_basis)
     return {
         "record_version": RECORD_VERSION,
         "model_version": __version__,
@@ -59,6 +60,7 @@ def run_plan(config: dict[str, Any], iterations: int = 10_000, seed: int | None 
         "config_fingerprint": fingerprint(config),
         "required_sorties": scenario.required_sorties,
         "required_from_sute": scenario.required_from_sute,
+        "tempo": _tempo(config),
         "goes_per_day": scenario.goes_per_day,
         "go_times": [list(pair) for pair in scenario.options.go_times],
         "iterations": int(iterations),
@@ -99,3 +101,9 @@ def verify_record(record: dict[str, Any]) -> dict[str, Any]:
         "rerun_fingerprint": rerun["metrics_fingerprint"],
         "problems": problems,
     }
+
+
+def _tempo(config: dict[str, Any]) -> dict[str, Any] | None:
+    """The deployed tempo as worked out from the config's figures [M-9]."""
+    from tps_core.tempo import solve_tempo
+    return solve_tempo(config["sute"]) if config.get("sute") else None
