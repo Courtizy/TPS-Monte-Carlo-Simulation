@@ -32,6 +32,13 @@ const FAILURE_NAMES = {
 
 const $ = (id) => document.getElementById(id);
 
+/* The browser's replaceChildren writes a null argument as the text "null". Optional pieces
+   are often null here, so drop them (and flatten lists) before they reach the page. */
+const nativeReplaceChildren = Element.prototype.replaceChildren;
+Element.prototype.replaceChildren = function (...children) {
+  return nativeReplaceChildren.apply(this, children.flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false));
+};
+
 /* ------------------------------------------------------------ DOM helper
    Builds elements with textContent only, so text from files is never parsed as HTML. */
 function el(tag, attrs = {}, ...children) {
@@ -1114,7 +1121,7 @@ function inputsView(record) {
     el("div", { class: "table-wrap" }, el("table", { class: "data-table" }, el("tbody", {},
       rows.map(([k, v]) => el("tr", {}, el("td", { text: k }), el("td", { text: v })))))),
     sources.length ? el("dl", { class: "record-facts" }, sources.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })])) : null,
-    el("p", { class: "note", text: `Model ${record.model_version}, build ${String(record.build_commit).slice(0, 7)}, seed ${record.seed}, config fingerprint ${record.config_fingerprint.slice(0, 16)}. Every rule is described in MODEL_LOGIC.md.` }),
+    el("p", { class: "note", text: `Model ${record.model_version}, build ${String(record.build_commit).slice(0, 7)}, seed ${record.seed}, config fingerprint ${record.config_fingerprint.slice(0, 16)}. Every rule is described in MODEL_LOGIC.md, and the sources for the methods are in REFERENCES.md.` }),
   ];
 }
 

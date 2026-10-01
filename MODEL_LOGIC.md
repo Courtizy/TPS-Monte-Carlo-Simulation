@@ -18,7 +18,7 @@ Every rule is tagged with where it comes from:
 | **Unit convention** | A planning practice confirmed by the model owner. Different units may set it differently, so it is an input wherever possible. |
 | **Model choice** | A design decision needed to turn planning practice into a simulation. Explained so it can be challenged. |
 
-No rule comes from restricted publications. Planning values (rates, commit, spares) are inputs from each unit, never built into the code.
+Sources for the method itself (Monte Carlo simulation, the confidence interval, sensitivity analysis, verification and validation, and prior Air Force and aviation simulation work) are in `REFERENCES.md`. No rule comes from restricted publications. Planning values (rates, commit, spares) are inputs from each unit, never built into the code.
 
 **Read the code in this order:** `rules.py` (planning arithmetic), `schemas.py` (inputs), `reference.py` (the simulation, written to be read line by line), `metrics.py` (judging a week), `patterns.py` and `levers.py` (search and fixes). `engine.py` is an optimized copy of `reference.py`; a test proves they give identical results, so you never need to read it to understand the model.
 

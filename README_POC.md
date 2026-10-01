@@ -8,6 +8,7 @@ The `tps_core` package here is the same model the hosted team app will run later
 | Path | What it is |
 | --- | --- |
 | `MODEL_LOGIC.md` | **Start here.** Every rule the model applies, in the order a week unfolds: plain words, the math, where it comes from (DAFI 21-101, unit convention, or model choice), and the code and test behind it. |
+| `REFERENCES.md` | Sources justifying Monte Carlo simulation for this question, the analysis methods (confidence interval, common random numbers, sensitivity analysis, verification and validation), and prior Air Force and aviation simulation work. |
 | `tps_core/` | The model package: schemas, rules, go-level engine (fast + readable reference), metrics, run records, sweeps. Standard library only. |
 | `tests_core/` | Tests that must pass before the site publishes. |
 | `web/` | The page: plan form, results, week board, variation comparison, run history. |
