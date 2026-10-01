@@ -1,8 +1,14 @@
 name: Test and publish the proof of concept
 
+# The proof of concept lives in browser_base/. This file must sit at the repo root,
+# in .github/workflows/, because GitHub only runs workflows from there.
+
 on:
   push:
     branches: [main]
+    paths:
+      - "browser_base/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -14,12 +20,17 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+defaults:
+  run:
+    working-directory: browser_base
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pinned so the runner image only changes when this line does.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install pytest
@@ -28,25 +39,25 @@ jobs:
 
   build:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Build the site with the version and commit stamped in
         run: python scripts/build_site.py --out site --commit "$GITHUB_SHA"
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
-          path: site
+          path: browser_base/site
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
