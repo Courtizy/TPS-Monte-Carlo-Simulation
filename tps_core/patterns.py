@@ -234,7 +234,7 @@ def generate(config: dict[str, Any], mode: str = "band", custom: list[int] | Non
 
     current_totals = tuple(scenario.schedule[d].daily_sorties for d in days)
     candidates.append(_candidate("Your plan", current_totals, [scenario.schedule[d].goes for d in days],
-                                 "current", None, days, per_day_pai, sum(current_totals)))
+                                 "current", None, days, per_day_pai, sum(current_totals), rules))
 
     for target in targets:
         weeks = daily_compositions(target, len(days), 1, cap, rules.max_day_to_day_delta, rng)
@@ -261,7 +261,7 @@ def generate(config: dict[str, Any], mode: str = "band", custom: list[int] | Non
                             break
                         splits.append(split)
                     if len(splits) == len(week):
-                        candidates.append(_candidate(family, week, splits, style, target, days, per_day_pai, target))
+                        candidates.append(_candidate(family, week, splits, style, target, days, per_day_pai, target, rules))
     # The same week can appear from both split styles when they give identical goes; keep one.
     unique, seen = [], set()
     for c in candidates:
@@ -272,9 +272,11 @@ def generate(config: dict[str, Any], mode: str = "band", custom: list[int] | Non
     return {"targets": targets, "daily_cap": cap, "coverage": coverage, "candidates": unique}
 
 
-def _candidate(family, totals, splits, style, target, days, per_day_pai, weekly) -> dict[str, Any]:
+def _candidate(family, totals, splits, style, target, days, per_day_pai, weekly, rules=None) -> dict[str, Any]:
     name, detail = _label(totals, splits)
+    spares = sum(day_spares(DayPlan(*s), rules) for s in splits if sum(s)) if rules is not None else 0
     return {
+        "spares_per_week": spares,
         "label": f"{family} {name}" if family != "Your plan" else f"Your plan {name}",
         "family": family if family != "Your plan" else classify(tuple(totals)),
         "is_current": family == "Your plan",
@@ -350,6 +352,9 @@ def _summary(c: dict[str, Any]) -> dict[str, Any]:
         "weekly_sorties": c["weekly_sorties"], "sute": c["sute"], "split": c["split"],
         "success": m["probability_success"], "ci95_low": m["ci95_low"], "ci95_high": m["ci95_high"],
         "iterations": m["iterations"], "fails_where": _fails_where(m), "fails_short": _fails_short(m),
+        "spares_per_week": c.get("spares_per_week", 0),
+        "adds_per_week": m["reported"]["mean_2407_adds_per_week"],
+        "resources": c.get("spares_per_week", 0) + m["reported"]["mean_2407_adds_per_week"],
         "confirmed": c.get("confirmed", False),
     }
 
@@ -398,6 +403,7 @@ def analyze(config: dict[str, Any], results: list[dict[str, Any]], success_targe
         if not row["diagnostic"] and not row["confirmed"] and row["index"] not in confirm:
             confirm.append(row["index"])
     current = next((i for i in items if i["is_current"]), None)
+    frontier = efficient_frontier(recommendable + ([current] if current else []))
 
     return {
         "success_target": success_target,
@@ -408,6 +414,7 @@ def analyze(config: dict[str, Any], results: list[dict[str, Any]], success_targe
         "max_sustained": max_sustained,
         "current": current,
         "confirm": confirm[:confirm_limit],
+        "frontier": frontier,
         "verdict": _verdict(scenario, success_target, focus, per_target, max_sustained, family_rows, current),
         "patterns_tested": len(tested),
     }
@@ -445,3 +452,19 @@ def _verdict(scenario, bar, focus, per_target, max_sustained, family_rows, curre
         lines.append(f"Your current plan ({current['detail']}, {current['weekly_sorties']} a week) succeeds in "
                      f"{round(current['success'] * 100)}% of weeks.")
     return lines
+
+
+# [P-7]
+def efficient_frontier(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Patterns no other pattern beats on all three: more sorties, higher success, fewer resources.
+
+    Resources are scheduled spares plus 2407 adds per week: aircraft held back or pulled in.
+    """
+    def dominated(a, b):   # does b beat a?
+        return (b["weekly_sorties"] >= a["weekly_sorties"] and b["success"] >= a["success"] - 1e-12
+                and b["resources"] <= a["resources"] + 1e-12
+                and (b["weekly_sorties"] > a["weekly_sorties"] or b["success"] > a["success"] + 1e-12
+                     or b["resources"] < a["resources"] - 1e-12))
+    pool = [i for i in items if i]
+    front = [a for a in pool if not any(dominated(a, b) for b in pool if b is not a)]
+    return sorted(front, key=lambda i: (i["weekly_sorties"], i["success"]))

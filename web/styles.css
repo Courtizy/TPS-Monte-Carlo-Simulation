@@ -378,6 +378,32 @@ details.section[open] > summary .sec-sum { display: none; }
 .calc-grid dt { color: var(--ink-2); }
 .calc-grid dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 
+/* Step 2: costs, decisions, margins, schedule risk */
+.brief-value { color: var(--ink-2); text-align: right; font-size: 0.9rem; }
+.brief-group { margin: 0.6rem 0 0.1rem; font-size: 0.85rem; text-transform: none; color: var(--ink-2); }
+.margin-row { padding: 0.45rem 0; border-top: 1px solid var(--rule); }
+.margin-label { font-weight: 600; }
+.margin-text { margin: 0.1rem 0 0.3rem; }
+.margin-bar { width: 100%; max-width: 420px; height: auto; display: block; }
+.margin-safe { fill: var(--flown); opacity: 0.25; }
+.sched-table td, .sched-table th { text-align: center; }
+.sched-table th[scope=row] { text-align: left; white-space: nowrap; }
+.sched-cell { min-width: 3.4rem; }
+.sched-n { display: block; font-weight: 700; font-size: 1.05rem; }
+.sched-p { display: block; font-size: 0.75rem; color: var(--ink-2); }
+.cell-low { background: var(--ok-bg); }
+.cell-watch { background: var(--warn-bg); }
+.cell-high { background: var(--error-bg); }
+.cell-empty { color: var(--ink-2); }
+.sched-extra td, .sched-extra th { font-size: 0.85rem; color: var(--ink-2); }
+
+/* Backtesting */
+.bt-grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 1.25rem; align-items: start; margin: 0.75rem 0; }
+@media (max-width: 760px) { .bt-grid { grid-template-columns: minmax(0, 1fr); } }
+.reliability .margin-svg { max-width: 360px; }
+.ci-ok { stroke: var(--ink); stroke-width: 2; }
+.ci-off { stroke: var(--lost); stroke-width: 2; }
+
 /* Day risk strip */
 .risk-strip { list-style: none; padding: 0; margin: 1rem 0 0.5rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr)); gap: 4px; }
 .risk { border-radius: 6px; padding: 0.45rem 0.5rem; display: flex; flex-direction: column; align-items: center; border: 1px solid transparent; }

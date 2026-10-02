@@ -87,6 +87,9 @@ def score_week(days: list[dict[str, Any]], week: dict[str, Any], flying_days: tu
 
     return {
         "succeeds": succeeds,
+        # What a unit's history can show, for backtesting [B-2]
+        "observable_flown": daily_ok and meets_sorties,
+        "observable_flown_recovered": daily_ok and meets_sorties and recovery,
         "total_sorties": total,
         "planned_sorties": planned,
         "required_sorties": required,
@@ -177,6 +180,12 @@ def summarize(weeks: list[tuple[list[dict], dict]], flying_days: tuple[str, ...]
             "share_missing_schedule": _share(r["sorties_flown"] < r["planned_sorties"] for r in rows)
             if day in flying_days else 0.0,
             "mean_2407_adds": mean(r["adds_2407"] for r in rows),
+            "mean_spares_used": mean(r["spares_used"] for r in rows),
+            "planned_by_go": list(rows[0]["planned_by_go"]),
+            "spares_planned": max(0, rows[0]["aircraft_required"] - rows[0]["planned_by_go"][0]),
+            # Chance each go loses at least one planned sortie, by go [M-10]
+            "go_miss_share": [_share(r["flown_by_go"][g] < r["planned_by_go"][g] for r in rows)
+                              if rows[0]["planned_by_go"][g] else None for g in range(len(rows[0]["planned_by_go"]))],
         }
 
     metrics = {
@@ -227,6 +236,11 @@ def summarize(weeks: list[tuple[list[dict], dict]], flying_days: tuple[str, ...]
         "causes": _causes(scores, failed),
         "weakest_day": _weakest_day(daily, flying_days),
         "goes": _by_go(weeks, flying_days, scores),
+        "convergence": _convergence(scores),
+        "observable": {
+            "flown": _share(s["observable_flown"] for s in scores),
+            "flown_and_recovered": _share(s["observable_flown_recovered"] for s in scores),
+        },
         "sute": _sute(weeks, flying_days, scores, sute_target, sute_ceiling, sute_basis),
     }
     metrics["summary_text"] = plain_summary(metrics)
@@ -238,6 +252,20 @@ DAY_NAMES = {"Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thur
 
 
 # [M-6]
+# [M-11]
+def _convergence(scores: list[dict], points: int = 25) -> list[list[float]]:
+    """Running success estimate as weeks accumulate: [weeks so far, share succeeded, 95% low, 95% high]."""
+    n = len(scores)
+    marks = sorted({max(1, round(n * (k + 1) / points)) for k in range(points)})
+    out, wins, last = [], 0, 0
+    for mark in marks:
+        wins += sum(s["succeeds"] for s in scores[last:mark])
+        last = mark
+        low, high = wilson_interval(wins, mark)
+        out.append([mark, wins / mark, low, high])
+    return out
+
+
 def _by_go(weeks, flying_days, scores) -> dict[str, Any]:
     """Planned and flown sorties for each go, plus turn success and generation effectiveness."""
     planned = [0] * 4

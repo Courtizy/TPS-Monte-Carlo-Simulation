@@ -1,6 +1,6 @@
 # TPS Model Logic
 
-**Turn Pattern Sustainability, model `tps_core` 0.7**
+**Turn Pattern Sustainability, model `tps_core` 0.9**
 
 TPS answers one planning question: **can this unit fly this weekly schedule, week after week, without running out of aircraft?** It plays the week out thousands of times. Each time, breaks, aborts, and fixes land differently, and the model counts how often the plan holds up and why it fails when it doesn't.
 
@@ -349,6 +349,24 @@ Any figures whose lines combine to *s − a − d* give the SUTE; three independ
 **Code:** `tempo.py` → `solve_tempo`; `schemas.py` → `_validate_sute`.
 **Test:** `test_tempo_from_any_figures`.
 
+### M-10: Risk by day and go, and what each day uses
+**Source:** Model choice, for schedulers.
+**Rule:** For each flying day and go: the share of weeks in which that go loses at least one planned sortie. For each day: scheduled spares (front line minus first go), average spares actually used, and average 2407 adds. The plan grid in the results is shaded by the per-go share.
+**Code:** `metrics.py` → `summarize` (`go_miss_share`, `spares_planned`, `mean_spares_used`); `runs.py` → `_plan_facts`.
+**Test:** `test_go_risk_and_daily_use`.
+
+### M-11: Has the answer settled?
+**Source:** Model choice; output analysis practice (Law 2015).
+**Rule:** Results include the running success estimate with its 95% range as weeks accumulate, so an analyst can see whether more weeks would change the answer. Replications run the same plan on five other seeds. Two independent estimates agree when they differ by no more than chance explains, within $1.96\sqrt{2}$ standard errors (about 1.4 times this run's 95% half-width); about 95% of seeds should.
+**Code:** `metrics.py` → `_convergence`; `sweep.py` → `derive_seed` (replication seeds).
+**Test:** `test_convergence_series_ends_at_the_answer`.
+
+### M-12: Break-even margins
+**Source:** Model choice; one-at-a-time sensitivity analysis (Saltelli et al. 2008).
+**Rule:** For each input (break rate, ground abort rate, MC rate, and fix rates as a share of today's), holding the rest as entered, search on the same seed for the value where success crosses the success bar. Start at today's value and the far end of a set range; halve the interval nine times. If the plan meets the bar today, report how far the input can get worse; if not, how much it alone must improve, or that it can't get there alone. When breaks or aborts are a set count per week, also report the margin as a count, since the count is what changes.
+**Code:** `sensitivity.py` → `break_even`, `describe`.
+**Test:** `test_break_even_finds_the_crossing`.
+
 ---
 
 ## 8. Fixes and the pattern search
@@ -358,6 +376,12 @@ Any figures whose lines combine to *s − a − d* give the SUTE; three independ
 **Rule:** From a finished run, the model builds changes a planner could make: one more spare on the weakest day, one fewer sortie on its last go, one more spare every day, allowing 2407 adds, and more weekend repair hours. Each change runs on **the same seed** as the original, so differences come from the change, not luck. Each lists its trade-off, including when a change raises next Monday's recovery target.
 **Code:** `levers.py` → `build_levers`.
 **Test:** `test_levers_are_valid_configs_with_costs`.
+
+### L-2: Moving a sortie
+**Source:** Model choice; slack placement in robust airline scheduling (Lan, Clarke & Barnhart 2006).
+**Rule:** Take one sortie off the weakest day's last go and give it to one of the two steadiest flying days (lowest chance of missing the plan, then widest margin of ready aircraft), on the same go if the rules allow, otherwise the latest go that does. Weekly sorties stay the same. Every fix is labeled a maintenance lever (spares, 2407 adds, weekend repairs) or a scheduling lever (fewer or moved sorties).
+**Code:** `levers.py` → `_moves`, `build_levers`.
+**Test:** `test_moves_keep_weekly_sorties_and_rules`.
 
 ### P-1: Weekly targets to test
 **Source:** Unit convention: focus permutations on the tempos that matter.
@@ -417,6 +441,12 @@ Diagnostic-only families are simulated and shown, but never recommended.
 
 **Code:** `patterns.py` → `generate`, `analyze`, `_verdict`.
 **Test:** `test_analysis_never_recommends_diagnostic_families`, `test_verdict_reports_the_shortfall_when_the_requirement_is_out_of_reach`.
+
+### P-7: Efficient frontier
+**Source:** Model choice; multi-objective simulation-optimization (Mattila & Virtanen 2014).
+**Rule:** Among tested patterns that can be recommended (plus the current plan), keep those no other pattern beats on all three counts: more weekly sorties, higher success, and fewer resources. Resources are scheduled spares plus average 2407 adds per week, the aircraft held back or pulled in.
+**Code:** `patterns.py` → `efficient_frontier`.
+**Test:** `test_frontier_keeps_only_unbeaten_patterns`.
 
 ---
 
@@ -491,7 +521,39 @@ Any week number can also be replayed.
 
 ---
 
-## 11. Not modeled yet
+## 11. Backtesting against past weeks
+
+### B-1: History and rates known beforehand
+**Source:** Model choice; operational validity (Sargent 2013).
+**Rule:** A history file has one row per flying day: week start, day, planned and flown sorties for each go, spares, breaks, aborts, and how many of that day's breaks and aborts were fixed within each window (columns like `fixed_8h`). Week columns (PAI, aircraft MC at the start of the week, aircraft MC next Monday, required sorties) can sit on the first row of each week. Each week is predicted only from what was known before it: its planned schedule, and rates measured over the previous weeks (4 by default, at least 2):
+
+$$\text{break rate} = \frac{\sum \text{breaks}}{\sum \text{planned sorties}}, \quad \text{abort rate} = \frac{\sum \text{aborts}}{\sum \text{planned sorties}}, \quad F_h = \frac{\sum \text{fixed within } h}{\sum (\text{breaks} + \text{aborts})}, \quad MC = \overline{MC_{start} / PAI}$$
+
+Other settings (commit, spare rate, goes, weekend hours, first-day rule) come from the plan setup. The file is read in the browser and never uploaded.
+**Code:** `backtest.py` → `parse_history`, `trailing_rates`, `week_config`, `prepare`.
+**Test:** `test_rates_come_only_from_earlier_weeks`.
+
+### B-2: What counts as success in history
+**Source:** Model choice.
+**Rule:** History shows whether every planned sortie flew each day, whether the weekly requirement was met, and, if next Monday's MC count is given, whether recovery passed. It doesn't show ready aircraft each morning, so the prediction compared is the model's chance of exactly those observable checks, not its full success rate.
+**Code:** `metrics.py` → `score_week` (`observable_flown`, `observable_flown_recovered`); `backtest.py` → `actual_outcome`.
+**Test:** `test_observable_success_matches_history`.
+
+### B-3: Scoring the predictions
+**Source:** Model choice; Brier score for probability forecasts; Wilson interval (M-4).
+**Rule:** Weeks are grouped into prediction bands (under 50%, 50–70%, 70–85%, 85–95%, 95% or more). A band agrees when its predicted average falls inside the 95% range of the share of its weeks that succeeded. The Brier score $\overline{(p - y)^2}$ is compared with always guessing the overall success rate; skill $= 1 - \text{Brier}/\text{Brier}_{naive}$, above 0 meaning the model adds information. Also reported: how often actual sorties fall inside the predicted middle 80%, average predicted risk for days that missed versus held, and how often a week's first missed day was the model's riskiest day.
+**Code:** `backtest.py` → `summarize`.
+**Test:** `test_scoring_on_known_outcomes`.
+
+### B-4: Synthetic history
+**Source:** Model choice.
+**Rule:** The model can write its own history file: weeks whose rates and schedules drift randomly, played out by the readable engine. Backtesting it checks the backtest itself and shows the file layout. The template download is two such weeks.
+**Code:** `backtest.py` → `synthetic_history`, `template`.
+**Test:** `test_synthetic_history_round_trips`.
+
+---
+
+## 12. Not modeled yet
 
 - **Multi-week tempo:** each run is one week starting fresh. Fatigue, phase clocks, and hangar queens need multi-week mode.
 - **Long or off-station sorties:** sorties that cross midnight or leave the aircraft away (mobility, bomber).
@@ -499,7 +561,7 @@ Any week number can also be replayed.
 - **Scheduled maintenance by day:** phase and inspection pulls are folded into the starting MC rate.
 - **Supply and cannibalization:** assumed to be inside the fix rates.
 
-## 12. DAFI 21-101 paragraphs referenced
+## 13. DAFI 21-101 paragraphs referenced
 
 Only paragraphs checked against the public text of DAFI 21-101 (with Change 1) are cited:
 

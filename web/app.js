@@ -486,7 +486,7 @@ async function runPlan() {
   } finally {
     setBusy(false);
     // The leadership view tests fixes as soon as a run finishes.
-    if (lastRecord && currentView() === "lead" && !insight.fixes) testFixes(lastRecord);
+    if (lastRecord && ["lead", "ana"].includes(currentView())) autoInsights(lastRecord, currentView());
   }
 }
 
@@ -507,7 +507,7 @@ const CAUSES = [
   ["lost_first_go_short", "Day started short of aircraft"],
 ];
 const TARGETS = [[0.70, "70% (Yellow)"], [0.85, "85% (Green)"], [0.95, "95%"]];
-const insight = { key: null, fixes: null, search: null, target: 0.85 };
+const insight = { key: null, fixes: null, search: null, margins: null, replicates: null, target: 0.85 };
 
 function sortieRange(m) {
   const d = m.distributions.sorties_flown;
@@ -750,6 +750,7 @@ function renderFixes(record) {
     const delta = (m.probability_success - base) * 100;
     return el("tr", { class: isBase ? "base-row" : "" },
       el("td", {}, el("button", { type: "button", class: "link-button", text: item.label, onclick: () => showRecord(item.record) })),
+      el("td", { class: "note", text: GROUP_NAMES[item.group] || "" }),
       el("td", { text: pctText(m.probability_success) }),
       el("td", { class: `delta ${delta > 0.5 ? "up" : delta < -0.5 ? "down" : ""}`, text: isBase ? "" : `${delta >= 0 ? "+" : "\u2212"}${Math.abs(delta).toFixed(1)} pts` }),
       el("td", { class: "nowrap", text: `${(m.ci95_low * 100).toFixed(0)}\u2013${pctText(m.ci95_high)}` }),
@@ -758,7 +759,7 @@ function renderFixes(record) {
   };
   $("fixes-out").replaceChildren(
     el("div", { class: "table-wrap" }, el("table", { class: "data-table fixes-table" },
-      el("thead", {}, el("tr", {}, ["Change", "Success", "Effect", "95% range", "Trade-off"].map((t) => el("th", { text: t })))),
+      el("thead", {}, el("tr", {}, ["Change", "Type", "Success", "Effect", "95% range", "Trade-off"].map((t) => el("th", { text: t })))),
       el("tbody", {}, row(results[0], true), ranked.map((item) => row(item, false))),
     )),
     el("p", { class: "note", text: `Each change ran ${whole(record.iterations)} weeks with the same seed as the run shown (${record.seed}). Select a change to see its full results.` }),
@@ -836,6 +837,16 @@ function renderSearch(record) {
   $("search-out").replaceChildren(
     el("div", { class: "verdict" }, analysis.verdict.map((line) => el("p", { text: line }))),
     suteCurve(record, tested),
+    analysis.frontier && analysis.frontier.length ? el("h3", { text: "Efficient frontier" }) : null,
+    analysis.frontier && analysis.frontier.length ? el("p", { class: "note", text: "Patterns nothing else beats on all three: more sorties a week, higher success, fewer resources (scheduled spares plus 2407 adds a week)." }) : null,
+    analysis.frontier && analysis.frontier.length ? el("div", { class: "table-wrap" }, el("table", { class: "data-table" },
+      el("thead", {}, el("tr", {}, ["Pattern", "Sorties / week", "Success", "Resources / week", ""].map((t) => el("th", { text: t })))),
+      el("tbody", {}, analysis.frontier.map((row) => el("tr", { class: row.is_current ? "base-row" : "" },
+        el("td", { class: "pattern-cell" }, row.is_current ? el("span", { text: "Your plan" }) : patternButton(row)),
+        el("td", { text: String(row.weekly_sorties) }),
+        el("td", { class: row.success >= analysis.success_target ? "meets" : "misses", text: pctText(row.success) }),
+        el("td", { text: `${row.spares_per_week} spares` + (row.adds_per_week >= 0.05 ? ` + ${row.adds_per_week.toFixed(1)} adds` : "") }),
+        el("td", { class: "note", text: row.family || "" })))))) : null,
     el("h3", { text: `Best pattern in each family at ${analysis.focus_target} sorties a week` }),
     el("div", { class: "table-wrap" }, el("table", { class: "data-table family-table" },
       el("thead", {}, el("tr", {}, ["Family", "Pattern (sorties per go, Mon\u2013Fri)", "Success", "95% range", "Where it fails"].map((t) => el("th", { text: t })))),
@@ -1013,7 +1024,12 @@ function applyView(record) {
   if (note) note.textContent = `${VIEW_NOTES[v]} Same run in every view.`;
   const details = $("all-numbers");
   if (details) details.open = v === "ana";
-  if (v === "lead" && record && !insight.fixes && !busy) testFixes(record);
+  if (record && !busy && (v === "lead" || v === "ana")) autoInsights(record, v);
+}
+
+async function autoInsights(record, view) {
+  if (view === "lead" && !insight.fixes) await testFixes(record);
+  if (!insight.margins && !busy && lastRecord === record) await runMargins(record);
 }
 
 const CAUSE_FOCUS = {
@@ -1026,56 +1042,73 @@ function renderBrief(record) {
   const box = $("brief");
   if (!box) return;
   const m = record.metrics;
+  const facts = record.plan_facts || {};
   const weakest = m.weakest_day;
+  const dayNames = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday" };
   const verdict = m.probability_success >= 0.85 ? "The plan holds."
     : m.probability_success >= 0.55 ? "The plan holds most weeks, with real risk." : "The plan doesn't hold as written.";
-  const dayNames = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday" };
   const goNote = m.goes && m.goes.by_go.length > 1 && m.goes.weakest_go ? ` Go ${m.goes.weakest_go} loses the most sorties across the week.` : "";
   const where = weakest ? ` The riskiest day is ${dayNames[weakest] || weakest}.${goNote}` : "";
+  const row = (label, value, tag) => el("div", { class: "brief-row" }, el("span", { text: label }), value ? el("span", { class: tag || "brief-value", text: value }) : null);
 
-  const changes = [];
+  // 1. Can we do it?
+  const can = [
+    row("Weekly sorties", `${m.plan.planned_sorties} planned, ${m.plan.required_sorties} required; met in ${pctText(m.components.meets_required_sorties)} of weeks`),
+  ];
+  if (m.sute && m.sute.target) {
+    const pa = m.sute.per_aircraft;
+    can.push(row("Training tempo", `SUTE ${m.sute.flown.p50.toFixed(2)} flown vs ${m.sute.target.toFixed(2)} deployed` +
+      (pa && pa.deployed ? `; ${pa.flown.p50.toFixed(1)} vs ${pa.deployed.toFixed(1)} sorties per aircraft a week` : "")));
+  }
+  can.push(row("Ready next Monday", `${Math.round(m.distributions.next_monday_ready.p50)} typical, ${m.recovery.target} needed`));
+
+  // 2. What the plan costs
+  const weekend = facts.weekend_hours || {};
+  const hours = (h) => (h === undefined ? "24 hr" : h === 0 ? "none" : `${h} hr`);
+  const cost = [
+    row("Front line", `up to ${facts.max_front_line ?? "?"} of ${facts.commit ?? "?"} committed aircraft`),
+    row("Spares", `${facts.spares_per_week ?? 0} scheduled a week, ${m.reported.mean_spare_sorties_per_week.toFixed(1)} flown`),
+    row("2407 adds", facts.allow_2407_adds ? `${m.reported.mean_2407_adds_per_week.toFixed(1)} a week` : "not allowed"),
+    row("Weekend repairs", `Sat ${hours(weekend.Sat)}, Sun ${hours(weekend.Sun)}`),
+  ];
+  if (m.reported.mean_days_over_commit_in_practice >= 0.05) cost.push(row("Days over commit in practice", `${m.reported.mean_days_over_commit_in_practice.toFixed(1)} a week`, "tag-watch"));
+
+  // 3. Decisions, grouped by who acts
+  const decisions = [];
   if (insight.fixes) {
     const base = insight.fixes[0].record.metrics.probability_success;
-    insight.fixes.slice(1)
-      .map((f) => ({ ...f, delta: (f.record.metrics.probability_success - base) * 100 }))
-      .filter((f) => f.delta > 0.5).sort((a, b) => b.delta - a.delta).slice(0, 3)
-      .forEach((f) => changes.push(el("div", { class: "brief-row" },
-        el("span", {}, f.label, el("span", { class: "brief-sub", text: f.cost })),
-        el("span", { class: "delta up", text: `+${f.delta.toFixed(1)} pts` }))));
-    if (!changes.length) changes.push(el("p", { class: "note", text: "No single change tested moves the plan by more than half a point." }));
+    for (const group of ["maintenance", "scheduling"]) {
+      const items = insight.fixes.slice(1).filter((f) => f.group === group)
+        .map((f) => ({ ...f, delta: (f.record.metrics.probability_success - base) * 100 }))
+        .sort((a, b) => b.delta - a.delta);
+      decisions.push(el("h4", { class: "brief-group", text: group === "maintenance" ? "Maintenance levers" : "Scheduling levers" }));
+      const helpful = items.filter((f) => f.delta > 0.5).slice(0, 3);
+      if (helpful.length) {
+        helpful.forEach((f) => decisions.push(el("div", { class: "brief-row" },
+          el("span", {}, f.label, el("span", { class: "brief-sub", text: f.cost })),
+          el("span", { class: "delta up", text: `+${f.delta.toFixed(1)} pts` }))));
+      } else {
+        decisions.push(el("p", { class: "note", text: items.length ? "None of these help by more than half a point for this plan." : "None apply to this plan." }));
+      }
+    }
   } else {
-    changes.push(el("p", { class: "note", role: "status", text: "Testing changes…" }));
+    decisions.push(el("p", { class: "note", role: "status", text: "Testing changes…" }));
   }
 
-  const resources = [];
+  // 4. Margin
+  const margin = insight.margins ? marginRows(true) : [el("p", { class: "note margins-status", role: "status", text: insight.fixes ? "Checking margins…" : "Margins follow once changes are tested." })];
+
+  // 5. Focus and headroom
+  const focus = [];
   const all = m.causes.all_weeks;
   if (all.lost_sorties && m.causes.main_cause) {
     const [area, words] = CAUSE_FOCUS[m.causes.main_cause];
-    resources.push(el("div", { class: "brief-row" }, el("span", { text: `${area}: ${words} cause ${pctText(all.shares[m.causes.main_cause])} of lost sorties` }), el("span", { class: "tag-focus", text: "Focus" })));
-  }
-  if (m.reported.mean_2407_adds_per_week >= 0.05) {
-    resources.push(el("div", { class: "brief-row" }, el("span", { text: `The plan relies on ${m.reported.mean_2407_adds_per_week.toFixed(1)} 2407 adds a week` }), el("span", { class: "tag-watch", text: "Watch" })));
-  }
-  if (insight.fixes) {
-    const base = insight.fixes[0].record.metrics.probability_success;
-    const weekend = insight.fixes.find((f) => /weekend/i.test(f.label));
-    if (weekend) {
-      const d = (weekend.record.metrics.probability_success - base) * 100;
-      resources.push(el("div", { class: "brief-row" }, el("span", { text: "More weekend repair hours" }),
-        el("span", { class: d > 2 ? "tag-focus" : "tag-low", text: d > 2 ? `+${d.toFixed(1)} pts` : "Low payoff" })));
-    }
+    focus.push(row(`${area}: ${words} cause ${pctText(all.shares[m.causes.main_cause])} of lost sorties`, "Focus", "tag-focus"));
   }
   if (insight.search && insight.search.analysis.max_sustained) {
     const top = insight.search.analysis.max_sustained;
     const gap = top.weekly_sorties - m.plan.planned_sorties;
-    resources.push(el("div", { class: "brief-row" }, el("span", { text: `Ceiling: ${top.weekly_sorties} sorties a week at the ${pctText(insight.search.analysis.success_target)} bar` }),
-      el("span", { class: "tag-low", text: gap >= 0 ? `${gap} above plan` : `${-gap} below plan` })));
-  }
-  if (m.sute && m.sute.target) {
-    const pa = m.sute.per_aircraft;
-    resources.push(el("div", { class: "brief-row" }, el("span", { text: `Training tempo meets the deployed SUTE in ${pctText(m.sute.share_weeks_meeting_target)} of weeks` +
-      (pa && pa.deployed ? `; ${pa.flown.p50.toFixed(1)} sorties per aircraft a week vs ${pa.deployed.toFixed(1)} deployed` : "") }),
-      el("span", { class: m.sute.share_weeks_meeting_target >= 0.85 ? "tag-low" : "tag-watch", text: `${m.sute.flown.p50.toFixed(2)} flown` })));
+    focus.push(row(`Most the fleet sustains: ${top.weekly_sorties} sorties a week at the ${pctText(insight.search.analysis.success_target)} bar`, gap >= 0 ? `${gap} above plan` : `${-gap} below plan`, "tag-low"));
   }
 
   box.replaceChildren(
@@ -1087,8 +1120,11 @@ function renderBrief(record) {
       el("span", { class: "big-number", text: pctText(m.probability_success) }),
       el("span", { class: `band band-${m.risk_band}`, text: m.risk_band }),
       el("span", { class: "headline-label", text: `${verdict}${where}` })),
-    el("h3", { text: "What to change" }), ...changes,
-    resources.length ? el("h3", { text: "Where resources matter" }) : null, ...resources,
+    el("h3", { text: "Can we do it?" }), can,
+    el("h3", { text: "What the plan costs" }), cost,
+    el("h3", { text: "Decisions" }), decisions,
+    el("h3", { text: "How much margin we have" }), margin,
+    focus.length ? el("h3", { text: "Where to focus" }) : null, focus,
     el("p", { class: "note brief-why" }, "Why? ",
       el("button", { type: "button", class: "link-button", text: "See the planner view", onclick: () => { try { localStorage.setItem("tps.view", "plan"); } catch { /* */ } applyView(record); } })),
   );
@@ -1123,6 +1159,326 @@ function inputsView(record) {
     sources.length ? el("dl", { class: "record-facts" }, sources.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })])) : null,
     el("p", { class: "note", text: `Model ${record.model_version}, build ${String(record.build_commit).slice(0, 7)}, seed ${record.seed}, config fingerprint ${record.config_fingerprint.slice(0, 16)}. Every rule is described in MODEL_LOGIC.md, and the sources for the methods are in REFERENCES.md.` }),
   ];
+}
+
+/* ------------------------------------------------------------ margins, convergence, replication */
+const GROUP_NAMES = { maintenance: "Maintenance", scheduling: "Scheduling", baseline: "" };
+const MARGIN_INPUTS = ["break_rate", "ground_abort_rate", "mc_rate", "fix_speed"];
+
+async function runMargins(record) {
+  if (busy) return;
+  setBusy(true, "Checking margins…");
+  const status = (text) => document.querySelectorAll(".margins-status").forEach((n) => { n.textContent = text; });
+  status("Checking how far each rate can slip…");
+  try {
+    while (pool.length < poolSize()) pool.push(new PythonWorker());
+    const iterations = Math.min(2000, record.iterations);
+    const results = new Array(MARGIN_INPUTS.length);
+    let next = 0, done = 0;
+    await Promise.all(pool.map(async (worker) => {
+      while (next < MARGIN_INPUTS.length) {
+        const i = next++;
+        results[i] = await worker.request("break_even", { config: JSON.stringify(record.config), input: MARGIN_INPUTS[i],
+          seed: record.seed, iterations, bar: insight.target });
+        status(`Checked ${++done} of ${MARGIN_INPUTS.length} rates…`);
+      }
+    }));
+    insight.margins = results;
+  } catch (error) {
+    status(`Couldn't check margins: ${error.message}`);
+  } finally {
+    setBusy(false);
+  }
+  renderMargins(record);
+  renderBrief(record);
+}
+
+function marginBar(r) {
+  // A horizontal scale for one input: today's value, and where the plan crosses the bar.
+  const [lo, hiRaw] = r.range;
+  const hi = hiRaw ?? 1;
+  const W = 320, H = 34, pad = 8;
+  const x = (v) => pad + ((Math.min(Math.max(v, lo), hi) - lo) / (hi - lo)) * (W - 2 * pad);
+  const parts = [svg("line", { x1: pad, x2: W - pad, y1: 17, y2: 17, class: "grid-line" })];
+  if (r.value !== null && r.value !== undefined) {
+    const safeFrom = r.status === "holds_until" ? (r.worse === "up" ? lo : r.value) : (r.worse === "up" ? lo : r.value);
+    const safeTo = r.status === "holds_until" ? (r.worse === "up" ? r.value : hi) : (r.worse === "up" ? r.value : hi);
+    parts.push(svg("rect", { x: x(safeFrom), y: 11, width: Math.max(1, x(safeTo) - x(safeFrom)), height: 12, class: "margin-safe" }));
+    parts.push(svg("line", { x1: x(r.value), x2: x(r.value), y1: 6, y2: 28, class: "needed-line needed-high" }));
+  } else if (r.status === "holds_across_range") {
+    parts.push(svg("rect", { x: pad, y: 11, width: W - 2 * pad, height: 12, class: "margin-safe" }));
+  }
+  parts.push(svg("circle", { cx: x(r.current), cy: 17, r: 5, class: "median-dot" }));
+  return svg("svg", { viewBox: `0 0 ${W} ${H}`, class: "margin-bar", role: "img",
+    "aria-label": `${r.label}: today ${r.current}; ${r.sentence}` }, parts);
+}
+
+function marginRows(compact) {
+  if (!insight.margins) return [el("p", { class: "note margins-status", role: "status", text: "Margins haven't been checked yet." })];
+  return insight.margins.map((r) => el("div", { class: "margin-row" },
+    el("div", { class: "margin-label" }, el("span", { text: r.label }), compact ? null : el("span", { class: "note", text: ` (${r.input === "fix_speed" ? "share of today's" : "rate"})` })),
+    el("p", { class: "margin-text", text: r.sentence }),
+    compact ? null : marginBar(r)));
+}
+
+function renderMargins(record) {
+  const box = $("margins-out");
+  if (!box) return;
+  box.replaceChildren(
+    ...marginRows(false),
+    insight.margins ? el("p", { class: "note", text: `Each rate changed on its own, the rest held as entered; ${whole(Math.min(2000, record.iterations))} weeks per trial on seed ${record.seed}. The dot is today; the shaded part is where the plan still meets the ${pctText(insight.target)} bar.` }) : null);
+}
+
+function convergenceChart(m) {
+  const series = m.convergence || [];
+  if (series.length < 2) return null;
+  const W = 640, H = 200, left = 44, right = 12, top = 12, bottom = 34;
+  const maxN = series[series.length - 1][0];
+  const lows = series.map((s) => s[2]), highs = series.map((s) => s[3]);
+  const yMin = Math.max(0, Math.min(...lows) - 0.02), yMax = Math.min(1, Math.max(...highs) + 0.02);
+  const X = (n) => left + (n / maxN) * (W - left - right);
+  const Y = (p) => top + (1 - (p - yMin) / (yMax - yMin || 1)) * (H - top - bottom);
+  const band = series.map((s) => `${X(s[0])},${Y(s[3])}`).concat(series.slice().reverse().map((s) => `${X(s[0])},${Y(s[2])}`)).join(" ");
+  const ticks = [yMin, (yMin + yMax) / 2, yMax];
+  return el("figure", { class: "chart" },
+    svg("svg", { viewBox: `0 0 ${W} ${H}`, class: "margin-svg", role: "img",
+      "aria-label": `Success estimate as weeks accumulate, ending at ${pctText(m.probability_success)}.` },
+      ticks.map((v) => svg("g", {}, svg("line", { x1: left, x2: W - right, y1: Y(v), y2: Y(v), class: "grid-line" }),
+        svg("text", { x: left - 6, y: Y(v) + 4, "text-anchor": "end", class: "axis-text", text: pctText(v) }))),
+      svg("polygon", { points: band, class: "band-area" }),
+      svg("polyline", { points: series.map((s) => `${X(s[0])},${Y(s[1])}`).join(" "), class: "median-line" }),
+      svg("text", { x: (left + W - right) / 2, y: H - 8, "text-anchor": "middle", class: "axis-text", text: `Weeks simulated (of ${whole(maxN)})` })),
+    el("figcaption", { class: "legend" },
+      el("span", {}, el("span", { class: "key key-median" }), "Success so far"),
+      el("span", {}, el("span", { class: "key key-band" }), "95% range")));
+}
+
+async function runReplicates(record, count = 5) {
+  if (busy) return;
+  setBusy(true, "Checking other seeds…");
+  const box = $("replicates-out");
+  box.replaceChildren(el("p", { class: "note", role: "status", text: "Running the same plan on other seeds…" }));
+  try {
+    const variants = Array.from({ length: count }, (_, i) => ({ label: `Seed ${i + 1}`, patch: {} }));
+    const sweep = await main.request("sweep_jobs", { config: JSON.stringify(record.config), variants: JSON.stringify(variants), seed: record.seed });
+    while (pool.length < poolSize()) pool.push(new PythonWorker());
+    const out = new Array(count);
+    let next = 0;
+    await Promise.all(pool.map(async (worker) => {
+      while (next < sweep.jobs.length) {
+        const job = sweep.jobs[next++];
+        out[job.index] = await worker.request("run", { config: JSON.stringify(job.config), iterations: record.iterations, seed: job.seed });
+      }
+    }));
+    insight.replicates = out;
+    renderReplicates(record);
+  } catch (error) {
+    box.replaceChildren(el("p", { class: "message message-error", text: error.message }));
+  } finally {
+    setBusy(false);
+  }
+}
+
+function renderReplicates(record) {
+  const box = $("replicates-out");
+  if (!box || !insight.replicates) return;
+  const m = record.metrics;
+  // Two independent estimates agree if they differ by no more than chance explains:
+  // within 1.96 x sqrt(2) standard errors, i.e. about 1.4 times this run's 95% half-width.
+  const halfWidth = (m.ci95_high - m.ci95_low) / 2;
+  const allowed = Math.SQRT2 * halfWidth;
+  const agrees = (v) => Math.abs(v - m.probability_success) <= allowed;
+  const values = insight.replicates.map((r) => r.metrics.probability_success);
+  const ok = values.filter(agrees).length;
+  box.replaceChildren(
+    el("div", { class: "table-wrap" }, el("table", { class: "data-table" },
+      el("thead", {}, el("tr", {}, ["Seed", "Success", "Difference", "Within chance?"].map((t) => el("th", { text: t })))),
+      el("tbody", {},
+        el("tr", { class: "base-row" }, el("td", { text: `${record.seed} (this run)` }), el("td", { text: pctText(m.probability_success, 1) }), el("td", { text: "" }), el("td", { text: `±${(allowed * 100).toFixed(1)} pts allowed` })),
+        insight.replicates.map((r) => {
+          const v = r.metrics.probability_success;
+          const d = (v - m.probability_success) * 100;
+          return el("tr", {}, el("td", { text: String(r.seed) }), el("td", { text: pctText(v, 1) }),
+            el("td", { text: `${d >= 0 ? "+" : "\u2212"}${Math.abs(d).toFixed(1)} pts` }), el("td", { text: agrees(v) ? "Yes" : "No" }));
+        })))),
+    el("p", { class: "note", text: `${ok} of ${values.length} other seeds differ from this run by no more than chance explains (about 95% should). ` +
+      (ok >= values.length - 1 ? "The answer is stable." : "More weeks would tighten it.") }),
+  );
+}
+
+function analystEvidence(record) {
+  const m = record.metrics;
+  return [
+    el("h3", { id: "evidence-h", text: "What moves the answer" }),
+    el("p", { class: "note", text: "How far each rate can slip before the plan drops below the success bar." }),
+    el("div", { id: "margins-out" }, ...marginRows(false)),
+    el("div", { class: "button-row" }, el("button", { type: "button", class: "secondary", "data-needs-idle": true, text: insight.margins ? "Check margins again" : "Check margins", onclick: () => runMargins(record) })),
+    el("h3", { text: "Has the answer settled?" }),
+    convergenceChart(m),
+    el("p", { class: "note", text: `The running estimate should flatten inside its range well before ${whole(m.iterations)} weeks. If it's still drifting, simulate more weeks.` }),
+    el("div", { class: "button-row" }, el("button", { type: "button", class: "secondary", "data-needs-idle": true, text: "Check 5 other seeds", onclick: () => runReplicates(record) })),
+    el("div", { id: "replicates-out" }),
+  ];
+}
+
+/* ------------------------------------------------------------ the schedule, shaded by risk */
+function riskShade(share) {
+  if (share === null || share === undefined) return "";
+  return share >= 0.10 ? "cell-high" : share >= 0.02 ? "cell-watch" : "cell-low";
+}
+
+function scheduleRisk(record) {
+  const m = record.metrics;
+  const days = flyingDays(record.config).filter((d) => m.daily[d]);
+  const goes = Math.max(1, record.goes_per_day || 1);
+  const row = (label, cells, cls = "") => el("tr", { class: cls }, el("th", { scope: "row", text: label }), cells);
+  return [
+    el("h3", { id: "sched-h", text: "Your schedule, shaded by risk" }),
+    el("p", { class: "note", text: "Each cell is a go: planned sorties, and the chance it loses at least one. Under 2% is low, 2 to 10% worth watching, 10% or more high." }),
+    el("div", { class: "table-wrap" }, el("table", { class: "data-table sched-table" },
+      el("thead", {}, el("tr", {}, el("th", { text: "" }), days.map((d) => el("th", { text: d })))),
+      el("tbody", {},
+        Array.from({ length: goes }, (_, g) => row(`Go ${g + 1}`, days.map((d) => {
+          const planned = m.daily[d].planned_by_go[g];
+          const share = m.daily[d].go_miss_share[g];
+          return el("td", { class: `sched-cell ${planned ? riskShade(share) : "cell-empty"}` },
+            el("span", { class: "sched-n", text: planned ? String(planned) : "–" }),
+            planned ? el("span", { class: "sched-p", text: share < 0.0005 ? "0%" : pctText(share, share < 0.1 ? 1 : 0) }) : null);
+        }))),
+        row("Spares scheduled", days.map((d) => el("td", { text: String(m.daily[d].spares_planned) })), "sched-extra"),
+        row("Spares used (avg)", days.map((d) => el("td", { text: m.daily[d].mean_spares_used.toFixed(2) })), "sched-extra"),
+        record.plan_facts && record.plan_facts.allow_2407_adds
+          ? row("2407 adds (avg)", days.map((d) => el("td", { text: m.daily[d].mean_2407_adds.toFixed(2) })), "sched-extra") : null,
+        row("Miss the day", days.map((d) => el("td", { class: riskShade(m.daily[d].share_missing_schedule), text: pctText(m.daily[d].share_missing_schedule, 1) })), "sched-extra"),
+      ))),
+  ];
+}
+
+/* ------------------------------------------------------------ backtesting against past weeks */
+const backtest = { csv: null, source: null, report: null };
+
+function downloadText(text, filename, type = "text/csv") {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = el("a", { href: url, download: filename });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function wireBacktest() {
+  $("bt-file").addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    backtest.csv = await file.text();       // read here; never sent anywhere
+    backtest.source = file.name;
+    $("bt-run").disabled = busy;
+    $("bt-out").replaceChildren(el("p", { class: "note", text: `Loaded ${file.name}. Ready to run.` }));
+  });
+  $("bt-run").addEventListener("click", () => runBacktest());
+  $("bt-synthetic").addEventListener("click", async () => {
+    const out = $("bt-out");
+    out.replaceChildren(el("p", { class: "note", role: "status", text: "Making 60 weeks of synthetic history from the current plan…" }));
+    try {
+      const made = await main.request("backtest_synthetic", { config: JSON.stringify(formToConfig()), weeks: 60, seed: 7 });
+      backtest.csv = made.csv; backtest.source = "synthetic history (60 weeks)";
+      await runBacktest();
+    } catch (error) { out.replaceChildren(el("p", { class: "message message-error", text: error.message })); }
+  });
+  $("bt-template").addEventListener("click", async () => {
+    const made = await main.request("backtest_template", { config: JSON.stringify(formToConfig()) });
+    downloadText(made.csv, "tps-history-template.csv");
+  });
+}
+
+async function runBacktest() {
+  if (busy || !backtest.csv) return;
+  setBusy(true, "Backtesting…");
+  const out = $("bt-out");
+  const status = el("p", { class: "note", role: "status", text: "Reading the history…" });
+  out.replaceChildren(status);
+  try {
+    const prepared = await main.request("backtest_prepare", { csv: backtest.csv, config: JSON.stringify(formToConfig()), lookback: Number($("bt-lookback").value) });
+    if (prepared.errors) { out.replaceChildren(el("p", { class: "message message-error", text: prepared.errors.join(" ") })); return; }
+    if (!prepared.weeks.length) { out.replaceChildren(el("p", { class: "message message-warn", text: "No week had enough history before it to predict. Add more weeks or shorten the lookback." })); return; }
+    while (pool.length < poolSize()) pool.push(new PythonWorker());
+    const iterations = Number($("bt-iterations").value);
+    const metrics = new Array(prepared.weeks.length);
+    let next = 0, done = 0;
+    await Promise.all(pool.map(async (worker) => {
+      while (next < prepared.weeks.length) {
+        const i = next++;
+        const rec = await worker.request("run", { config: JSON.stringify(prepared.weeks[i].config), iterations, seed: 42 });
+        if (rec.errors) throw new Error(`Week ${prepared.weeks[i].week_start}: ${rec.errors.join(" ")}`);
+        metrics[i] = rec.metrics;
+        status.textContent = `Predicted ${++done} of ${prepared.weeks.length} weeks…`;
+      }
+    }));
+    const slim = { ...prepared, weeks: prepared.weeks.map(({ config, ...rest }) => rest) };
+    backtest.report = await main.request("backtest_summarize", { prepared: JSON.stringify(slim), metrics: JSON.stringify(metrics) });
+    renderBacktest();
+  } catch (error) {
+    out.replaceChildren(el("p", { class: "message message-error", text: error.message }));
+  } finally {
+    setBusy(false);
+    $("bt-run").disabled = !backtest.csv;
+  }
+}
+
+function reliabilityChart(r) {
+  const W = 360, H = 300, left = 46, right = 14, top = 14, bottom = 42;
+  const X = (v) => left + v * (W - left - right);
+  const Y = (v) => top + (1 - v) * (H - top - bottom);
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const maxWeeks = Math.max(...r.bins.map((b) => b.weeks));
+  return el("figure", { class: "chart reliability" },
+    svg("svg", { viewBox: `0 0 ${W} ${H}`, class: "margin-svg", role: "img",
+      "aria-label": `Calibration: predicted chance of success against the share of weeks that succeeded, in ${r.bins.length} bands.` },
+      ticks.map((v) => svg("g", {},
+        svg("line", { x1: left, x2: W - right, y1: Y(v), y2: Y(v), class: "grid-line" }),
+        svg("text", { x: left - 6, y: Y(v) + 4, "text-anchor": "end", class: "axis-text", text: pctText(v) }),
+        svg("text", { x: X(v), y: H - bottom + 16, "text-anchor": "middle", class: "axis-text", text: pctText(v) }))),
+      svg("line", { x1: X(0), y1: Y(0), x2: X(1), y2: Y(1), class: "needed-line" }),
+      r.bins.map((b) => svg("g", {},
+        svg("line", { x1: X(b.predicted), x2: X(b.predicted), y1: Y(b.observed_low), y2: Y(b.observed_high), class: b.agrees ? "ci-ok" : "ci-off" }),
+        svg("circle", { cx: X(b.predicted), cy: Y(b.observed), r: 4 + 6 * Math.sqrt(b.weeks / maxWeeks), class: b.agrees ? "median-dot" : "dot-miss" },
+          svg("title", { text: `${pctText(b.from)}–${pctText(b.to)} predicted: ${b.weeks} weeks, ${pctText(b.observed)} succeeded` })))),
+      svg("text", { x: (left + W - right) / 2, y: H - 6, "text-anchor": "middle", class: "axis-text", text: "Predicted chance of success" })),
+    el("figcaption", { class: "legend" },
+      el("span", {}, el("span", { class: "key key-needed" }), "Perfect calibration"),
+      el("span", {}, el("span", { class: "key key-dot" }), "Share that succeeded (size: weeks; line: 95% range)")));
+}
+
+function renderBacktest() {
+  const r = backtest.report;
+  const out = $("bt-out");
+  if (!r) return;
+  if (!r.weeks) { out.replaceChildren(el("p", { class: "message message-warn", text: r.sentences[0] })); return; }
+  const csvRows = [["week_start", "predicted", "succeeded", "flown", "planned", "sorties_p10", "sorties_p90", "missed_days", "riskiest_day"]]
+    .concat(r.rows.map((w) => [w.week_start, w.predicted.toFixed(3), w.succeeded ? 1 : 0, w.flown, w.planned, w.sorties_p10, w.sorties_p90, w.missed_days.join(" "), w.weakest_day || ""]));
+  out.replaceChildren(
+    el("p", { class: "note", text: `${backtest.source}: ${r.weeks} weeks predicted` + (r.skipped_for_history ? `; the first ${r.skipped_for_history} had too little history before them.` : ".") }),
+    el("ul", { class: "findings" }, r.sentences.map((t) => el("li", { text: t }))),
+    el("div", { class: "bt-grid" },
+      reliabilityChart(r),
+      el("div", { class: "table-wrap" }, el("table", { class: "data-table" },
+        el("thead", {}, el("tr", {}, ["Predicted band", "Weeks", "Predicted", "Succeeded", "Agrees?"].map((t) => el("th", { text: t })))),
+        el("tbody", {}, r.bins.map((b) => el("tr", {},
+          el("td", { text: `${pctText(b.from)}–${pctText(b.to)}` }), el("td", { text: String(b.weeks) }),
+          el("td", { text: pctText(b.predicted) }), el("td", { text: `${pctText(b.observed)} (${pctText(b.observed_low)}–${pctText(b.observed_high)})` }),
+          el("td", { class: b.agrees ? "meets" : "misses", text: b.agrees ? "Yes" : "No" }))))))),
+    el("details", { class: "details" },
+      el("summary", { text: "Week by week" }),
+      el("div", { class: "table-wrap" }, el("table", { class: "data-table" },
+        el("thead", {}, el("tr", {}, ["Week of", "Predicted", "What happened", "Sorties (predicted range)", "Missed days", "Riskiest day"].map((t) => el("th", { text: t })))),
+        el("tbody", {}, r.rows.map((w) => el("tr", {},
+          el("td", { text: w.week_start }), el("td", { text: pctText(w.predicted) }),
+          el("td", { class: w.succeeded ? "meets" : "misses", text: w.succeeded ? "Succeeded" : "Fell short" }),
+          el("td", { text: `${w.flown} of ${w.planned} (${Math.round(w.sorties_p10)}–${Math.round(w.sorties_p90)})` }),
+          el("td", { text: w.missed_days.join(", ") || "None" }), el("td", { text: w.weakest_day || "None" }))))))),
+    el("div", { class: "button-row" }, el("button", { type: "button", class: "secondary", text: "Download results (CSV)",
+      onclick: () => downloadText(csvRows.map((row) => row.join(",")).join("\n"), "tps-backtest-results.csv") })),
+    r.problems && r.problems.length ? el("details", { class: "details" }, el("summary", { text: `${r.problems.length} rows or weeks skipped` }),
+      el("ul", {}, r.problems.map((t) => el("li", { text: t })))) : null,
+  );
 }
 
 /* ------------------------------------------------------------ leadership summary */
@@ -1231,7 +1587,7 @@ function renderResult(record) {
   const days = flying.filter((d) => m.daily[d]);
   const failures = Object.entries(m.failures.failure_mode_counts).filter(([mode]) => mode !== "Full Schedule Not Flown");
   const key = record.metrics_fingerprint + record.seed;
-  if (insight.key !== key) { insight.key = key; insight.fixes = null; insight.search = null; }
+  if (insight.key !== key) { insight.key = key; insight.fixes = null; insight.search = null; insight.margins = null; insight.replicates = null; }
 
   const targetSelect = el("select", { id: "target", "aria-label": "Success target" },
     TARGETS.map(([value, label]) => el("option", { value, text: label, selected: value === insight.target })));
@@ -1244,6 +1600,7 @@ function renderResult(record) {
     viewToggle(),
     el("section", { id: "brief", class: "card brief-card", "data-views": "lead", "aria-label": "Decision brief" }),
     el("section", { id: "summary", class: "card summary-card", "data-views": "plan ana", "aria-label": "Summary" }),
+    el("section", { class: "card", "data-views": "plan ana", "aria-labelledby": "sched-h" }, scheduleRisk(record)),
     el("section", { class: "card", "aria-labelledby": "where-h" },
       el("h3", { id: "where-h", text: "Where the plan runs tight" }),
       marginChart(record),
@@ -1278,6 +1635,7 @@ function renderResult(record) {
         el("button", { type: "button", class: "primary align-end", "data-needs-idle": true, text: "Test turn patterns", onclick: () => testPatterns(record) })),
       el("div", { id: "search-out" }),
     ),
+    el("section", { class: "card", "data-views": "ana", "aria-labelledby": "evidence-h" }, analystEvidence(record)),
     el("section", { class: "card", "data-views": "ana", "aria-labelledby": "inputs-h" }, inputsView(record)),
     el("section", { class: "card no-print", "data-views": "ana", "aria-label": "Example week" }, weekBoard(record)),
     el("details", { id: "all-numbers", class: "card details no-print", "data-views": "plan ana" },
@@ -1328,6 +1686,8 @@ function renderResult(record) {
   const first = picks.typical_failure ?? picks.typical;
   if (first !== undefined && first !== null) loadWeek(record, first);
   if (insight.fixes) renderFixes(record);
+  if (insight.margins) renderMargins(record);
+  if (insight.replicates) renderReplicates(record);
   if (insight.search) renderSearch(record);
   document.querySelectorAll("[data-needs-idle]").forEach((b) => { b.disabled = busy; });
   const result = $("result");
@@ -1478,6 +1838,7 @@ function wireTheme() {
 
 async function start() {
   wireTheme();
+  wireBacktest();
   wireForm();
   renderHistory();
   try {

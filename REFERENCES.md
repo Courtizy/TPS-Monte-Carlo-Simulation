@@ -68,6 +68,9 @@ A Monte Carlo turnaround model compared with three months of an airline's flight
 **San Antonio, A., A. A. Juan, L. Calvet, P. Fonseca i Casas, and D. Guimarans (2017).** "Using Simulation to Estimate Critical Paths and Survival Functions in Aircraft Turnaround Processes." In *Proceedings of the 2017 Winter Simulation Conference*, 3394–3403. doi:10.1109/WSC.2017.8248055
 Monte Carlo simulation of a Boeing 737-800 turnaround with random task times, giving the probability the turnaround finishes by each target time. *TPS:* the same idea as cumulative fix windows, the share of aircraft ready within each number of hours (F-1).
 
+**"Scheduling Aircraft Ground Handling Operations Under Uncertainty Using Critical Path Analysis and Monte Carlo Simulation: Survey and Research Directions."** Journal article, IGI Global. ResearchGate publication 338326271: https://www.researchgate.net/publication/338326271. *(Authors, journal, and year to confirm from the publication page.)*
+Schedules ground handling tasks with uncertain durations by combining critical path analysis with Monte Carlo simulation, using a long-range wide-body twin-engine case at a hub airport; the method improved on the schedules observed there. *TPS:* the same pairing of a fixed task sequence with simulated task times, and the same aim of setting realistic turn times so resources go where the critical path is.
+
 **Bazargan-Lari, M., P. Gupta, and S. Young (2003).** "A Simulation Approach to Manpower Planning." In *Proceedings of the 2003 Winter Simulation Conference*.
 A line maintenance simulation for Continental Airlines at Newark, checked against actual staffing, with sensitivity analysis and a search for better shift schedules. *TPS:* precedent for simulating maintenance shift coverage (F-4) and for validating against real numbers.
 

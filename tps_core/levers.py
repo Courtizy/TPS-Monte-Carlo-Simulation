@@ -21,7 +21,7 @@ def build_levers(config: dict[str, Any], metrics: dict[str, Any]) -> list[dict[s
     commit = commit_aircraft(scenario.inventory.pai, rules)
     days = rules.flying_days
     weakest = metrics.get("weakest_day")
-    variants = [{"label": "As planned", "patch": {}, "kind": "baseline", "cost": "None"}]
+    variants = [{"label": "As planned", "patch": {}, "kind": "baseline", "group": "baseline", "cost": "None"}]
 
     def over_commit(plan: DayPlan, extra: int) -> bool:
         return aircraft_required(plan, rules) + extra > commit
@@ -39,6 +39,7 @@ def build_levers(config: dict[str, Any], metrics: dict[str, Any]) -> list[dict[s
         if plan.first_go:
             variants.append({
                 "label": f"One more spare on {weakest}",
+                "group": "maintenance",
                 "patch": {"schedule": {weakest: {"spares": day_spares(plan, rules) + 1}}},
                 "kind": "lever",
                 "cost": f"1 more aircraft on the {weakest} front line" + (" (above commit)" if over_commit(plan, 1) else "")
@@ -51,6 +52,7 @@ def build_levers(config: dict[str, Any], metrics: dict[str, Any]) -> list[dict[s
             names = ("first_go", "second_go", "third_go", "fourth_go")
             variants.append({
                 "label": f"One fewer sortie on {weakest}'s last go",
+                "group": "scheduling",
                 "patch": {"schedule": {weakest: {names[i]: fewer[i] for i in range(4) if fewer[i] != plan.goes[i]}}},
                 "kind": "lever",
                 "cost": "1 fewer sortie planned" + (
@@ -62,6 +64,7 @@ def build_levers(config: dict[str, Any], metrics: dict[str, Any]) -> list[dict[s
         above = any(over_commit(p, 1) for p in flying_plans.values())
         variants.append({
             "label": "One more spare every day",
+            "group": "maintenance",
             "patch": {"schedule": {d: {"spares": day_spares(p, rules) + 1} for d, p in flying_plans.items()}},
             "kind": "lever",
             "cost": "1 more aircraft on each day's front line" + (" (above commit on some days)" if above else "")
@@ -70,14 +73,18 @@ def build_levers(config: dict[str, Any], metrics: dict[str, Any]) -> list[dict[s
     if not scenario.options.allow_2407_adds:
         variants.append({
             "label": "Allow 2407 adds",
+            "group": "maintenance",
             "patch": {"options": {"allow_2407_adds": True}},
             "kind": "lever",
             "cost": "Unplanned aircraft each need approval and count against commit afterward",
         })
+    if weakest:
+        variants.extend(_moves(scenario, metrics, weakest, commit))
     weekend = dict(scenario.options.weekend_coverage_hours)
     if weekend.get("Sat", 24) == 0 and weekend.get("Sun", 24) == 0:
         variants.append({
             "label": "One 8-hour repair shift each weekend day",
+            "group": "maintenance",
             "patch": {"options": {"weekend_coverage_hours": {"Sat": 8, "Sun": 8}}},
             "kind": "lever",
             "cost": "Two weekend shifts",
@@ -85,6 +92,7 @@ def build_levers(config: dict[str, Any], metrics: dict[str, Any]) -> list[dict[s
     if weekend.get("Sat", 24) < 24 or weekend.get("Sun", 24) < 24:
         variants.append({
             "label": "Weekend repairs around the clock",
+            "group": "maintenance",
             "patch": {"options": {"weekend_coverage_hours": {"Sat": 24, "Sun": 24}}},
             "kind": "lever",
             "cost": "Full weekend manning",
@@ -161,3 +169,59 @@ def sustainable_candidates(config: dict[str, Any], max_candidates: int = 60) -> 
         })
     candidates.sort(key=lambda c: (-c["weekly_sorties"], -c["pattern"][0]))
     return candidates[:max_candidates]
+
+
+GO_NAMES = ("first_go", "second_go", "third_go", "fourth_go")
+
+
+def _fits(goes: list[int], rules, commit: int) -> bool:
+    if any(goes[i + 1] > goes[i] for i in range(3)):
+        return False
+    plan = DayPlan(*goes)
+    if aircraft_required(plan, rules) > commit:
+        return False
+    limits = (None, rules.max_second_go, rules.max_third_go, rules.max_fourth_go)
+    if any(limit is not None and c > limit for c, limit in zip(goes, limits)):
+        return False
+    return rules.max_daily_sorties is None or sum(goes) <= rules.max_daily_sorties
+
+
+# [L-2]
+def _moves(scenario, metrics, weakest: str, commit: int, how_many: int = 2) -> list[dict[str, Any]]:
+    """Move one sortie off the weakest day's last go onto the steadiest days: same weekly flying."""
+    rules = scenario.rules
+    source = scenario.schedule[weakest]
+    flown = [g for g in source.goes if g]
+    if not flown:
+        return []
+    from_go = len(flown) - 1
+    src = list(source.goes)
+    src[from_go] -= 1
+    if not _fits(src, rules, commit) and sum(src) > 0:
+        return []
+    daily = metrics.get("daily", {})
+    others = [d for d in rules.flying_days if d != weakest and scenario.schedule[d].daily_sorties]
+    others.sort(key=lambda d: (daily.get(d, {}).get("share_missing_schedule", 1),
+                               -(daily.get(d, {}).get("ready_p10", 0) - daily.get(d, {}).get("aircraft_needed", 0))))
+    moves = []
+    max_go = scenario.goes_per_day
+    for day in others:
+        dst_plan = scenario.schedule[day]
+        for go in [from_go] + [g for g in range(max_go - 1, -1, -1) if g != from_go]:
+            dst = list(dst_plan.goes)
+            dst[go] += 1
+            if go < max_go and _fits(dst, rules, commit):
+                moves.append({
+                    "label": f"Move one sortie from {weakest} go {from_go + 1} to {day} go {go + 1}",
+                    "group": "scheduling",
+                    "patch": {"schedule": {
+                        weakest: {GO_NAMES[i]: src[i] for i in range(4) if src[i] != source.goes[i]},
+                        day: {GO_NAMES[i]: dst[i] for i in range(4) if dst[i] != dst_plan.goes[i]},
+                    }},
+                    "kind": "lever",
+                    "cost": f"Same weekly sorties; {weakest} flies {sum(src)}, {day} flies {sum(dst)}",
+                })
+                break
+        if len(moves) >= how_many:
+            break
+    return moves

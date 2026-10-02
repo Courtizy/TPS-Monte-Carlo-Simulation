@@ -227,6 +227,28 @@
       </div>
       <div id="result" hidden></div>
 
+      <section id="backtest" class="card no-print" data-views="plan ana" aria-labelledby="bt-h">
+        <h2 id="bt-h">Check the model against past weeks</h2>
+        <p class="note">Load your unit's history: one row per flying day with planned and flown sorties by go, spares, breaks, aborts, and fixes within each window. Each week is predicted from the plan and the rates of the weeks before it, then compared with what happened. <strong>Your file is read in this browser and never uploaded.</strong></p>
+        <div class="row-fields">
+          <label class="field">History file (CSV)
+            <input id="bt-file" type="file" accept=".csv,text/csv">
+          </label>
+          <label class="field">Rates from the weeks before
+            <select id="bt-lookback"><option value="2">2 weeks</option><option value="4" selected>4 weeks</option><option value="8">8 weeks</option></select>
+          </label>
+          <label class="field">Weeks simulated per prediction
+            <select id="bt-iterations"><option value="1000">1,000</option><option value="2000" selected>2,000</option></select>
+          </label>
+        </div>
+        <div class="button-row">
+          <button type="button" id="bt-run" class="primary" disabled>Run the backtest</button>
+          <button type="button" id="bt-synthetic" class="secondary">Try with synthetic history</button>
+          <button type="button" id="bt-template" class="secondary">Download the template</button>
+        </div>
+        <p class="note">Spares, commit, goes, weekend hours, and other rules come from the plan setup above.</p>
+        <div id="bt-out" aria-live="polite"></div>
+      </section>
       <section class="records card no-print" aria-labelledby="records-heading">
         <h2 id="records-heading">Run history</h2>
         <p class="note">Runs are saved in this browser only. Download a run record to keep it or share it; anyone can verify it reproduces exactly.</p>

@@ -54,15 +54,19 @@ Setup sections (weekly plan, how your unit flies, deployed tempo, rates, rules, 
 
 Deployed tempo takes three inputs: deployed aircraft (PAA), O&M days, and sorties. SUTE, aircraft days, sorties per O&M day, and average sorties per aircraft are calculated and shown. Configs that recorded other figures still load; their worked-out aircraft, days, and sorties appear greyed in the inputs.
 
+## Backtesting against past weeks
+
+The **Check the model against past weeks** section loads a history file (one row per flying day; see `examples/history_template.csv` or use **Download the template**). Each week is predicted from its planned schedule and the rates of the weeks before it, then compared with what happened: calibration by prediction band, a Brier accuracy score against always guessing the overall rate, sorties coverage, and day-level agreement. **Try with synthetic history** shows the whole flow on 60 weeks the model generates itself. The file is read in the browser and never uploaded. Rules B-1 to B-4 in `MODEL_LOGIC.md`.
+
 ## Three views of the same run
 
 A toggle at the top of the results switches depth without changing the run:
 
 | View | Shows |
 | --- | --- |
-| Leadership | A decision brief: the verdict, what to change ranked by payoff (fixes run automatically), and where resources matter; plus where the plan runs tight and the fixes table. |
-| Planner (default) | Everything: summary, where the plan runs tight (with goes and SUTE), why sorties are lost, watch a week, fixes, and the turn-pattern search. |
-| Analyst | Everything in the planner view, plus inputs and their sources, the run record, and all the numbers opened up. |
+| Leadership | A decision brief built around their questions: can we do it, what the plan costs (front line vs commit, spares scheduled and flown, 2407 adds, weekend repairs), decisions grouped into maintenance and scheduling levers, how much margin each rate has before the plan drops below the bar, and where to focus. Fixes and margins run automatically. |
+| Planner (default) | The schedule shaded by risk (each go's chance of losing a sortie, spares scheduled and used by day), where the plan runs tight, why sorties are lost, watch a week, fixes including moving a sortie, and the turn-pattern search with its efficient frontier. |
+| Analyst | Everything in the planner view, plus what moves the answer (break-even margins for each rate), whether the answer has settled (running estimate and a check against five other seeds), inputs and sources, and all the numbers. |
 
 Anyone can switch views at any time, and every view shows the same seed and model version, so a recommendation can always be traced to its evidence. The choice is remembered in the browser.
 

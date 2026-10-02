@@ -29,6 +29,11 @@ self.onmessage = async (event) => {
     else if (type === "levers") text = api.levers(payload.config, payload.metrics);
     else if (type === "candidates") text = api.candidates(payload.config);
     else if (type === "patterns_generate") text = api.patterns_generate(payload.config, payload.options);
+    else if (type === "break_even") text = api.break_even(payload.config, payload.input, payload.seed, payload.iterations, payload.bar);
+    else if (type === "backtest_prepare") text = api.backtest_prepare(payload.csv, payload.config, payload.lookback);
+    else if (type === "backtest_summarize") text = api.backtest_summarize(payload.prepared, payload.metrics);
+    else if (type === "backtest_synthetic") text = api.backtest_synthetic(payload.config, payload.weeks, payload.seed);
+    else if (type === "backtest_template") text = api.backtest_template(payload.config);
     else if (type === "tempo") text = api.tempo(payload.sute, payload.pai, payload.days);
     else if (type === "replay") text = api.replay(payload.config, payload.seed, payload.week);
     else if (type === "patterns_analyze") text = api.patterns_analyze(payload.config, payload.results, payload.target);

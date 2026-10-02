@@ -61,6 +61,7 @@ def run_plan(config: dict[str, Any], iterations: int = 10_000, seed: int | None 
         "required_sorties": scenario.required_sorties,
         "required_from_sute": scenario.required_from_sute,
         "tempo": _tempo(config),
+        "plan_facts": _plan_facts(scenario),
         "goes_per_day": scenario.goes_per_day,
         "go_times": [list(pair) for pair in scenario.options.go_times],
         "iterations": int(iterations),
@@ -107,3 +108,17 @@ def _tempo(config: dict[str, Any]) -> dict[str, Any] | None:
     """The deployed tempo as worked out from the config's figures [M-9]."""
     from tps_core.tempo import solve_tempo
     return solve_tempo(config["sute"]) if config.get("sute") else None
+
+
+def _plan_facts(scenario) -> dict[str, Any]:
+    """What the plan asks of the unit before any luck: commit, front line, and scheduled spares."""
+    from tps_core.rules import aircraft_required, commit_aircraft, day_spares
+    rules = scenario.rules
+    days = [d for d in rules.flying_days if scenario.schedule[d].daily_sorties]
+    return {
+        "commit": commit_aircraft(scenario.inventory.pai, rules),
+        "max_front_line": max((aircraft_required(scenario.schedule[d], rules) for d in days), default=0),
+        "spares_per_week": sum(day_spares(scenario.schedule[d], rules) for d in days),
+        "weekend_hours": dict(scenario.options.weekend_coverage_hours),
+        "allow_2407_adds": scenario.options.allow_2407_adds,
+    }

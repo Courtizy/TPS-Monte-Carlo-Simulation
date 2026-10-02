@@ -92,3 +92,33 @@ def tempo(sute_json: str, pai: int, flying_days: int) -> str:
     if result["sute"] and pai:
         result["requirements"] = home_requirements(result["sute"], int(pai), int(flying_days))
     return json.dumps(result)
+
+
+def break_even(config_json: str, name: str, seed: int, iterations: int, bar: float) -> str:
+    from tps_core.sensitivity import break_even as find, describe
+    result = find(json.loads(config_json), str(name), int(seed), int(iterations), float(bar))
+    result["sentence"] = describe(result)
+    return json.dumps(result)
+
+
+def backtest_prepare(csv_text: str, config_json: str, lookback: int) -> str:
+    from tps_core.backtest import prepare
+    try:
+        return json.dumps(prepare(str(csv_text), json.loads(config_json), int(lookback)))
+    except (ValueError, KeyError) as error:
+        return json.dumps({"errors": [str(error)]})
+
+
+def backtest_summarize(prepared_json: str, metrics_json: str) -> str:
+    from tps_core.backtest import summarize
+    return json.dumps(summarize(json.loads(prepared_json), json.loads(metrics_json)))
+
+
+def backtest_synthetic(config_json: str, weeks: int, seed: int) -> str:
+    from tps_core.backtest import synthetic_history
+    return json.dumps({"csv": synthetic_history(json.loads(config_json), int(weeks), int(seed))})
+
+
+def backtest_template(config_json: str) -> str:
+    from tps_core.backtest import template
+    return json.dumps({"csv": template(json.loads(config_json))})
