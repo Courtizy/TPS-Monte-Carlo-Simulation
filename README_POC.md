@@ -48,6 +48,10 @@ Each config describes one unit's pattern. The three synthetic examples show a 2-
 
 Day-based patterns only for now: every sortie launches and lands at home the same day. Long sorties that cross midnight or leave the aircraft off-station (mobility, bomber) are a later phase.
 
+## Branding
+
+The page uses the Decision Models brand kit in `brand/` (TPS is app 01: teal, "Can the fleet meet the flying schedule?"). `<html data-app="tps">` picks the app; the build copies `brand/css`, `brand/icons` and `brand/js` into the site. Dark is the default and light follows the device, with the Auto/Light/Dark switch forcing either. Page colors are aliases for the brand tokens (`web/styles.css`, top). Chart marks use the series colors, good and bad meanings use the status colors with a label, and the disclaimer footer appears on every page and printout. To change colors, edit `brand/palette.py` and follow `brand/README.md`.
+
 ## Page layout
 
 Setup sections (weekly plan, how your unit flies, deployed tempo, rates, rules, how the week plays out) are collapsible; each shows a one-line summary when closed, and the weekly plan starts open. After a run, the setup folds into a single line with an **Edit plan** button so the results use the full width.

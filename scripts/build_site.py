@@ -46,6 +46,10 @@ def main() -> int:
     if out.exists():
         shutil.rmtree(out)
     shutil.copytree(ROOT / "web", out)
+    # The brand kit's web assets (stylesheet, icons, chart palette) ship with the site.
+    for part in ("css", "icons", "js"):
+        if (ROOT / "brand" / part).exists():
+            shutil.copytree(ROOT / "brand" / part, out / "brand" / part)
     (out / ".nojekyll").write_text("")
 
     # Zip the package with the build stamp written in (source files stay untouched).

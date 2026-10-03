@@ -1,12 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-app="tps">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Turn Pattern Sustainability</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <title>Turn Pattern Sustainability · Jason C. Courtoy</title>
+  <link rel="icon" type="image/svg+xml" href="brand/icons/tps.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="brand/icons/tps-32.png">
+  <link rel="apple-touch-icon" href="brand/icons/tps-180.png">
+  <link rel="stylesheet" href="brand/css/brand.css">
   <link rel="stylesheet" href="styles.css">
   <script>
     try {
@@ -16,14 +17,18 @@
   </script>
 </head>
 <body>
-  <header class="masthead">
-    <div class="masthead-inner">
-      <div>
-        <h1>Turn Pattern Sustainability</h1>
-        <p class="tagline">How often does this week's flying schedule hold up? Proof of concept.</p>
+  <header class="brand-header">
+    <div class="brand-header__inner">
+      <div class="brand-tile" aria-hidden="true">
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M52 32a20 20 0 1 1-6-14.3"/><path d="M48 8v10H38"/><circle cx="32" cy="32" r="4" fill="currentColor"/></svg>
+      </div>
+      <div class="brand-header__text">
+        <h1 class="brand-header__name">Turn Pattern Sustainability</h1>
+        <p class="brand-header__question">Can the fleet meet the flying schedule?</p>
+        <span class="brand-header__by">by Jason C. Courtoy</span>
       </div>
       <div class="engine-status">
-        <p id="status" class="status status-loading" role="status">Loading the model. The first load takes a few seconds.</p>
+        <p id="status" class="engine-state engine-loading" role="status">Loading the model. The first load takes a few seconds.</p>
         <p id="build" class="build"></p>
         <div class="theme-switch" role="group" aria-label="Color theme">
           <button type="button" data-theme-choice="auto">Auto</button>
@@ -262,8 +267,9 @@
     </section>
   </main>
 
-  <footer class="footer no-print">
-    <p>The model runs entirely in your browser. No plan or result is sent to a server. Public examples use synthetic values only.</p>
+  <footer class="brand-footer">
+    <p>Personal project · public or synthetic data only · not endorsed by DoD or the U.S. Air Force</p>
+    <p class="no-print">The model runs entirely in your browser. No plan, history file, or result is sent to a server.</p>
   </footer>
   <script src="app.js"></script>
 </body>

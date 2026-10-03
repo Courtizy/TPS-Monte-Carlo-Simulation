@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- Starter page. Copy into your site and change data-app to "tps", "roi" or "valuation".
+     Paths assume this file sits next to the brand/ folder; adjust if it lives inside it. -->
+<html lang="en" data-app="tps">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Turn Pattern Sustainability · Jason C. Courtoy</title>
+  <link rel="icon" type="image/svg+xml" href="brand/icons/tps.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="brand/icons/tps-32.png">
+  <link rel="apple-touch-icon" href="brand/icons/tps-180.png">
+  <link rel="stylesheet" href="brand/css/brand.css">
+</head>
+<body>
+  <header class="brand-header">
+    <div class="brand-header__inner">
+      <div class="brand-tile" aria-hidden="true">
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M52 32a20 20 0 1 1-6-14.3"/><path d="M48 8v10H38"/><circle cx="32" cy="32" r="4" fill="currentColor"/></svg>
+      </div>
+      <div class="brand-header__text">
+        <h1 class="brand-header__name">Turn Pattern Sustainability</h1>
+        <p class="brand-header__question">Can the fleet meet the flying schedule?</p>
+      </div>
+      <span class="brand-header__by">by Jason C. Courtoy</span>
+    </div>
+  </header>
+
+  <main style="max-width: 1120px; margin: 0 auto; padding: 24px 16px; display: grid; gap: 16px;">
+    <section class="brand-card">
+      <h2 style="margin-top: 0;">Result</h2>
+      <p>Probability of meeting the weekly requirement: <span class="num">[value]</span></p>
+      <p>
+        <span class="status status--good">On track</span>
+        <span class="status status--warning">At risk</span>
+        <span class="status status--critical">Shortfall</span>
+      </p>
+      <div id="chart" style="height: 320px;"></div>
+    </section>
+  </main>
+
+  <footer class="brand-footer">
+    Personal project · public or synthetic data only · not endorsed by DoD or the U.S. Air Force
+  </footer>
+
+  <!-- Optional: chart colors for Plotly.js (or read series() for any chart library). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+  <script type="module">
+    import { series, plotlyLayout, onModeChange } from "./brand/js/palette.js";
+    const app = document.documentElement.dataset.app;
+    const draw = () => {
+      const [c1, c2] = series(app, undefined, 2);
+      Plotly.react("chart", [
+        // Sample data only: replace with your results.
+        { y: [3, 5, 4, 6], name: "Pattern A", line: { color: c1, width: 2 } },
+        { y: [2, 4, 5, 5], name: "Pattern B", line: { color: c2, width: 2 } },
+      ], { ...plotlyLayout(app), margin: { t: 16, r: 16, b: 40, l: 40 } }, { displayModeBar: false, responsive: true });
+    };
+    draw();
+    onModeChange(draw);
+  </script>
+</body>
+</html>

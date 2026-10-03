@@ -1845,12 +1845,12 @@ async function start() {
     await loadExamples();
     const info = await main.request("info");
     $("status").textContent = "Model ready";
-    $("status").className = "status status-ready";
+    $("status").className = "engine-state engine-ready";
     $("build").textContent = `Model ${info.model_version}, build ${String(info.build_commit).slice(0, 7)}`;
     setBusy(false);
   } catch (error) {
     $("status").textContent = `The model didn't load: ${error.message}`;
-    $("status").className = "status status-error";
+    $("status").className = "engine-state engine-error";
   }
 }
 
