@@ -1,8 +1,7 @@
 name: Test and publish the proof of concept
 
-# Lives at the repo root in .github/workflows/ (GitHub only runs workflows from there).
-# It finds the proof-of-concept folder by itself: whichever folder holds
-# scripts/build_site.py (browser_base/, any other name, or the repo root).
+# Runs from the repo root: tests in tests/, model in model/, page in app/.
+# GitHub only runs workflows from .github/workflows/.
 
 on:
   push:
@@ -23,49 +22,32 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-      - name: Find the proof-of-concept folder
-        id: app
-        run: |
-          found=$(git ls-files '*scripts/build_site.py' | head -1)
-          if [ -z "$found" ]; then
-            echo "::error::Couldn't find scripts/build_site.py anywhere on this branch. Upload the proof-of-concept folder."
-            exit 1
-          fi
-          dir=$(dirname "$(dirname "$found")")
-          echo "dir=$dir" >> "$GITHUB_OUTPUT"
-          echo "Proof of concept found in: $dir"
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install pytest
       - name: Model tests (must pass before anything publishes)
-        working-directory: ${{ steps.app.outputs.dir }}
-        run: pytest tests_core -q
+        run: pytest -q
 
   build:
     needs: test
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-      - name: Find the proof-of-concept folder
-        id: app
-        run: |
-          found=$(git ls-files '*scripts/build_site.py' | head -1)
-          dir=$(dirname "$(dirname "$found")")
-          echo "dir=$dir" >> "$GITHUB_OUTPUT"
-          if [ ! -f "$dir/brand/css/brand.css" ]; then
-            echo "::warning::No brand/ folder next to web/ in $dir. The site will publish without the brand styles."
-          fi
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Check the brand kit is present
+        run: |
+          if [ ! -f app/brand/css/brand.css ]; then
+            echo "::warning::No app/brand/ folder. The site will publish without the brand styles."
+          fi
       - name: Build the site with the version and commit stamped in
-        working-directory: ${{ steps.app.outputs.dir }}
         run: python scripts/build_site.py --out site --commit "$GITHUB_SHA"
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: ${{ steps.app.outputs.dir }}/site
+          path: site
 
   deploy:
     needs: build

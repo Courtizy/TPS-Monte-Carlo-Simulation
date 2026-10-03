@@ -1,0 +1,8 @@
+# Build output (the workflow builds and publishes it)
+site/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

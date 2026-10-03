@@ -1,3 +1,0 @@
-
-# TPS proof of concept build output
-site/

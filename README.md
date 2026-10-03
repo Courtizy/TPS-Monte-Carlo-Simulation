@@ -1,303 +1,113 @@
-# Turn Pattern Sustainability Monte Carlo Model
+# Turn Pattern Sustainability
 
-This is a condensed Streamlit Monte Carlo model for assessing whether weekly turn patterns are sustainable under TTP commit limits, UTE planning bands, maintenance event rates, and repair assumptions.
+**Can the fleet meet the flying schedule?** TPS plays a weekly flying schedule out thousands of times, with breaks, aborts, and fixes drawn from a unit's own rates, and reports how often the plan holds, where it breaks, why, and what would fix it. It runs entirely in the browser: no plan, history file, or result is sent to a server.
 
-## Files
+Personal project · public or synthetic data only · not endorsed by DoD or the U.S. Air Force.
 
-- `ttp_rules.py`: TTP/policy assumptions, model version, validation, risk bands, commit-rate math, spare rules, and recovery model names.
-- `simulation.py`: simulation and Monte Carlo mechanics: event generation, event distribution, GA coverage, fix logic, daily MC carry-forward, weekend recovery, and success scoring.
-- `pattern_generator.py`: UTE capacity sweep, DSUTE calculator, turn-pattern permutations, GO-level splits, and pattern classification.
-- `gui_app.py`: Streamlit interface for optimization, manual pattern testing, and DSUTE calculation.
-- `assets/`: application logo files based on selected Option 6A branding, including exact raster recolors.
-- `MODEL_LOGIC.md`: deeper reference explaining each model phase, feature, and output interpretation.
-- `requirements.txt`: Python package requirements.
+## Repo layout
 
-Generated output may appear in `analysis_output/`; it is not required to run the GUI.
+The folders follow the portfolio's app framework (`app_layer_frameworks.md`): each model layer has its own folder, with matching tests.
 
-## Run
+```
+docs/                 MODEL_LOGIC.md (start here) and REFERENCES.md
+model/tps_core/       the model, standard library only
+  L0_inputs/          config schema, planning rules, deployed tempo
+  L1_engine/          the simulation (readable reference + fast engine) and week replay
+  L2_metrics/         judging each week and summarizing a run
+  L3_levers/          fixes, turn-pattern search, break-even margins, sweeps
+  L4_evidence/        run records and backtesting against past weeks
+  web_api.py          the bridge the page calls (L5)
+tests/                one folder per layer (L0_inputs/ ... L4_evidence/, app/), plus the docs sync test
+app/web/              the page (L5): index.html, app.js, styles.css, worker.js
+app/brand/            the Decision Models brand kit
+examples/plans/       synthetic example plans
+examples/history/     a template history file for backtesting
+scripts/build_site.py builds site/ for GitHub Pages
+.github/workflows/    tests, builds, and deploys on every push to main
+```
+
+| Where | What |
+| --- | --- |
+| `docs/MODEL_LOGIC.md` | **Start here.** Every rule the model applies, in the order a week unfolds: plain words, the math, where it comes from (DAFI 21-101, unit convention, or model choice), and the code and test behind it. A test keeps it in sync with the code. |
+| `docs/REFERENCES.md` | Sources for Monte Carlo simulation, the analysis methods, verification and validation, and prior Air Force and commercial aviation simulation work. |
+| `examples/` | Synthetic plans and a history template. **Never commit real unit data.** |
+
+## Turn on GitHub Pages (once)
+
+1. Push these files to `main`.
+2. In the repo on GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. Watch **Actions**. When "Test and publish the proof of concept" finishes, the site link appears on the run and under Settings → Pages.
+
+If any test fails, nothing publishes.
+
+## Run it on your own machine
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-streamlit run gui_app.py
+pytest                            # all tests (configured in pyproject.toml)
+python scripts/build_site.py      # builds ./site
+python -m http.server -d site 8000
 ```
 
-## GUI Pages
+Then open http://localhost:8000. It needs internet access the first time to download Pyodide.
 
-### Optimization Dashboard
+## Describing your unit
 
-Runs generated Monday-Friday GO-level turn patterns through the Monte Carlo simulation.
+Each config describes one unit's pattern. The three synthetic examples show a 2-go, 3-go, and 4-go unit.
 
-The UTE sweep always includes every target from `0.40` through `0.52`, plus a separate `55% Commit Surge` capacity point. Weekly sortie counts round down because partial aircraft/sorties are not usable planning capacity, so adjacent UTE targets may produce the same sortie count at smaller PAI.
+| Config field | What it sets |
+| --- | --- |
+| `options.go_profile` | `goes_per_day` (1–4), `sortie_hours`, and `turn_hours`. Launch and landing times follow from these, with the first launch at hour 0. |
+| `rates.fix_windows` | Cumulative fix rates as `[{"hours": 4, "rate": 0.45}, ...]`. Any hours, rising. Not fixed within the longest window means down for the week. The older `fix_8hr_rate`/`fix_12hr_rate`/`fix_24hr_rate` fields still work. |
+| `rules.first_day_fix_hours` | On the first flying day, fixes longer than this wait for the next day (8 by default). |
+| `rules.standard_patterns` | Optional MAJCOM standard turn patterns, like `[[8, 6, 4], [6, 4]]`. When set, plans are checked against them and the sustainable-plan search tries only these. |
+| `sute` | Deployed tempo from any figures you have: `possessed_aircraft`, `om_days`, `sorties`, `possessed_aircraft_days`, `sorties_per_om_day`, `avg_sorties_per_aircraft` (or `monthly_sorties_per_aircraft`), or `sute` itself. Any set that pins down the SUTE works; three independent figures recover aircraft, days, and sorties too. `surge_ceiling` is optional. Leave out `required_sorties` to set the weekly requirement from the tempo; `requirement_basis` chooses matching SUTE (`"sute"`, the default) or sorties per aircraft (`"per_aircraft"`). Results show both side by side. |
 
-Outputs include:
+Day-based patterns only for now: every sortie launches and lands at home the same day. Long sorties that cross midnight or leave the aircraft off-station (mobility, bomber) are a later phase.
 
-- Capacity sweep by PAI and UTE target.
-- Best pattern per PAI, UTE point, and recovery model.
-- Success probability.
-- Sortie success probability.
-- Aircraft availability and commit compliance.
-- Next-Monday MC recovery.
-- Risk band.
+## Branding
 
-### Manual Turn Pattern
+The page uses the Decision Models brand kit in `app/brand/` (TPS is app 01: teal, "Can the fleet meet the flying schedule?"). `<html data-app="tps">` picks the app; the build copies `app/brand/css`, `icons` and `js` into the site. Dark is the default and light follows the device, with the Auto/Light/Dark switch forcing either. Page colors are aliases for the brand tokens (`app/web/styles.css`, top). Chart marks use the series colors, good and bad meanings use the status colors with a label, and the disclaimer footer appears on every page and printout. To change colors, edit `app/brand/palette.py` and follow `app/brand/README.md`.
 
-Lets you enter a specific GO-level split, such as:
+## Page layout
 
-```text
-5x2, 4x2, 4x2, 3x2, 2x0
-```
+Setup sections (weekly plan, how your unit flies, deployed tempo, rates, rules, how the week plays out) are collapsible; each shows a one-line summary when closed, and the weekly plan starts open. After a run, the setup folds into a single line with an **Edit plan** button so the results use the full width.
 
-The page runs that pattern against both recovery models:
+Deployed tempo takes three inputs: deployed aircraft (PAA), O&M days, and sorties. SUTE, aircraft days, sorties per O&M day, and average sorties per aircraft are calculated and shown. Configs that recorded other figures still load; their worked-out aircraft, days, and sorties appear greyed in the inputs.
 
-- `Scheduled-Spares Only`
-- `Fleet-Flex Recovery`
+## Backtesting against past weeks
 
-### DSUTE Calculator
+The **Check the model against past weeks** section loads a history file (one row per flying day; see `examples/history/history_template.csv` or use **Download the template**). Each week is predicted from its planned schedule and the rates of the weeks before it, then compared with what happened: calibration by prediction band, a Brier accuracy score against always guessing the overall rate, sorties coverage, and day-level agreement. **Try with synthetic history** shows the whole flow on 60 weeks the model generates itself. The file is read in the browser and never uploaded. Rules B-1 to B-4 in `docs/MODEL_LOGIC.md`.
 
-Calculates location DSUTE on the sortie side only. Flying hours, average sortie duration, and deployed or operating-location flying hours are not used.
+## Three views of the same run
 
-Inputs:
+A toggle at the top of the results switches depth without changing the run:
 
-- Scheduled or required sorties.
-- Possessed aircraft.
-- O&M days.
-- Optional deployed or operating-location sorties only when intentionally toggled into the requirement.
+| View | Shows |
+| --- | --- |
+| Leadership | A decision brief built around their questions: can we do it, what the plan costs (front line vs commit, spares scheduled and flown, 2407 adds, weekend repairs), decisions grouped into maintenance and scheduling levers, how much margin each rate has before the plan drops below the bar, and where to focus. Fixes and margins run automatically. |
+| Planner (default) | The schedule shaded by risk (each go's chance of losing a sortie, spares scheduled and used by day), where the plan runs tight, why sorties are lost, watch a week, fixes including moving a sortie, and the turn-pattern search with its efficient frontier. |
+| Analyst | Everything in the planner view, plus what moves the answer (break-even margins for each rate), whether the answer has settled (running estimate and a check against five other seeds), inputs and sources, and all the numbers. |
 
-Calculations:
+Anyone can switch views at any time, and every view shows the same seed and model version, so a recommendation can always be traced to its evidence. The choice is remembered in the browser.
 
-- `DSUTE = scheduled or required sorties / (possessed aircraft x O&M days)`
+## Reading the results
 
-Example:
+| Section | Answers |
+| --- | --- |
+| Summary (printable on one page) | Will the plan hold up? Weakest day, weekly requirement, next-Monday readiness, and the best fix and sustainable pattern once tested. |
+| Where the plan runs tight | Aircraft ready at each day's first go (middle 80% of weeks) against aircraft needed, each day's chance of missing its plan, sorties flown by go with turn success and sortie generation effectiveness, and daily SUTE (planned and flown) against the deployed target and surge ceiling. |
+| Why sorties are lost | Each lost sortie traced to one cause: ground aborts used up the spares, no aircraft back in time for a turn, or the day started short. |
+| What would fix it | Changes a planner can make, ranked by effect, each with its trade-off. All use the same seed as the run shown, so differences come from the change. |
+| Watch a week | Replays any simulated week exactly: a board of what every MC aircraft did all week (zoom to any day), the week step by step, and the chain of events behind a failure. Offers a typical week, a typical failure, the worst week, and a recovery-only failure, or any week number. |
+| Test turn patterns | Permutes Monday–Friday weeks in recognizable families (Flat Turns, Waterfall, Step-Down, Front-Loaded Push, Balanced Push, Recovery Valley, Midweek Spike, Multi-Spike, Sawtooth, Step-Up; Reverse Waterfall, Back-Loaded Push, and Compressed Surge are tested but diagnostic only), at the requirement or a band of weekly targets, with go splits stepped down or even. Every week runs on the same seed and the leaders are re-run at full length. The requirement check names the best pattern for the requirement and where it fails, or says none reaches the bar and gives the most the fleet sustains. |
 
-- `31 / (11 x 7) = 0.40 DSUTE`
-- `32 / (11 x 7) = 0.42 DSUTE`
-- `40 / (11 x 7) = 0.52 DSUTE`
+## How results stay trustworthy
 
-### About / Model Logic
+- Every run record stores the full config, its fingerprint, the model version, the build commit, and the seed.
+- **Verify a run record** re-runs it in the browser and confirms the results are identical, or explains what differs.
+- Comparisons derive each variation's seed from one main seed, so the whole comparison re-runs identically.
+- `tests/L1_engine/test_engine_equivalence.py` proves the fast engine matches the readable reference exactly.
 
-Provides a concise in-app guide to the model purpose, logic flow, Monte Carlo concept,
-success rules, recovery models, DSUTE logic, and tab interpretation.
-The deeper standalone reference is available in `MODEL_LOGIC.md`.
+## Data
 
-## Model Flow
-
-```mermaid
-flowchart TD
-    A["User Inputs"] --> B["TTP Policy Layer"]
-    B --> C["Capacity Sweep: 0.40-0.52 UTE plus 55% surge"]
-    C --> D["Pattern Generator: GO-level turn-pattern splits"]
-    D --> E["Monte Carlo Simulation"]
-    E --> F["Daily MC Carry-Forward and Repair Logic"]
-    F --> G["Success Scoring"]
-    G --> H["GUI Tables and Recommendations"]
-```
-
-## Core Logic
-
-1. Planned weekly sorties come from the Monday-Friday schedule.
-2. Required sorties are entered by the user.
-3. Code 3 and ground-abort events are generated from weekly sortie totals.
-4. Events are distributed across flying days without silently discarding overflow.
-5. Starting MC aircraft are `floor(PAI x MC rate)`.
-6. Daily MC aircraft carry forward from the previous day’s ending availability.
-7. Ground aborts may be covered by scheduled spares or by uncommitted MC aircraft, depending on recovery model.
-8. Fixes are applied through 8-hour, 12-hour, and 24-hour logic.
-9. 12-hour and 24-hour fixes begin on Tuesday by default.
-10. Saturday, Sunday, and next Monday continue recovery logic.
-11. Success requires more than sortie count alone: required sorties, daily schedule, aircraft availability, commit compliance, recovery, backlog, and event integrity all matter.
-
-## Version
-
-Current model version: `0.23.17`
-
-Version `0.3` adds a configurable UTE planning range, PAI-specific decision briefs,
-sustainable-only best-pattern output, cleaner DSUTE wording, and updated GUI defaults.
-
-Version `0.4` adds embedded comparison views: best sustainable pattern by UTE
-and selected-pattern recovery model comparison.
-
-Version `0.5` removes organization- and location-specific wording from user-facing
-documentation and helper naming.
-
-Version `0.6` adds an About / Model Logic page to the web app.
-
-Version `0.7` adds average sorties per aircraft to the DSUTE calculator.
-
-Version `0.8` adds a left-to-right visual model-flow diagram to the web app.
-
-Version `0.9` adds average sorties per aircraft to UTE-facing tables and
-shows UTE in best-pattern outputs.
-
-Version `0.10` enlarges the in-app model-flow diagram for readability.
-
-Version `0.11` replaces the model-flow diagram with a readable stepped flow
-section in the About page.
-
-Version `0.12` adds a DSUTE-derived suggested UTE planning band for model limits.
-
-Version `0.13` makes UTE table displays compatible with cached results from
-older model versions.
-
-Version `0.14` expands the About page with explanations for sidebar options,
-maintenance rates, event/fix modes, output metrics, and tab features.
-
-Version `0.15` adds configurable # of GOs depth for 1st through 4th go in both
-optimization and manual turn-pattern testing.
-
-Version `0.16` restores a separate max-commit surge week calculation for weeks
-1-5 in the web app.
-
-Version `0.17` adds a detailed Underlying Logic section to the About page.
-
-Version `0.18` improves the Max Surge Weeks tab with a sustainability summary,
-trend charts, and a first-failure explanation for each PAI/recovery model.
-
-Version `0.19` changes generated turn-pattern displays to normal go notation,
-such as `4x2-4x2-4x2-3x2-3x2`.
-
-Version `0.20` adds dashboard diagnostics and charts for summary decisions,
-capacity shape, pattern-family performance, failure modes, and selected-pattern
-success dimensions.
-
-Version `0.21` removes low-value dashboard charts and replaces them with clearer
-diagnostic readout tables while keeping useful pressure visuals for surge weeks
-and daily sortie shape.
-
-Version `0.21.1` keeps the Summary decision brief and makes generated pattern
-selection family-balanced so all discovered pattern families are represented
-before Monte Carlo ranking.
-
-Version `0.21.2` simplifies the Summary tab by removing the Decision Overview
-and Operating Envelope callouts.
-
-Version `0.21.3` separates tested candidates from recommendations. The model can
-simulate operationally questionable shapes for visibility, but the recommendation
-screen rejects max-commit surge, heavily back-loaded, Friday-heavy, compressed,
-or highly uneven patterns from the sustainable/recommendable list.
-
-Version `0.21.4` tightens pattern-family classification so low-variance
-waterfalls like `4x2-4x2-4x2-3x2-3x2` are no longer mislabeled as flat turns.
-
-Version `0.21.5` keeps the best simulated candidate from each discovered pattern
-family instead of only the single overall winner, and lets first-go shape relabel
-near-flat sortie totals as waterfall, step, front-loaded, or back-loaded patterns
-when that better reflects the operational turn pattern.
-
-Version `0.21.6` adds a sidebar scheduled-spares toggle. When enabled, scheduled
-spares are modeled at 20% of first-go aircraft; when disabled, the model uses no
-scheduled spares.
-
-Version `0.21.7` makes flat-turn classification operational instead of
-statistical. A pattern is only a flat turn when the same GO split repeats every
-flying day, such as `4x2-4x2-4x2-4x2-4x2`.
-
-Version `0.21.8` renames diagnostics near-miss wording from "best failed" to
-"Closest Non-Recommended Pattern" and adds an explanatory callout in the
-Diagnostics tab.
-
-Version `0.21.9` tightens user-facing output language so near-miss,
-non-recommended, and representative family candidates are not confused with
-execution recommendations.
-
-Version `0.21.10` prevents exact flat-turn patterns from being rejected as
-Friday pushes simply because Friday ties the same first-go count used every
-other flying day.
-
-Version `0.22.0` simplifies pattern selection by using an explicit operational
-family order. Normal families are preserved first, while reverse-waterfall,
-back-loaded, and compressed-surge families remain visible as diagnostic-only
-candidates rather than normal recommendations.
-
-Version `0.22.1` further tightens flat-turn logic so flat daily sortie totals
-are not labeled as flat turns unless the exact GO split repeats every flying day.
-
-Version `0.22.2` changes generator ordering to favor smoother, less-compressed
-patterns before Friday-recovery-heavy shapes, reducing unrealistic schedules
-with very low Friday output when a normal waterfall or flat option exists.
-
-Version `0.22.3` adds `MODEL_LOGIC.md` and expands the About page with concrete
-model-flow and feature-impact tables.
-
-Version `0.22.4` redesigns the About page into a guided walkthrough with a
-clear testing sequence, model logic chain, output interpretation, and optional
-deep-dive sections.
-
-Version `0.22.5` simplifies the About page further into a quick guide with only
-the core idea, logic flow, recommended workflow, interpretation rules, and three
-optional detail expanders.
-
-Version `0.22.6` changes scheduled spare calculation to round up, while keeping
-commit aircraft and UTE capacity rounded down.
-
-Version `0.22.7` renames the project and web app to Turn Pattern Sustainability
-Monte Carlo Model.
-
-Version `0.22.8` adds a concise About-page explanation of Monte Carlo modeling
-and examples of other fields where it is used.
-
-Version `0.22.9` cleans up user-facing grammar, capitalization, punctuation,
-and wording across the app and documentation.
-
-Version `0.23.0` refocuses the About page into a shorter user-facing overview
-with detailed mechanics moved into expandable methodology sections.
-
-Version `0.23.1` adds the selected Option 6A logo assets and uses them for the
-web app header and page icon.
-
-Version `0.23.2` adds a lightweight SVG logo fallback so Streamlit Cloud can
-display selected branding even if the binary `assets/` folder is not deployed.
-
-Version `0.23.3` moves selected branding from the main content header to the
-sidebar so the dashboard starts with the model title and working content.
-
-Version `0.23.4` changes the About page bottom-line section into an expander
-that displays the full `MODEL_LOGIC.md` reference inside the app.
-
-Version `0.23.5` simplifies the About page by removing duplicate guidance and
-methodology sections, leaving one `Model Logic` expander sourced from
-`MODEL_LOGIC.md`.
-
-Version `0.23.6` adds a black/red/white logo variant and uses it in the
-Streamlit sidebar.
-
-Version `0.23.7` adds a white/red logo variant and switches the Streamlit
-sidebar branding to that lighter version.
-
-Version `0.23.8` replaces the earlier redrawn logo variants with exact
-recolored versions of the selected Option 6A PNG artwork and uses the exact
-white/red version in the Streamlit sidebar.
-
-Version `0.23.9` regenerates the recolored Option 6A assets with cleaner
-two-color processing to remove stray color artifacts, and uses the clean
-white/red logo in the Streamlit sidebar.
-
-Version `0.23.10` adds stronger visual risk-band treatment in the Streamlit
-app with colored Green, Yellow, and Red badges plus clearer table labels.
-
-Version `0.23.11` moves risk-band color coding into Streamlit tables and
-removes the large colored callout strip from decision sections.
-
-Version `0.23.12` moves the Risk column to the first column in styled tables
-and color-codes recommendation/status cells for recommended and
-non-recommended outputs.
-
-Version `0.23.13` updates the Pattern Detail selector to match table language,
-sorting options by risk and recommendation status and showing risk first in the
-dropdown label.
-
-Version `0.23.14` fixes Pattern Detail selector sorting by handling the tuple
-rank correctly on Streamlit Cloud.
-
-Version `0.23.15` adds a plain-English Pattern Detail interpretation table
-that explains risk, recommendation status, limiter/watch item, and how to use
-the selected row.
-
-Version `0.23.16` condenses Pattern Detail interpretation into one plain-English
-paragraph and changes the Summary page to show closest other option patterns
-instead of the candidate failure-reason table.
-
-Version `0.23.17` updates the DSUTE calculator so the suggested lower UTE equals
-calculated DSUTE and the suggested upper UTE is derived from max-commit UTE less
-a configurable safety margin.
+The page never sends plans or results to a server; everything runs in the browser, and history is kept in that browser only. The site is public, so the repo holds synthetic examples only. Enter real unit data only where your unit's rules allow it.
