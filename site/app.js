@@ -477,6 +477,8 @@ async function runPlan() {
     if (record.errors) { showMessages({ errors: record.errors }); return; }
     showMessages({ warnings: record.warnings || [] });
     lastRecord = record;
+    liveRecord = record;
+    staticInsights = null;
     saveToHistory(record);
     renderResult(record);
     setPlanCollapsed(true);
@@ -560,17 +562,19 @@ function marginChart(record) {
       ticks.map((v) => svg("g", {},
         svg("line", { x1: left, x2: W - right, y1: y(v), y2: y(v), class: "grid-line" }),
         svg("text", { x: left - 8, y: y(v) + 4, "text-anchor": "end", class: "axis-text", text: String(v) }))),
-      svg("polygon", { points: band, class: "band-area" }),
-      svg("polyline", { points: median, class: "median-line" }),
       points.map((p, i) => svg("g", {},
-        svg("line", { x1: x(i) - step * 0.28, x2: x(i) + step * 0.28, y1: y(p.needed), y2: y(p.needed), class: `needed-line needed-${riskLevel(p.risk)}` }),
-        svg("circle", { cx: x(i), cy: y(p.p50), r: 4.5, class: "median-dot" }),
+        // Brand chart for TPS: median bar, 10–90% range whisker, dashed requirement line.
+        svg("rect", { x: x(i) - step * 0.21, y: y(p.p50), width: step * 0.42, height: Math.max(0, y(0) - y(p.p50)), class: "res-bar" }),
+        svg("line", { x1: x(i), x2: x(i), y1: y(p.p10), y2: y(p.p90), class: "res-range" }),
+        svg("line", { x1: x(i) - 6, x2: x(i) + 6, y1: y(p.p10), y2: y(p.p10), class: "res-range" }),
+        svg("line", { x1: x(i) - 6, x2: x(i) + 6, y1: y(p.p90), y2: y(p.p90), class: "res-range" }),
+        svg("line", { x1: x(i) - step * 0.45, x2: x(i) + step * 0.45, y1: y(p.needed), y2: y(p.needed), class: `res-need needed-${riskLevel(p.risk)}` }),
         svg("text", { x: x(i), y: H - bottom + 20, "text-anchor": "middle", class: "day-text", text: p.day }))),
     ),
     el("figcaption", { class: "legend" },
-      el("span", {}, el("span", { class: "key key-band" }), "Aircraft ready, middle 80% of weeks"),
-      el("span", {}, el("span", { class: "key key-median" }), "Typical week"),
-      el("span", {}, el("span", { class: "key key-needed" }), "Needed (first go + spares; Monday recovery target)"),
+      el("span", {}, el("span", { class: "key key-bar" }), "Median aircraft ready"),
+      el("span", {}, el("span", { class: "key key-range" }), "10–90% range"),
+      el("span", {}, el("span", { class: "key key-need" }), "Needed (first go + spares; next Monday: recovery target)"),
     ),
     el("p", { class: "chart-note", text: `Tightest margin: ${tight.day}. Typically ${Math.round(tight.p50)} aircraft ready for ${tight.needed} needed, and ${Math.round(tight.p10)} or fewer in the worst 10% of weeks.` }),
   );
@@ -749,7 +753,7 @@ function renderFixes(record) {
     const m = item.record.metrics;
     const delta = (m.probability_success - base) * 100;
     return el("tr", { class: isBase ? "base-row" : "" },
-      el("td", {}, el("button", { type: "button", class: "link-button", text: item.label, onclick: () => showRecord(item.record) })),
+      el("td", {}, staticInsights ? el("span", { text: item.label }) : el("button", { type: "button", class: "link-button", text: item.label, onclick: () => showRecord(item.record) })),
       el("td", { class: "note", text: GROUP_NAMES[item.group] || "" }),
       el("td", { text: pctText(m.probability_success) }),
       el("td", { class: `delta ${delta > 0.5 ? "up" : delta < -0.5 ? "down" : ""}`, text: isBase ? "" : `${delta >= 0 ? "+" : "\u2212"}${Math.abs(delta).toFixed(1)} pts` }),
@@ -826,6 +830,7 @@ async function reanalyze(record) {
 
 function patternButton(item) {
   const result = insight.search.results[item.index];
+  if (staticInsights) return el("span", { class: "pattern-text", text: item.detail });
   return el("button", { type: "button", class: "link-button", text: item.detail, onclick: () => showRecord(result.record) });
 }
 
@@ -885,7 +890,9 @@ async function loadWeek(record, index) {
   const out = $("watch-out");
   out.replaceChildren(el("p", { class: "note", role: "status", text: `Replaying week ${whole(index + 1)}…` }));
   try {
-    const r = await main.request("replay", { config: JSON.stringify(record.config), seed: record.seed, week: index });
+    const r = staticInsights
+      ? (staticInsights.replays || {})[String(index)] || { errors: ["This preset includes the offered weeks only. Open Run ▸ to replay any week."] }
+      : await main.request("replay", { config: JSON.stringify(record.config), seed: record.seed, week: index });
     if (r.errors) { out.replaceChildren(el("p", { class: "message message-error", text: r.errors.join(" ") })); return; }
     watch.replay = r;
     watch.zoom = null;
@@ -987,8 +994,8 @@ function watchSection(record) {
       el("div", { class: "week-tabs", role: "group", "aria-label": "Choose a week" },
         WEEK_CHOICES.filter(([key]) => picks[key] !== null && picks[key] !== undefined).map(([key, label]) =>
           el("button", { type: "button", text: label, onclick: () => loadWeek(record, picks[key]) }))),
-      el("label", { class: "field" }, "Week number", weekInput),
-      el("button", { type: "button", class: "secondary align-end", text: "Show week", onclick: () => {
+      el("label", { class: "field static-hide" }, "Week number", weekInput),
+      el("button", { type: "button", class: "secondary align-end static-hide", text: "Show week", onclick: () => {
         const n = Number(weekInput.value);
         if (!Number.isInteger(n) || n < 1 || n > record.iterations) { showMessages({ errors: [`Choose a week from 1 to ${whole(record.iterations)}.`] }); return; }
         loadWeek(record, n - 1);
@@ -1006,7 +1013,7 @@ const VIEW_NOTES = {
 };
 function currentView() {
   try { const v = localStorage.getItem("tps.view"); if (VIEWS.some(([k]) => k === v)) return v; } catch { /* default */ }
-  return "plan";
+  return "lead";
 }
 function viewToggle() {
   const v = currentView();
@@ -1024,7 +1031,7 @@ function applyView(record) {
   if (note) note.textContent = `${VIEW_NOTES[v]} Same run in every view.`;
   const details = $("all-numbers");
   if (details) details.open = v === "ana";
-  if (record && !busy && (v === "lead" || v === "ana")) autoInsights(record, v);
+  if (record && !busy && !staticInsights && (v === "lead" || v === "ana")) autoInsights(record, v);
 }
 
 async function autoInsights(record, view) {
@@ -1061,6 +1068,7 @@ function renderBrief(record) {
       (pa && pa.deployed ? `; ${pa.flown.p50.toFixed(1)} vs ${pa.deployed.toFixed(1)} sorties per aircraft a week` : "")));
   }
   can.push(row("Ready next Monday", `${Math.round(m.distributions.next_monday_ready.p50)} typical, ${m.recovery.target} needed`));
+  if (insight.season) can.push(row("Through the year", seasonSentence(insight.season)));
 
   // 2. What the plan costs
   const weekend = facts.weekend_hours || {};
@@ -1474,7 +1482,14 @@ function renderBacktest() {
           el("td", { class: w.succeeded ? "meets" : "misses", text: w.succeeded ? "Succeeded" : "Fell short" }),
           el("td", { text: `${w.flown} of ${w.planned} (${Math.round(w.sorties_p10)}–${Math.round(w.sorties_p90)})` }),
           el("td", { text: w.missed_days.join(", ") || "None" }), el("td", { text: w.weakest_day || "None" }))))))),
-    el("div", { class: "button-row" }, el("button", { type: "button", class: "secondary", text: "Download results (CSV)",
+    el("div", { class: "button-row" }, el("button", { type: "button", class: "secondary", text: "Use these monthly rates as the season profile",
+      onclick: async () => {
+        const prof = await main.request("monthly_profile", { csv: backtest.csv });
+        if (prof.errors) { showMessages({ errors: prof.errors }); return; }
+        const cfg = formToConfig(); cfg.seasonality = prof; loadConfig(cfg);
+        showMessages({ warnings: [`Season profile set from ${prof.source} (${Object.keys(prof.months).length} months). Run the plan to see the season strip.`] });
+      } }),
+      el("button", { type: "button", class: "secondary", text: "Download results (CSV)",
       onclick: () => downloadText(csvRows.map((row) => row.join(",")).join("\n"), "tps-backtest-results.csv") })),
     r.problems && r.problems.length ? el("details", { class: "details" }, el("summary", { text: `${r.problems.length} rows or weeks skipped` }),
       el("ul", {}, r.problems.map((t) => el("li", { text: t })))) : null,
@@ -1574,6 +1589,70 @@ function weekBoard(record) {
   return wrap;
 }
 
+/* ------------------------------------------------------------ precomputed results and the season strip */
+let staticInsights = null;   // set when showing a precomputed public preset: nothing is recomputed in the browser
+
+const MONTH_NAMES = { Jan: "January", Feb: "February", Mar: "March", Apr: "April", May: "May", Jun: "June", Jul: "July", Aug: "August", Sep: "September", Oct: "October", Nov: "November", Dec: "December" };
+const seasonLevel = (p) => (p >= 0.85 ? "good" : p >= 0.70 ? "warning" : "critical");
+
+function seasonSentence(season) {
+  const weak = season.filter((m) => m.success < 0.85);
+  if (!weak.length) return "holds at 85% or better in every month";
+  const worst = weak.reduce((a, b) => (b.success < a.success ? b : a));
+  return `below 85% in ${weak.length} of 12 months; weakest ${MONTH_NAMES[worst.month]} (${pctText(worst.success)})`;
+}
+
+function renderSeason() {
+  const card = $("season-card");
+  if (!card) return;
+  const season = insight.season;
+  card.hidden = !season && !insight.seasonPending;
+  if (!season) { card.replaceChildren(el("p", { class: "note", role: "status", text: "Running each month's conditions…" })); return; }
+  const flagText = { holiday: "holiday week", surge: "surge" };
+  card.replaceChildren(
+    el("h3", { text: "Through the year" }),
+    el("p", { class: "note", text: `The same weekly pattern under each month's conditions: ${seasonSentence(season)}.` }),
+    el("ol", { class: "season-strip", "aria-label": "Chance the plan holds, by month" }, season.map((m) => el("li", {
+      class: `season-cell season-${seasonLevel(m.success)}`, title: [m.note, ...m.flags.map((f) => flagText[f])].filter(Boolean).join(" · ") },
+      el("span", { class: "season-month", text: m.month }),
+      el("span", { class: "season-pct num", text: pctText(m.success) }),
+      m.flags.length ? el("span", { class: "season-flag", text: m.flags.map((f) => (f === "holiday" ? "H" : "S")).join(" ") }) : null))),
+    el("p", { class: "note", text: "H: holiday week (one fewer flying day, no weekend repairs). S: surge (exercise or fiscal-year-end push). Hover a month for what drives it." }),
+    el("div", { class: "table-wrap", "data-views": "ana" }, el("table", { class: "data-table" },
+      el("thead", {}, el("tr", {}, ["Month", "Success", "95% range", "Weakest day", "Main cause", "Conditions"].map((t) => el("th", { text: t })))),
+      el("tbody", {}, season.map((m) => el("tr", {},
+        el("td", { text: m.month }), el("td", { class: "num", text: pctText(m.success, 1) }),
+        el("td", { class: "num", text: `${pctText(m.ci95[0])}–${pctText(m.ci95[1])}` }),
+        el("td", { text: m.weakest_day || "None" }),
+        el("td", { text: m.main_cause ? { lost_abort_uncovered: "aborts use up spares", lost_turn_short: "no aircraft back for a turn", lost_first_go_short: "day starts short" }[m.main_cause] : "None" }),
+        el("td", { text: [m.note, ...m.flags.map((f) => flagText[f])].filter(Boolean).join("; ") || "Base week" })))))),
+  );
+}
+
+async function loadSeason(record) {
+  if (staticInsights || insight.season || !record.config.seasonality || !Object.keys(record.config.seasonality.months || {}).length) { renderSeason(); return; }
+  insight.seasonPending = true; renderSeason();
+  try {
+    const season = await main.request("season", { config: JSON.stringify(record.config), runs: Math.min(1000, record.iterations), seed: record.seed });
+    if (lastRecord === record) { insight.season = season; }
+  } catch { /* the strip stays hidden */ }
+  insight.seasonPending = false;
+  renderSeason(); renderBrief(record);
+}
+
+/* Entry point for the public Results page: show a preset the engine precomputed. */
+let liveRecord = null;   // the planner's own latest run, kept separate from any precomputed preset
+window.showLive = () => {
+  staticInsights = null;
+  if (liveRecord) { lastRecord = liveRecord; renderResult(liveRecord); }
+  else { $("result").hidden = true; $("empty").hidden = false; }
+};
+window.showPrecomputed = (record, insights) => {
+  staticInsights = insights;
+  lastRecord = record;
+  renderResult(record);
+};
+
 /* ------------------------------------------------------------ full result */
 function showRecord(record) {
   lastRecord = record;
@@ -1587,7 +1666,11 @@ function renderResult(record) {
   const days = flying.filter((d) => m.daily[d]);
   const failures = Object.entries(m.failures.failure_mode_counts).filter(([mode]) => mode !== "Full Schedule Not Flown");
   const key = record.metrics_fingerprint + record.seed;
-  if (insight.key !== key) { insight.key = key; insight.fixes = null; insight.search = null; insight.margins = null; insight.replicates = null; }
+  if (insight.key !== key) { insight.key = key; insight.fixes = null; insight.search = null; insight.margins = null; insight.replicates = null; insight.season = null; }
+  if (staticInsights) {
+    insight.fixes = staticInsights.fixes; insight.margins = staticInsights.margins; insight.season = staticInsights.season;
+    insight.search = staticInsights.search ? { ...staticInsights.search, gen: { candidates: [] } } : null;
+  }
 
   const targetSelect = el("select", { id: "target", "aria-label": "Success target" },
     TARGETS.map(([value, label]) => el("option", { value, text: label, selected: value === insight.target })));
@@ -1600,6 +1683,7 @@ function renderResult(record) {
     viewToggle(),
     el("section", { id: "brief", class: "card brief-card", "data-views": "lead", "aria-label": "Decision brief" }),
     el("section", { id: "summary", class: "card summary-card", "data-views": "plan ana", "aria-label": "Summary" }),
+    el("section", { id: "season-card", class: "card", "aria-label": "Season", hidden: true }),
     el("section", { class: "card", "data-views": "plan ana", "aria-labelledby": "sched-h" }, scheduleRisk(record)),
     el("section", { class: "card", "aria-labelledby": "where-h" },
       el("h3", { id: "where-h", text: "Where the plan runs tight" }),
@@ -1622,7 +1706,7 @@ function renderResult(record) {
     el("section", { class: "card no-print", "data-views": "plan ana", "aria-labelledby": "patterns-h" },
       el("h3", { id: "patterns-h", text: "Test turn patterns" }),
       el("p", { class: "note", text: "Generates weeks in families leadership will recognize (waterfall, flat, recovery valley, and more), tests each one, and reports what works at the sortie levels that matter." }),
-      el("div", { class: "row-fields no-print" },
+      el("div", { class: "row-fields no-print static-hide" },
         el("label", { class: "field" }, "Success bar", targetSelect),
         el("label", { class: "field" }, "Weekly sortie targets",
           el("select", { id: "target-mode" }, TARGET_MODES.map(([v, t]) => el("option", { value: v, text: t })))),
@@ -1681,6 +1765,8 @@ function renderResult(record) {
   );
   renderSummary(record);
   applyView(record);
+  $("result").classList.toggle("static", Boolean(staticInsights));
+  loadSeason(record);
   watch.replay = null;
   const picks = record.replay_weeks || {};
   const first = picks.typical_failure ?? picks.typical;
@@ -1721,7 +1807,7 @@ function renderHistory() {
   const list = $("history");
   const items = readHistory();
   list.replaceChildren(...items.map((record) => el("li", {},
-    el("button", { type: "button", class: "secondary", onclick: () => { lastRecord = record; renderResult(record); } },
+    el("button", { type: "button", class: "secondary", onclick: () => { lastRecord = record; staticInsights = null; renderResult(record); } },
       el("span", { class: "h-name", text: record.name || "Untitled plan" }),
       el("span", { class: "h-meta", text: `${pctText(record.metrics.probability_success)} on ${new Date(record.created_at).toLocaleDateString()}` }),
     ))));

@@ -31,7 +31,7 @@ LEGACY_FIX_KEYS = (("fix_8hr_rate", 8.0), ("fix_12hr_rate", 12.0), ("fix_24hr_ra
 MAX_GOES = 4
 TOP_KEYS = (
     "schema", "name", "notes", "inventory", "rates", "rules", "schedule",
-    "required_sorties", "success", "options", "sources", "sute",
+    "required_sorties", "success", "options", "sources", "sute", "seasonality",
 )
 
 
@@ -154,6 +154,8 @@ def validate_config(config: Any) -> list[str]:
     if "required_sorties" not in config and "sute" not in config:
         errors.append("Missing: required_sorties (or a sute block to work it out from)")
     errors += _validate_sute(config.get("sute"))
+    from tps.L0_inputs.seasonality import validate_seasonality
+    errors += validate_seasonality(config.get("seasonality"))
 
     inventory = config.get("inventory", {})
     if not isinstance(inventory, dict) or set(inventory) - {"pai"}:

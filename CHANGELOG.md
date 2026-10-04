@@ -2,6 +2,11 @@
 
 All notable changes to Turn Pattern Sustainability. Versions follow semantic versioning; dates are when each version was built.
 
+## [0.11.0] - 2026-10-04
+- One results experience in both doors: the public Results page uses the planner's own Leadership, Planner and Analyst views, fed results the engine precomputed for each synthetic preset (fixes, margins, replayed weeks, season, and the pattern search for each unit's baseline). Leadership opens first everywhere.
+- Seasonality: monthly rates, fix speed, holiday weeks and surges per month; a season strip in the answer layer and a month-by-month table for analysts. Monthly rates can come from a history file in the planner.
+- The availability chart uses the brand's TPS form: median bars, 10–90% range, dashed requirement line.
+
 ## [0.10.0] - 2026-10-04
 - Aligned with the Decision Models kit: `src/tps/` package, root `brand/`, public and private front doors, Overview · Results · Method pages with the full planner behind Run ▸.
 - Results page shows precomputed presets for each synthetic unit (baseline, surge, short-staffed recovery) under scheduled spares and fleet flex.

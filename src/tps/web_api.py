@@ -122,3 +122,17 @@ def backtest_synthetic(config_json: str, weeks: int, seed: int) -> str:
 def backtest_template(config_json: str) -> str:
     from tps.L4_evidence.backtest import template
     return json.dumps({"csv": template(json.loads(config_json))})
+
+
+def season(config_json: str, runs: int, seed: int) -> str:
+    from tps.L0_inputs.seasonality import has_seasonality, season_view
+    config = json.loads(config_json)
+    return json.dumps(season_view(config, int(runs), int(seed)) if has_seasonality(config) else None)
+
+
+def monthly_profile(csv_text: str) -> str:
+    from tps.L4_evidence.backtest import monthly_profile as profile
+    try:
+        return json.dumps(profile(str(csv_text)))
+    except (ValueError, KeyError) as error:
+        return json.dumps({"errors": [str(error)]})

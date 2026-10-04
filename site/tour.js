@@ -19,55 +19,47 @@
   const site = () => window.tpsSite;
   const kpi = () => site().preset().kpis;
   const dayRow = (name) => site().preset().days.find((d) => d.day === name);
+  const view = async (v) => { const b = q(`.view-toggle button[data-view='${v}']`); if (b) { b.click(); await sleep(300); } };
   const RESULTS = [
     { page: "overview", target: ".ov-answer", title: "The answer first",
       text: () => `For the default preset, ${pct(kpi().weeks_meeting_every_requirement)} of simulated weeks meet every requirement: every planned sortie flown, the weekly total met, and enough aircraft ready next Monday.` },
-    { page: "overview", target: ".ov-answer .status", title: "Where it breaks",
-      text: () => "The binding constraint is the requirement most likely to fail. The rest of the tour shows what moves it." },
-    { page: "results", action: () => site().pick(site().defaultPick()), target: ".res-left", title: "Pick what to look at",
-      text: "Choose a unit, a scenario and a recovery model. Each combination was run by the engine ahead of time; nothing is calculated in your browser here." },
-    { page: "results", target: ".kpis", title: "Four numbers",
-      text: () => `Weeks meeting every requirement (${pct(kpi().weeks_meeting_every_requirement)}), sorties actually flown against scheduled, aircraft available at a typical first launch, and aircraft ready next Monday against the ${kpi().recovery_target} needed.` },
-    { page: "results", target: "#res-chart-slot", title: "Margin by day",
-      text: "Bars are the median aircraft available at each day's first launch; whiskers show the middle 80% of weeks; the dashed line is what the day needs. Where a whisker dips below its line, bad weeks run short." },
-    { page: "results", target: "#page-results .data-table", title: "Day by day",
-      text: "The chance each day flies its full plan, and a status with its label: on track, at risk, or shortfall. Next Monday is the recovery check." },
-    { page: "results", target: ".kpi--main", title: "Change the recovery model",
-      action: async (ctx) => { ctx.base = kpi().weeks_meeting_every_requirement; ctx.baseAdds = kpi().adds_2407_per_week; await site().pick({ recovery: "flex" }); },
+    { page: "results", action: async () => { await site().pick(site().defaultPick()); await view("lead"); }, target: "#res-chooser", title: "Pick what to look at",
+      text: "Choose a unit, a scenario and a recovery model. The engine ran every combination ahead of time; this page only displays what it computed." },
+    { page: "results", target: "#brief", title: "Leadership view: the call",
+      text: "The same results page the planner shows, opened on Leadership: can we do it, what the plan costs, the decisions, and how much margin each rate has." },
+    { page: "results", target: "#season-card", title: "Through the year",
+      text: () => { const sv = site().preset().insights.season || []; const worst = sv.reduce((a, b) => (b.success < a.success ? b : a), sv[0] || { month: "", success: 1 });
+        return `The same weekly pattern under each month's conditions. Heat in summer means more breaks and slower fixes; winter brings more aborts; holiday weeks lose a flying day. Weakest month here: ${worst.month} (${pct(worst.success)}).`; } },
+    { page: "results", target: "#brief .headline", title: "Change the recovery model",
+      action: async (ctx) => { ctx.base = kpi().weeks_meeting_every_requirement; await site().pick({ recovery: "flex" }); await view("lead"); },
       text: (ctx) => `Switched to fleet flex: ${pct(ctx.base)} → ${pct(kpi().weeks_meeting_every_requirement)} (${pts(ctx.base, kpi().weeks_meeting_every_requirement)}). Idle mission-capable aircraft now cover losses the spares couldn't, using an unplanned aircraft (2407 add) ${perWeek(kpi().adds_2407_per_week)}.` },
-    { page: "results", target: "#page-results tbody tr:last-child", title: "Short on weekend repairs",
+    { page: "results", target: "#brief", title: "Short on weekend repairs",
       action: async (ctx) => { await site().pick({ recovery: "spares", scenario: "baseline" }); ctx.monBase = dayRow("Next Mon").p_day_met;
-        await site().pick({ scenario: "short_staffed" }); },
+        await site().pick({ scenario: "short_staffed" }); await view("lead"); },
       text: (ctx) => `Short-staffed recovery removes weekend repair hours and slows every fix: the chance of enough aircraft next Monday goes ${pct(ctx.monBase)} → ${pct(dayRow("Next Mon").p_day_met)}. Recovery, not the flying days, is what this lever hits.` },
-    { page: "results", target: ".kpi--main", title: "Ask for more flying",
+    { page: "results", target: "#brief .headline", title: "Ask for more flying",
       action: async (ctx) => { await site().pick({ scenario: "baseline" }); ctx.surgeBase = kpi().weeks_meeting_every_requirement;
-        ctx.sortiesBase = site().preset().simulation.inputs.weekly_sorties; await site().pick({ scenario: "surge" }); },
+        ctx.sortiesBase = site().preset().simulation.inputs.weekly_sorties; await site().pick({ scenario: "surge" }); await view("lead"); },
       text: (ctx) => {
         const now = kpi().weeks_meeting_every_requirement, sorties = site().preset().simulation.inputs.weekly_sorties;
-        const why = now >= ctx.surgeBase
-          ? " It can rise: a bigger first go rounds up to another scheduled spare, which can cover more aborts."
+        const why = now >= ctx.surgeBase ? " It can rise: a bigger first go rounds up to another scheduled spare, which can cover more aborts."
           : " More sorties means more breaks and aborts to absorb with the same fleet.";
-        return `A surge week plans ${sorties} sorties instead of ${ctx.sortiesBase}: ${pct(ctx.surgeBase)} → ${pct(now)}.${why}`;
-      } },
-    { page: "results", target: ".res-left .chooser", title: "A different unit",
-      action: async (ctx) => { await site().pick({ scenario: "baseline", recovery: "spares" }); ctx.unitBase = kpi().weeks_meeting_every_requirement;
-        ctx.unitName = site().preset().unit_name; const other = site().preset().unit === "synthetic_3go" ? "synthetic_4go" : "synthetic_3go";
-        await site().pick({ unit: other }); },
-      text: (ctx) => {
-        const now = kpi().weeks_meeting_every_requirement, goes = site().preset().simulation.inputs.goes_per_day;
-        const why = now < ctx.unitBase
-          ? ` With ${goes} goes a day, turns are shorter, so a broken aircraft has less time to be fixed before it's needed again.`
-          : ` Its plan leaves more slack for its fleet, even with ${goes} goes a day.`;
-        return `Same baseline week and recovery model on ${site().preset().unit_name}: ${pct(now)}, against ${pct(ctx.unitBase)} for ${ctx.unitName}.${why}`;
-      } },
-    { page: "results", target: ".res-left .assumptions", title: "What went in",
-      text: () => `Every preset lists its inputs and how it was run (${site().preset().simulation.runs_used.toLocaleString()} runs, seed ${site().preset().simulation.seed}). Download the JSON to check any number.` },
+        return `A surge week plans ${sorties} sorties instead of ${ctx.sortiesBase}: ${pct(ctx.surgeBase)} → ${pct(now)}.${why}`; } },
+    { page: "results", target: "section.card:has(#sched-h)", title: "Planner view: where it breaks",
+      action: async () => { await site().pick({ scenario: "baseline" }); await view("plan"); },
+      text: "The planner sees the schedule shaded by each go's chance of losing a sortie, where aircraft run short, why sorties are lost, and a replayed failed week." },
+    { page: "results", target: "section.card:has(#fix-h)", title: "What would fix it",
+      text: () => { const f = (site().preset().insights.fixes || []).slice(1).sort((a, b) => b.record.metrics.probability_success - a.record.metrics.probability_success)[0];
+        return f ? `Every change ran on the same seed, so the difference comes from the change. Top here: ${f.label}, ${pct(f.record.metrics.probability_success)}.` : "Every change ran on the same seed."; } },
+    { page: "results", target: "section.card:has(#evidence-h)", title: "Analyst view: how sure",
+      action: () => view("ana"),
+      text: () => { const m = (site().preset().insights.margins || [])[0]; return `The analyst sees how far each rate can slip before the plan fails${m ? ` (${m.sentence})` : ""}, the month-by-month table, and the inputs with their sources.`; } },
     { page: "method", target: "#m-validation", title: "How far to trust it",
       action: () => { const d = q("#m-validation"); if (d) d.open = true; },
       text: "Done means covered by tests that run on every deploy. Backtesting against real weeks is still planned, so these results show the method, not any unit's readiness." },
     { page: "method", target: ".tour-strip", title: "Try it yourself",
-      action: () => site().pick(site().defaultPick()),
-      text: "The planner tour runs the engine on a plan you can edit. Use public or synthetic values only." , next: "planner" },
+      action: async () => { await site().pick(site().defaultPick()); },
+      text: "The planner tour runs the engine on a plan you can edit, with the same views. Use public or synthetic values only.", next: "planner" },
   ];
 
   /* ------------------------------------------------ planner tour */
@@ -85,6 +77,7 @@
     q("#run").click();
     await waitFor(() => record() && record() !== before && !q("#run").disabled, 180000);
     await sleep(400);
+    const planBtn = q(".view-toggle button[data-view='plan']"); if (planBtn && !ctx.leaveView) { planBtn.click(); await sleep(300); }
     return record().metrics;
   }
   const openSection = (key) => { if (typeof setPlanCollapsed === "function") setPlanCollapsed(false); const d = q(`details[data-sec="${key}"]`); if (d) d.open = true; };
@@ -122,7 +115,7 @@
       text: () => { const row = q("#fixes-out tbody tr:nth-child(2)"); return row ? `Each change runs on the same seed, so the difference comes from the change. Top of the list: ${row.querySelector("td").textContent}.` : "Each change runs on the same seed, so the difference comes from the change."; } },
     { page: "run", target: ".view-toggle", title: "Three views of the same run",
       action: async () => { q(".view-toggle button[data-view='lead']").click(); await sleep(800); },
-      text: "Leadership sees the verdict, what the plan costs, and the decisions. Planner and Analyst add the detail and the evidence." },
+      text: "Leadership (the default view) sees the verdict, what the plan costs, the decisions and the season. Planner and Analyst add the detail and the evidence." },
     { page: "run", target: "section.card:has(#patterns-h)", title: "Search turn patterns",
       action: async () => { q(".view-toggle button[data-view='plan']").click(); await sleep(500); },
       text: "Tests many week shapes (waterfall, flat, recovery valley and more) at the sortie levels you choose, and says which hold." },

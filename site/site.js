@@ -113,46 +113,33 @@
         h("span", {}, h("span", { class: "key key-need" }), "Required (first go + spares; next Monday: recovery target)")));
   }
 
+  // The Results page uses the planner's own results view, fed the preset the engine precomputed.
+  const resultHome = { node: null, parent: null, next: null };
+  function mountResult(target) {
+    const node = document.getElementById("result");
+    if (!resultHome.node) { resultHome.node = node; resultHome.parent = node.parentNode; resultHome.next = node.nextSibling; }
+    if (target) target.append(node); else resultHome.parent.insertBefore(node, resultHome.next);
+  }
+
   function renderResults() {
-    const p = state.preset, k = p.kpis, sim = p.simulation, inp = sim.inputs, idx = state.index;
-    const windows = inp.fix_windows.map((w) => `${w.hours} h ${pct(w.rate)}`).join(", ");
-    const weekend = inp.weekend_hours || {};
-    const hours = (v) => (v === undefined ? "24 h" : v === 0 ? "none" : `${v} h`);
-    const kpi = (label, value, note, main) => h("div", { class: `kpi${main ? " kpi--main" : ""}` },
-      h("p", { class: "kpi-label", text: label }), h("p", { class: "kpi-value num", text: value }), note ? h("p", { class: "note", text: note }) : null);
-    $page("results").replaceChildren(h("div", { class: "res-grid" },
-      h("aside", { class: "res-left" },
+    const p = state.preset, sim = p.simulation, idx = state.index;
+    mountResult(null);   // take the shared results view out before rebuilding this page, or it goes with it
+    $page("results").replaceChildren(
+      h("div", { id: "res-chooser", class: "res-bar-top" },
         chooser("Unit", "unit", idx.units),
         chooser("Scenario", "scenario", idx.scenarios),
         chooser("Recovery model", "recovery", idx.recovery),
-        h("p", { class: "note", text: `${p.scenario_note} ${p.recovery_note}` }),
-        h("h3", { text: "Key assumptions" }),
-        h("dl", { class: "assumptions" },
-          [["Aircraft (PAI)", inp.pai], ["Mission capable", pct(inp.mc_rate, 1)], ["Break / abort", `${pct(inp.break_rate, 1)} / ${pct(inp.ground_abort_rate, 1)}`],
-           ["Fixed within", windows], ["Commit / spares", `${pct(inp.commit_rate)} / ${pct(inp.spare_rate)}`], ["Goes per day", inp.goes_per_day],
-           ["Sorties planned / required", `${inp.weekly_sorties} / ${inp.required_sorties}`], ["Weekend repairs", `Sat ${hours(weekend.Sat)}, Sun ${hours(weekend.Sun)}`],
-           ["Fleet flex (2407 adds)", inp.fleet_flex ? "Allowed" : "Not allowed"]].map(([a, b]) => [h("dt", { text: a }), h("dd", { class: "num", text: String(b) })])),
-        h("p", { class: "note", text: `Precomputed by the engine · ${sim.runs_used.toLocaleString()} runs · seed ${sim.seed}` }),
-        h("p", { class: "note", text: `Generated ${new Date(p.generated_at).toLocaleString()} · model ${p.model_version}` }),
-        h("p", {}, h("a", { href: `data/preset_${p.id}.json`, download: `tps_${p.id}.json`, text: "Download results (JSON)" }))),
-      h("div", { class: "res-right" },
-        h("div", { class: "kpis" },
-          kpi("Weeks meeting every requirement", pct(k.weeks_meeting_every_requirement), `95% range ${pct(k.ci95[0])}–${pct(k.ci95[1])}`, true),
-          kpi("Sortie compliance", pct(k.sortie_compliance, 1), "scheduled sorties flown"),
-          kpi("Aircraft available, median", num(k.available_median), "at each day's first launch"),
-          kpi("Ready next Monday, median", num(k.ready_next_monday_median), `${k.recovery_target} needed`)),
-        h("section", { class: "card" }, h("h3", { text: "Aircraft available vs. requirement, by day" }), h("div", { id: "res-chart-slot" })),
-        h("section", { class: "card" }, h("h3", { text: "Day by day" }),
-          h("div", { class: "table-wrap" }, h("table", { class: "data-table" },
-            h("thead", {}, h("tr", {}, ["Day", "Sorties planned", "P(day met)", "Available, median", "Status"].map((t) => h("th", { text: t })))),
-            h("tbody", {}, p.days.map((d) => h("tr", {},
-              h("td", { text: d.day === "Next Mon" ? "Next Mon (recovery)" : d.day }),
-              h("td", { class: "num", text: d.day === "Next Mon" ? "—" : String(d.sorties_planned) }),
-              h("td", { class: "num", text: pct(d.p_day_met, 1) }),
-              h("td", { class: "num", text: `${num(d.available_p50)} (need ${d.needed})` }),
-              h("td", {}, statusChip(d.status, d.status_label)))))))),
-        h("p", { class: "note", text: p.summary }))));
-    drawWhenVisible(() => $("#res-chart-slot").replaceChildren(availabilityChart(p.days)));
+        h("div", {},
+          h("p", { class: "note precomputed-note", text: `${p.scenario_note} ${p.recovery_note}` }),
+          h("p", { class: "note precomputed-note", text: `Precomputed by the engine from synthetic inputs · ${sim.runs_used.toLocaleString()} runs · seed ${sim.seed} · ${new Date(p.generated_at).toLocaleDateString()}` }),
+          h("p", { class: "note precomputed-note" }, h("a", { href: `data/preset_${p.id}.json`, download: `tps_${p.id}.json`, text: "Download results (JSON)" }), " · change anything in ", h("a", { href: "#run", text: "Run ▸" })))),
+      h("div", { id: "res-mount" }));
+    if (!$page("results").hidden) showPreset();
+  }
+
+  function showPreset() {
+    mountResult(document.getElementById("res-mount"));
+    if (window.showPrecomputed) window.showPrecomputed(state.preset.record, state.preset.insights);
   }
 
   /* ---------------------------------------------------------------- Method */
@@ -216,8 +203,8 @@
     document.querySelectorAll(".app-tabs a[data-page]").forEach((a) => {
       if (a.dataset.page === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
-    if (page === "run" && window.startPlanner) window.startPlanner();
-    if (page === "results" && pendingDraw) requestAnimationFrame(() => { pendingDraw(); pendingDraw = null; });
+    if (page === "results" && state.preset) showPreset();
+    if (page === "run") { mountResult(null); if (window.startPlanner) window.startPlanner(); if (window.showLive) window.showLive(); }
     window.scrollTo(0, 0);
   }
 

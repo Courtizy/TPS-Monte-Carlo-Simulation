@@ -106,5 +106,50 @@
   "sources": {
     "everything": "Synthetic placeholder values for illustration.",
     "sute": "Synthetic deployed figures: aircraft (PAA), O&M days, and sorties."
+  },
+  "seasonality": {
+    "source": "Synthetic seasonal profile, for illustration only",
+    "months": {
+      "Jan": {
+        "abort_scale": 1.4,
+        "note": "Winter weather: more aborts"
+      },
+      "Feb": {
+        "abort_scale": 1.3,
+        "note": "Winter weather: more aborts"
+      },
+      "Mar": {
+        "surge": true,
+        "note": "Exercise surge"
+      },
+      "Jun": {
+        "break_scale": 1.2,
+        "fix_scale": 0.92,
+        "note": "Heat: more breaks, slower fixes"
+      },
+      "Jul": {
+        "break_scale": 1.35,
+        "fix_scale": 0.85,
+        "note": "Peak heat"
+      },
+      "Aug": {
+        "break_scale": 1.3,
+        "fix_scale": 0.88,
+        "note": "Heat: more breaks, slower fixes"
+      },
+      "Sep": {
+        "surge": true,
+        "note": "Fiscal-year-end flying push"
+      },
+      "Nov": {
+        "holiday": true,
+        "note": "Holiday week: one fewer flying day, no weekend repairs"
+      },
+      "Dec": {
+        "holiday": true,
+        "abort_scale": 1.2,
+        "note": "Holidays and leave, winter weather"
+      }
+    }
   }
 }

@@ -327,3 +327,30 @@ def synthetic_history(base: dict[str, Any], weeks: int = 60, seed: int = 7, star
 def template(base: dict[str, Any]) -> str:
     """A two-week example of the layout, filled with synthetic numbers."""
     return synthetic_history(base, weeks=2, seed=1)
+
+
+# [R-7]
+def monthly_profile(text: str) -> dict[str, Any]:
+    """Each calendar month's rates measured from a history file, as a seasonality block."""
+    from tps.L0_inputs.seasonality import MONTHS
+    history = parse_history(text)
+    by_month: dict[str, list[dict]] = {}
+    for week in history["weeks"]:
+        month = MONTHS[int(week["week_start"][5:7]) - 1]
+        by_month.setdefault(month, []).append(week)
+    months = {}
+    for month in MONTHS:
+        weeks = by_month.get(month)
+        if not weeks:
+            continue
+        rates = trailing_rates(weeks, len(weeks), history["windows"], lookback=len(weeks), min_history=1)
+        if not rates:
+            continue
+        entry = {"break_rate": round(rates["break_rate"], 4), "ground_abort_rate": round(rates["ground_abort_rate"], 4),
+                 "note": f"{len(weeks)} week{'s' if len(weeks) != 1 else ''} of history"}
+        if rates.get("mc_rate") is not None:
+            entry["mc_rate"] = round(rates["mc_rate"], 4)
+        if rates.get("fix_windows"):
+            entry["fix_windows"] = rates["fix_windows"]
+        months[month] = entry
+    return {"months": months, "source": f"history file, {len(history['weeks'])} weeks"}

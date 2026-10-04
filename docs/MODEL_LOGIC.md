@@ -1,6 +1,6 @@
 # TPS Model Logic
 
-**Turn Pattern Sustainability, model `tps` 0.10**
+**Turn Pattern Sustainability, model `tps` 0.11**
 
 TPS answers one planning question: **can this unit fly this weekly schedule, week after week, without running out of aircraft?** It plays the week out thousands of times. Each time, breaks, aborts, and fixes land differently, and the model counts how often the plan holds up and why it fails when it doesn't.
 
@@ -115,6 +115,12 @@ $$go_{k+1} \le go_k, \qquad \text{goes used} \le \text{goes per day}$$
 **Rule:** The public Results page shows each synthetic unit under three scenarios and two recovery models. **Baseline** is the week as configured. **Surge** adds one sortie to every go each day where commit and the go limits allow. **Short-staffed recovery** removes weekend repair hours and cuts every fix window's rate by 15%. **Scheduled spares** covers losses with spares only; **fleet flex** also lets idle mission-capable aircraft cover them (2407 adds). These are synthetic what-ifs that show the method, not any unit's readiness.
 **Code:** `L0_inputs/presets.py` → `scenario_config`.
 **Test:** `test_presets_are_valid_and_change_what_they_say`.
+
+### R-7: Seasonality
+**Source:** Unit convention: heat (more breaks, slower fixes), weather (more aborts), holidays and leave (thin coverage, fewer flying days), and exercises or fiscal-year-end pushes change how a week plays out; monthly rates come from the unit's own history.
+**Rule:** A config may carry a `seasonality` block with an entry per month. An entry sets that month's MC, break, and abort rates (or multipliers on the base rates), its fix rates (or a multiplier on them), a **holiday** week (the last flying day dropped from the week and no weekend repairs; the requirement shrinks with it), or a **surge** (the surge week from R-6). The weekly engine is unchanged: each month is a config run like any other, and the season view reports each month's chance of success. `monthly_profile` builds the block from a history file, grouping weeks by calendar month and measuring rates as in B-1. The public profile is synthetic.
+**Code:** `L0_inputs/seasonality.py` → `month_config`, `season_view`; `L4_evidence/backtest.py` → `monthly_profile`.
+**Test:** `test_season_months_change_what_they_say`.
 
 ---
 

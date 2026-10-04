@@ -54,10 +54,52 @@ def day_status(p_met: float) -> tuple[str, str]:
     return "critical", "Shortfall"
 
 
+def insights_for(config: dict, record: dict, runs: int, seed: int, with_search: bool) -> dict:
+    """Everything the shared results views show, precomputed by the engine so the public page only displays it."""
+    from tps.L0_inputs.seasonality import has_seasonality, season_view
+    from tps.L1_engine.replay import replay
+    from tps.L3_levers.levers import build_levers
+    from tps.L3_levers.sensitivity import INPUTS, break_even, describe
+    from tps.L3_levers.sweep import apply_patch
+    slim = lambda r: {"metrics": r["metrics"], "seed": r["seed"]}  # noqa: E731
+    fixes = []
+    for lever in build_levers(config, record["metrics"]):
+        result = run_plan(apply_patch(config, lever["patch"]), runs, seed, example_weeks=0)
+        fixes.append({**{k: v for k, v in lever.items() if k != "patch"}, "record": slim(result)})
+    margins = []
+    for name in INPUTS:
+        m = break_even(config, name, seed, min(1000, runs), 0.85)
+        m["sentence"] = describe(m)
+        margins.append(m)
+    replays = {}
+    for key, week in (record.get("replay_weeks") or {}).items():
+        if week is not None and str(week) not in replays:
+            r = replay(config, seed, week)
+            r.pop("events", None)
+            replays[str(week)] = r
+    out = {"fixes": fixes, "margins": margins, "replays": replays,
+           "season": season_view(config, min(1000, runs), seed) if has_seasonality(config) else None, "search": None}
+    if with_search:
+        from tps.L3_levers.patterns import analyze, generate
+        from tps.L3_levers.sweep import plan_sweep
+        gen = generate(config, budget=90, seed=seed)
+        jobs = plan_sweep(config, gen["candidates"], seed)["jobs"]
+        results = []
+        for cand, job in zip(gen["candidates"], jobs):
+            met = run_plan(job["config"], 500, seed, example_weeks=0)["metrics"]
+            results.append({**{k: v for k, v in cand.items() if k != "patch"}, "index": job["index"], "metrics": met})
+        analysis = analyze(config, results, 0.85)
+        out["search"] = {"analysis": analysis, "screenWeeks": 500,
+                         "results": [{**{k: v for k, v in r.items() if k != "metrics"}, "record": {"metrics": {
+                             "probability_success": r["metrics"]["probability_success"]}}} for r in results]}
+    return out
+
+
 def preset_result(unit_id: str, base: dict, scenario: str, recovery: str, runs: int, seed: int, stamp: dict) -> dict:
     """One preset, run by the engine, in the JSON shape the Results page reads."""
     config = scenario_config(base, scenario, recovery)
-    record = run_plan(config, runs, seed, example_weeks=0)
+    full = run_plan(config, runs, seed)
+    record = full
     m = record["metrics"]
     sc = load_scenario(config)
     days = []
@@ -107,6 +149,8 @@ def preset_result(unit_id: str, base: dict, scenario: str, recovery: str, runs: 
                     "requirement": "recovery next Monday" if weakest["day"] == "Next Mon" else "every planned sortie"},
         "summary": m["summary_text"],
         "days": days,
+        "record": full,
+        "insights": insights_for(config, full, runs, seed, with_search=(scenario == "baseline" and recovery == "spares")),
         **stamp,
     }
 
@@ -153,7 +197,7 @@ def export(configs: list[Path], out: Path, runs: int, seed: int, commit: str, in
         for scenario in SCENARIOS:
             for recovery in RECOVERY:
                 result = preset_result(unit_id, config, scenario, recovery, runs, seed, stamp)
-                (data / f"preset_{result['id']}.json").write_text(json.dumps(result, indent=1) + "\n")
+                (data / f"preset_{result['id']}.json").write_text(json.dumps(result, separators=(",", ":")) + "\n")
                 index["presets"].append({"id": result["id"], "unit": unit_id, "scenario": scenario, "recovery": recovery,
                                          "weeks_meeting_every_requirement": result["kpis"]["weeks_meeting_every_requirement"]})
     preferred = [p for p in index["presets"] if p["scenario"] == "baseline" and p["recovery"] == "spares"]

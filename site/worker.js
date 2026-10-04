@@ -34,6 +34,8 @@ self.onmessage = async (event) => {
     else if (type === "backtest_summarize") text = api.backtest_summarize(payload.prepared, payload.metrics);
     else if (type === "backtest_synthetic") text = api.backtest_synthetic(payload.config, payload.weeks, payload.seed);
     else if (type === "backtest_template") text = api.backtest_template(payload.config);
+    else if (type === "season") text = api.season(payload.config, payload.runs, payload.seed);
+    else if (type === "monthly_profile") text = api.monthly_profile(payload.csv);
     else if (type === "tempo") text = api.tempo(payload.sute, payload.pai, payload.days);
     else if (type === "replay") text = api.replay(payload.config, payload.seed, payload.week);
     else if (type === "patterns_analyze") text = api.patterns_analyze(payload.config, payload.results, payload.target);

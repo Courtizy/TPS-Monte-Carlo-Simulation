@@ -423,6 +423,8 @@ a.button.primary { background: var(--brand-fill); border-color: var(--brand-fill
 .res-bar { fill: var(--series-1); opacity: 0.85; }
 .res-range { stroke: var(--ink); stroke-width: 2; }
 .res-need { stroke: var(--ink-2); stroke-width: 2.5; stroke-dasharray: 6 4; }
+.res-need.needed-watch { stroke: var(--status-warning); }
+.res-need.needed-high { stroke: var(--status-critical); stroke-width: 3; }
 .key-bar { background: var(--series-1); }
 .key-range { width: 3px; height: 14px; background: var(--ink); }
 .key-need { height: 0; border-top: 3px dashed var(--ink-2); }
@@ -473,6 +475,27 @@ a.button.primary { background: var(--brand-fill); border-color: var(--brand-fill
   .tour-strip__inner span { width: 100%; }
 }
 @media print { .tour-box, .tour-strip { display: none !important; } }
+
+/* Precomputed (public) results: show what the engine computed, hide what would recompute */
+#result.static [data-needs-idle], #result.static .static-hide { display: none !important; }
+.precomputed-note { margin: 0; }
+.res-bar-top { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: flex-end; background: var(--panel); border: 1px solid var(--line); padding: 0.8rem 1rem; min-width: 0; }
+.res-bar-top > * { min-width: 0; max-width: 100%; }
+.res-bar-top > div:last-child { flex: 1 1 100%; }
+
+/* Season strip */
+.season-strip { list-style: none; padding: 0; margin: 0.5rem 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; }
+.season-cell { display: flex; flex-direction: column; align-items: center; padding: 0.4rem 0.1rem; border: 1px solid transparent; position: relative; }
+.season-month { font-weight: 600; font-size: 0.85rem; }
+.season-pct { font-size: 0.8rem; }
+.season-flag { font-size: 0.65rem; color: var(--ink-2); font-family: var(--font-mono); }
+.season-good { background: var(--ok-bg); }
+.season-good .season-pct::before { content: "✓ "; }
+.season-warning .season-pct::before { content: "! "; }
+.season-critical .season-pct::before { content: "✕ "; }
+.season-warning { background: var(--warn-bg); border-color: var(--status-warning); }
+.season-critical { background: var(--error-bg); border-color: var(--status-critical); border-width: 2px; }
+@media (max-width: 720px) { .season-strip { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 
 /* Day risk strip */
 .risk-strip { list-style: none; padding: 0; margin: 1rem 0 0.5rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr)); gap: 4px; }
