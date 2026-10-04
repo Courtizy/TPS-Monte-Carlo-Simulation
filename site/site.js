@@ -221,6 +221,14 @@
     window.scrollTo(0, 0);
   }
 
+  // For the guided tour: switch presets exactly as clicking the chips does.
+  window.tpsSite = {
+    preset: () => state.preset,
+    pick: async (changes) => { Object.assign(state.pick, changes); await loadPreset(); renderOverview(); renderResults(); return state.preset; },
+    defaultPick: () => { const [unit, scenario, recovery] = state.index.default.split("__"); return { unit, scenario, recovery }; },
+    ready: () => Boolean(state.preset),
+  };
+
   async function init() {
     try {
       state.index = await getJSON("data/presets.json");

@@ -7,6 +7,7 @@ All notable changes to Turn Pattern Sustainability. Versions follow semantic ver
 - Results page shows precomputed presets for each synthetic unit (baseline, surge, short-staffed recovery) under scheduled spares and fleet flex.
 - Golden outputs captured before the move and checked on every deploy; simulation results unchanged.
 - Saving runs in the browser is now opt-in, with one button to clear everything the site stores.
+- Two guided tours from the "Take the tour" strip: the results tour switches presets and the planner tour edits and runs the plan, each showing what changes what with the engine's real numbers.
 
 ## [0.9.0] - 2026-10-03
 - Backtesting against past weeks in the browser: calibration by band, Brier skill, sorties coverage, day-level agreement.

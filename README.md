@@ -29,6 +29,8 @@ python -m http.server -d site 8000          # view at http://localhost:8000
 python app/run_private.py --config private/inputs.json
 ```
 
+**Take the tour** (the strip under the tabs) offers two guided tours that show cause and effect with the engine's real numbers: the results tour switches units, scenarios and recovery models; the planner tour runs the plan, then allows 2407 adds, raises the break rate and tests fixes, and puts the plan back afterward. ← → move, Esc closes.
+
 **Run ▸** runs the full planner (fixes, turn-pattern search, watch a week, backtesting) in the visitor's browser. Nothing is sent to a server, but it's a personal public site: use public or synthetic values only. Saving runs in the browser is opt-in, and one button clears everything the site stores.
 
 ## Describing your unit

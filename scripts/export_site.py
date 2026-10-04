@@ -188,7 +188,7 @@ def stamp_files(out: Path, commit: str) -> None:
     tag = "".join(ch for ch in commit if ch.isalnum())[:12] or "dev"
     index = out / "index.html"
     html = index.read_text(encoding="utf-8")
-    for ref in ('href="brand/css/brand.css"', 'href="styles.css"', 'src="app.js"', 'src="site.js"'):
+    for ref in ('href="brand/css/brand.css"', 'href="styles.css"', 'src="app.js"', 'src="site.js"', 'src="tour.js"'):
         html = html.replace(ref, ref[:-1] + f'?v={tag}"')
     index.write_text(html, encoding="utf-8")
     app = out / "app.js"

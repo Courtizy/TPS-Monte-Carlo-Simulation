@@ -35,7 +35,7 @@ def main() -> int:
         return 1
     out = ROOT / "private" / "site"
     out.mkdir(parents=True, exist_ok=True)
-    for name in ("index.html", "styles.css", "app.js", "site.js", "worker.js", "kit-fallback.css"):
+    for name in ("index.html", "styles.css", "app.js", "site.js", "tour.js", "worker.js", "kit-fallback.css"):
         shutil.copy(ROOT / "site" / name, out / name)
     index = export(configs, out, args.runs, args.seed, current_commit())
     data = ROOT / "private" / "data"

@@ -455,6 +455,25 @@ a.button.primary { background: var(--brand-fill); border-color: var(--brand-fill
   .kpi-value { font-size: 1.5rem; }
 }
 
+/* Guided tours */
+.tour-strip { border-bottom: 1px solid var(--line); background: var(--panel); }
+.tour-strip__inner { max-width: 1240px; margin: 0 auto; padding: 0.4rem 1.25rem; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; font-size: 0.9rem; color: var(--ink-2); }
+.tour-strip__inner span { margin-right: auto; }
+.tour-strip button { min-height: 40px; }
+.tour-box { position: fixed; right: 1rem; bottom: 1rem; z-index: 50; width: min(390px, calc(100vw - 2rem)); background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--brand-fill); padding: 0.9rem 1rem 0.8rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); }
+.tour-count { margin: 0; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+.tour-title { margin: 0.25rem 0 0.35rem; font-size: 1.1rem; }
+.tour-text { margin: 0 0 0.75rem; line-height: 1.45; }
+.tour-buttons { display: flex; gap: 0.5rem; align-items: center; }
+.tour-buttons button { min-height: 44px; }
+.tour-buttons [data-act=close] { margin-left: auto; }
+.tour-target { outline: 3px solid var(--accent); outline-offset: 4px; scroll-margin: 120px; }
+@media (max-width: 720px) {
+  .tour-box { right: 0.5rem; left: 0.5rem; bottom: 0.5rem; width: auto; }
+  .tour-strip__inner span { width: 100%; }
+}
+@media print { .tour-box, .tour-strip { display: none !important; } }
+
 /* Day risk strip */
 .risk-strip { list-style: none; padding: 0; margin: 1rem 0 0.5rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr)); gap: 4px; }
 .risk { border-radius: 0; padding: 0.45rem 0.5rem; display: flex; flex-direction: column; align-items: center; border: 1px solid transparent; }
