@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en" data-app="tps">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Turn Pattern Sustainability · Jason C. Courtoy</title>
+  <link rel="icon" type="image/svg+xml" href="brand/icons/tps.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="brand/icons/tps-32.png">
+  <link rel="apple-touch-icon" href="brand/icons/tps-180.png">
+  <link rel="stylesheet" href="kit-fallback.css">
+  <link rel="stylesheet" href="brand/css/brand.css">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    try {
+      const saved = localStorage.getItem("tps.theme");
+      if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+    } catch (error) { /* storage unavailable: follow the device setting */ }
+  </script>
+</head>
+<body>
+  <div class="hub-bar"><div class="hub-bar__inner"><a href="https://courtizy.github.io/">← Decision Models</a><span>Jason C. Courtoy</span></div></div>
+  <header class="brand-header">
+    <div class="brand-header__inner">
+      <div class="brand-tile" aria-hidden="true">
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M52 32a20 20 0 1 1-6-14.3"/><path d="M48 8v10H38"/><circle cx="32" cy="32" r="4" fill="currentColor"/></svg>
+      </div>
+      <div class="brand-header__text">
+        <h1 class="brand-header__name">Turn Pattern Sustainability</h1>
+        <p class="brand-header__question">Can the fleet meet the flying schedule?</p>
+        <span class="brand-header__by">by Jason C. Courtoy</span>
+      </div>
+      <span class="app-status"><span class="app-status__dot"></span>In development</span>
+    </div>
+  </header>
+  <nav class="app-tabs no-print" aria-label="Pages">
+    <div class="app-tabs__inner">
+      <a href="#overview" data-page="overview">Overview</a>
+      <a href="#results" data-page="results">Results</a>
+      <a href="#method" data-page="method">Method</a>
+      <span class="app-tabs__spacer"></span>
+      <div class="theme-switch" role="group" aria-label="Color theme">
+        <button type="button" data-theme-choice="auto">Auto</button>
+        <button type="button" data-theme-choice="light">Light</button>
+        <button type="button" data-theme-choice="dark">Dark</button>
+      </div>
+      <a href="#run" data-page="run" class="run-link">Run ▸</a>
+    </div>
+  </nav>
+  <main id="page-overview" class="page" aria-label="Overview"></main>
+  <main id="page-results" class="page" aria-label="Results" hidden></main>
+  <main id="page-method" class="page" aria-label="Method" hidden></main>
+  <div id="page-run" class="page" hidden>
+  <div class="run-intro">
+    <div>
+      <h2>Run your own week</h2>
+      <p class="message message-warn"><strong>Public or synthetic values only.</strong> The model runs in this browser and nothing is sent to a server, but this is a personal public site: don't enter unit data here. Work data goes through official channels.</p>
+    </div>
+    <div class="engine-status">
+      <p id="status" class="engine-state engine-loading" role="status">Loading the model. The first load takes a few seconds.</p>
+      <p id="build" class="build"></p>
+    </div>
+  </div>
+
+  <main class="layout">
+    <section class="plan no-print" aria-labelledby="plan-heading">
+      <div class="plan-bar" id="plan-bar">
+        <div class="plan-bar-text">
+          <span class="plan-bar-name" id="plan-bar-name"></span>
+          <span class="plan-bar-sum" id="plan-bar-sum"></span>
+        </div>
+        <button type="button" id="edit-plan" class="secondary">Edit plan</button>
+      </div>
+      <div class="plan-body">
+      <h2 id="plan-heading">Plan setup</h2>
+      <details class="section" data-sec="plan" open>
+        <summary><span class="sec-title">Weekly plan</span><span class="sec-sum" id="sum-plan"></span></summary>
+        <div class="sec-body">
+      <div class="row-fields">
+        <label class="field field-wide">Plan name
+          <input id="name" type="text" autocomplete="off">
+        </label>
+        <label class="field">Example
+          <select id="example-picker"></select>
+        </label>
+      </div>
+      <div class="row-fields">
+        <label class="field">Aircraft assigned (PAI)
+          <input id="pai" type="number" min="1" step="1" inputmode="numeric">
+        </label>
+        <label class="field">Required sorties this week
+          <input id="required" type="number" min="0" step="1" inputmode="numeric">
+        </label>
+        <label class="check align-end"><input id="required_from_sute" type="checkbox"> Work out from SUTE</label>
+      </div>
+      <div class="board-wrap">
+        <table class="plan-grid" aria-describedby="grid-note">
+          <thead><tr id="grid-head"></tr></thead>
+          <tbody id="grid-body"></tbody>
+          <tfoot><tr id="grid-foot"></tr></tfoot>
+        </table>
+        <p id="grid-note" class="note">Grey spares are worked out from the spare rate; type a number to override. Later goes fly with aircraft from earlier goes that day.</p>
+      </div>
+        </div>
+      </details>
+      <details class="section" data-sec="unit">
+        <summary><span class="sec-title">How your unit flies</span><span class="sec-sum" id="sum-unit"></span></summary>
+        <div class="sec-body">
+        <div class="rate-grid">
+          <label class="field">Goes per day
+            <select id="goes_per_day">
+              <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+            </select>
+          </label>
+          <label class="field">Sortie length (hours)
+            <input id="sortie_hours" type="number" min="0.25" step="0.25" inputmode="decimal">
+          </label>
+          <label class="field">Turn window (hours)
+            <input id="turn_hours" type="number" min="0.25" step="0.25" inputmode="decimal">
+          </label>
+        </div>
+        <p id="go-times-note" class="note"></p>
+        </div>
+      </details>
+      <details class="section" data-sec="tempo">
+        <summary><span class="sec-title">Deployed tempo (SUTE)</span><span class="sec-sum" id="sum-tempo"></span></summary>
+        <div class="sec-body">
+        <p class="note">Enter the deployed aircraft (PAA), O&amp;M days, and sorties. The rest is calculated.</p>
+        <div class="rate-grid">
+          <label class="field">Deployed aircraft (PAA)
+            <input id="t_possessed_aircraft" data-tempo="possessed_aircraft" type="number" min="0" step="1" inputmode="numeric">
+          </label>
+          <label class="field">O&amp;M days
+            <input id="t_om_days" data-tempo="om_days" type="number" min="0" step="1" inputmode="numeric">
+          </label>
+          <label class="field">Sorties
+            <input id="t_sorties" data-tempo="sorties" type="number" min="0" step="1" inputmode="numeric">
+          </label>
+          <label class="field">Surge ceiling (optional)
+            <input id="sute_ceiling" type="number" min="0" step="0.01" inputmode="decimal" placeholder="None">
+          </label>
+          <label class="field">Home requirement matches
+            <select id="sute_basis">
+              <option value="sute">Deployed SUTE</option>
+              <option value="per_aircraft">Deployed sorties per aircraft</option>
+            </select>
+          </label>
+        </div>
+        <div id="tempo-out" class="tempo-out" aria-live="polite"></div>
+        </div>
+      </details>
+      <details class="section" data-sec="rates">
+        <summary><span class="sec-title">Rates (monthly averages)</span><span class="sec-sum" id="sum-rates"></span></summary>
+        <div class="sec-body">
+        <div class="rate-grid">
+          <label class="field">Mission capable
+            <span class="pct"><input id="mc_rate" type="number" min="0" max="100" step="0.1" inputmode="decimal"><span>%</span></span>
+          </label>
+          <label class="field">Break (Code 3)
+            <span class="pct"><input id="break_rate" type="number" min="0" max="100" step="0.1" inputmode="decimal"><span>%</span></span>
+          </label>
+          <label class="field">Ground abort
+            <span class="pct"><input id="ground_abort_rate" type="number" min="0" max="100" step="0.1" inputmode="decimal"><span>%</span></span>
+          </label>
+        </div>
+        <h3 class="sub-legend">Fix rates</h3>
+        <p class="note">Share of breaks and aborts fixed within each window, counting all shorter windows too. Anything not fixed within the longest window stays down for the week.</p>
+        <table class="window-table">
+          <thead><tr><th scope="col">Fixed within (hours)</th><th scope="col">Share fixed</th><th scope="col"><span class="visually-hidden">Remove</span></th></tr></thead>
+          <tbody id="window-body"></tbody>
+        </table>
+        <button type="button" id="add-window" class="secondary small">Add a fix window</button>
+        </div>
+      </details>
+      <details class="section" data-sec="rules">
+        <summary><span class="sec-title">Rules</span><span class="sec-sum" id="sum-rules"></span></summary>
+        <div class="sec-body">
+        <div class="rate-grid">
+          <label class="field">Commit rate
+            <span class="pct"><input id="commit_rate" type="number" min="0" max="100" step="0.1" inputmode="decimal"><span>%</span></span>
+          </label>
+          <label class="field">Spare rate
+            <span class="pct"><input id="spare_rate" type="number" min="0" max="100" step="0.1" inputmode="decimal"><span>%</span></span>
+          </label>
+          <label class="field">First flying day: longest fix worked (hours)
+            <input id="first_day_fix_hours" type="number" min="0" step="1" inputmode="numeric">
+          </label>
+        </div>
+        </div>
+      </details>
+      <details class="section" data-sec="week">
+        <summary><span class="sec-title">How the week plays out</span><span class="sec-sum" id="sum-week"></span></summary>
+        <div class="sec-body">
+        <div class="rate-grid">
+          <label class="field">Where breaks land
+            <select id="event_mode">
+              <option value="Spreadsheet">Evenly spread (spreadsheet)</option>
+              <option value="Fixed Count Random Placement">Set count, random sorties</option>
+              <option value="Fully Random">Fully random</option>
+            </select>
+          </label>
+          <label class="field">Fix outcomes
+            <select id="fix_mode">
+              <option value="Random">Random</option>
+              <option value="Expected">Match the rates exactly</option>
+            </select>
+          </label>
+          <label class="field">Saturday repair hours
+            <select id="sat_hours"></select>
+          </label>
+          <label class="field">Sunday repair hours
+            <select id="sun_hours"></select>
+          </label>
+          <label class="field">Repeat (re-breaks within a day)
+            <span class="pct"><input id="repeat_rate" type="number" min="0" max="100" step="0.1" inputmode="decimal"><span>%</span></span>
+          </label>
+          <label class="field">Recur (re-breaks within 3 days)
+            <span class="pct"><input id="recur_rate" type="number" min="0" max="100" step="0.1" inputmode="decimal"><span>%</span></span>
+          </label>
+        </div>
+        <label class="check"><input id="allow_2407_adds" type="checkbox"> Allow 2407 adds (unplanned aircraft cover losses)</label>
+        </div>
+      </details>
+      <details class="advanced">
+        <summary>Edit the full config</summary>
+        <p class="note">Everything the model uses, including fields not shown above. Apply to load it into the form.</p>
+        <textarea id="config-json" spellcheck="false" rows="16" aria-label="Full config as JSON"></textarea>
+        <div class="button-row">
+          <button type="button" id="apply-json" class="secondary">Apply config</button>
+          <button type="button" id="download-config" class="secondary">Download config</button>
+          <label class="secondary file-button">Open a config file<input id="open-config" type="file" accept=".json,application/json"></label>
+        </div>
+      </details>
+      <div class="run-bar">
+        <label class="field">Weeks to simulate
+          <select id="iterations">
+            <option value="1000">1,000</option>
+            <option value="5000">5,000</option>
+            <option value="10000" selected>10,000</option>
+          </select>
+        </label>
+        <label class="field">Seed
+          <input id="seed" type="number" min="0" step="1" placeholder="Random" inputmode="numeric">
+        </label>
+        <button type="button" id="run" class="primary" disabled>Simulate 10,000 weeks</button>
+      </div>
+      </div>
+      <div id="messages" class="messages" aria-live="polite"></div>
+    </section>
+
+    <section class="results" aria-labelledby="results-heading">
+      <h2 id="results-heading" class="visually-hidden">Results</h2>
+      <div id="empty" class="empty card">
+        <p>Run the plan to see how often it holds up, which day it usually breaks, and why.</p>
+      </div>
+      <div id="result" hidden></div>
+
+      <section id="backtest" class="card no-print" data-views="plan ana" aria-labelledby="bt-h">
+        <h2 id="bt-h">Check the model against past weeks</h2>
+        <p class="note">Load your unit's history: one row per flying day with planned and flown sorties by go, spares, breaks, aborts, and fixes within each window. Each week is predicted from the plan and the rates of the weeks before it, then compared with what happened. <strong>Your file is read in this browser and never uploaded.</strong> Use public or synthetic history only on this site; real unit history belongs in the private version run on your own machine.</p>
+        <div class="row-fields">
+          <label class="field">History file (CSV)
+            <input id="bt-file" type="file" accept=".csv,text/csv">
+          </label>
+          <label class="field">Rates from the weeks before
+            <select id="bt-lookback"><option value="2">2 weeks</option><option value="4" selected>4 weeks</option><option value="8">8 weeks</option></select>
+          </label>
+          <label class="field">Weeks simulated per prediction
+            <select id="bt-iterations"><option value="1000">1,000</option><option value="2000" selected>2,000</option></select>
+          </label>
+        </div>
+        <div class="button-row">
+          <button type="button" id="bt-run" class="primary" disabled>Run the backtest</button>
+          <button type="button" id="bt-synthetic" class="secondary">Try with synthetic history</button>
+          <button type="button" id="bt-template" class="secondary">Download the template</button>
+        </div>
+        <p class="note">Spares, commit, goes, weekend hours, and other rules come from the plan setup above.</p>
+        <div id="bt-out" aria-live="polite"></div>
+      </section>
+      <section class="records card no-print" aria-labelledby="records-heading">
+        <h2 id="records-heading">Run history</h2>
+        <p class="note">Runs are saved in this browser only. Download a run record to keep it or share it; anyone can verify it reproduces exactly.</p>
+        <div class="button-row">
+          <label class="secondary file-button">Verify a run record<input id="verify-file" type="file" accept=".json,application/json"></label>
+          <label class="check"><input id="save-history" type="checkbox"> Save runs in this browser</label>
+          <button type="button" id="clear-history" class="secondary">Clear everything stored in this browser</button>
+        </div>
+        <div id="verify-result" aria-live="polite"></div>
+        <ol id="history" class="history"></ol>
+      </section>
+    </section>
+  </main>
+  </div>
+
+  <footer class="brand-footer">
+    <p>Personal project · public or synthetic data only · not endorsed by DoD or the U.S. Air Force</p>
+    <p class="no-print">The model runs entirely in your browser. No plan, history file, or result is sent to a server.</p>
+  </footer>
+  <script src="app.js"></script>
+  <script src="site.js"></script>
+</body>
+</html>

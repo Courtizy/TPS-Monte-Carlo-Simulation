@@ -5,9 +5,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import example  # noqa: E402
-from tps_core.L1_engine import engine  # noqa: E402
-from tps_core.L1_engine import reference  # noqa: E402
-from tps_core.L0_inputs.schemas import COVERAGE_OPTIONS, EVENT_MODES, FIX_MODES, load_scenario  # noqa: E402
+from tps.L1_engine import engine  # noqa: E402
+from tps.L1_engine import reference  # noqa: E402
+from tps.L0_inputs.schemas import COVERAGE_OPTIONS, EVENT_MODES, FIX_MODES, load_scenario  # noqa: E402
 
 
 def _random_config(r):

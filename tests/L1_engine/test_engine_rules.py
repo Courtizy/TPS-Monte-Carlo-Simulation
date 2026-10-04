@@ -1,4 +1,4 @@
-"""Pins rules confirmed in ASSUMPTIONS.md on the tps_core engine."""
+"""Pins rules confirmed in ASSUMPTIONS.md on the tps engine."""
 import math
 import sys
 from pathlib import Path
@@ -8,8 +8,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import example  # noqa: E402
-from tps_core.L1_engine.engine import coverage_by_day, ready_time, run_week  # noqa: E402
-from tps_core.L0_inputs.schemas import DEFAULT_GO_TIMES, Options, load_scenario  # noqa: E402
+from tps.L1_engine.engine import coverage_by_day, ready_time, run_week  # noqa: E402
+from tps.L0_inputs.schemas import DEFAULT_GO_TIMES, Options, load_scenario  # noqa: E402
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Next Mon")
 FULL = coverage_by_day(DAYS, Options(weekend_coverage_hours=(("Sat", 24), ("Sun", 24))))

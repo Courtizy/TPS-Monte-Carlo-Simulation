@@ -7,13 +7,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import example  # noqa: E402
-from tps_core import web_api  # noqa: E402
-from tps_core.L3_levers.levers import build_levers  # noqa: E402
-from tps_core.L3_levers.patterns import efficient_frontier  # noqa: E402
-from tps_core.L4_evidence.runs import run_plan  # noqa: E402
-from tps_core.L0_inputs.schemas import load_scenario, plan_warnings  # noqa: E402
-from tps_core.L3_levers.sensitivity import break_even, describe  # noqa: E402
-from tps_core.L3_levers.sweep import apply_patch  # noqa: E402
+from tps import web_api  # noqa: E402
+from tps.L3_levers.levers import build_levers  # noqa: E402
+from tps.L3_levers.patterns import efficient_frontier  # noqa: E402
+from tps.L4_evidence.runs import run_plan  # noqa: E402
+from tps.L0_inputs.schemas import load_scenario, plan_warnings  # noqa: E402
+from tps.L3_levers.sensitivity import break_even, describe  # noqa: E402
+from tps.L3_levers.sweep import apply_patch  # noqa: E402
 
 
 # [M-10]

@@ -6,11 +6,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import example  # noqa: E402
 from test_engine_equivalence import _random_config  # noqa: E402
-from tps_core.L1_engine.engine import compile_plan, run_compiled_week  # noqa: E402
-from tps_core.L3_levers.levers import build_levers, sustainable_candidates  # noqa: E402
-from tps_core.L4_evidence.runs import run_plan  # noqa: E402
-from tps_core.L0_inputs.schemas import load_scenario, plan_warnings, validate_config  # noqa: E402
-from tps_core.L3_levers.sweep import apply_patch  # noqa: E402
+from tps.L1_engine.engine import compile_plan, run_compiled_week  # noqa: E402
+from tps.L3_levers.levers import build_levers, sustainable_candidates  # noqa: E402
+from tps.L4_evidence.runs import run_plan  # noqa: E402
+from tps.L0_inputs.schemas import load_scenario, plan_warnings, validate_config  # noqa: E402
+from tps.L3_levers.sweep import apply_patch  # noqa: E402
 
 CAUSES = ("lost_first_go_short", "lost_turn_short", "lost_abort_uncovered")
 

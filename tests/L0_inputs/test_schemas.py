@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import example  # noqa: E402
-from tps_core.L0_inputs.schemas import ConfigError, fingerprint, load_scenario, plan_warnings, validate_config  # noqa: E402
+from tps.L0_inputs.schemas import ConfigError, fingerprint, load_scenario, plan_warnings, validate_config  # noqa: E402
 
 
 def test_example_is_valid_and_clean():

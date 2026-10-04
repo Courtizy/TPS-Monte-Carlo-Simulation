@@ -1,0 +1,100 @@
+{
+  "schema": "tps-core/1",
+  "name": "Synthetic 2-go unit",
+  "notes": "SYNTHETIC VALUES ONLY. Replace every number with your unit's data, and keep real data out of the public repo.",
+  "inventory": {
+    "pai": 18
+  },
+  "rates": {
+    "mc_rate": 0.75,
+    "break_rate": 0.25,
+    "ground_abort_rate": 0.05,
+    "fix_windows": [
+      {
+        "hours": 8,
+        "rate": 0.45
+      },
+      {
+        "hours": 12,
+        "rate": 0.6
+      },
+      {
+        "hours": 24,
+        "rate": 0.8
+      }
+    ]
+  },
+  "rules": {
+    "commit_rate": 0.55,
+    "spare_rate": 0.2,
+    "flying_days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+    ],
+    "recovery_days": [
+      "Sat",
+      "Sun",
+      "Next Mon"
+    ],
+    "long_fix_start_day": "Tue",
+    "max_daily_sorties": 9,
+    "max_second_go": 4,
+    "max_day_to_day_delta": 5,
+    "first_day_fix_hours": 8
+  },
+  "schedule": {
+    "Mon": {
+      "first_go": 6,
+      "second_go": 3
+    },
+    "Tue": {
+      "first_go": 6,
+      "second_go": 3
+    },
+    "Wed": {
+      "first_go": 5,
+      "second_go": 3
+    },
+    "Thu": {
+      "first_go": 5,
+      "second_go": 2
+    },
+    "Fri": {
+      "first_go": 4,
+      "second_go": 2
+    }
+  },
+  "sute": {
+    "possessed_aircraft": 18,
+    "om_days": 30,
+    "sorties": 216,
+    "surge_ceiling": 0.52
+  },
+  "success": {
+    "minimum_monday_aircraft": null,
+    "backlog_threshold": null
+  },
+  "options": {
+    "event_mode": "Fixed Count Random Placement",
+    "fix_mode": "Random",
+    "allow_2407_adds": false,
+    "weekend_coverage_hours": {
+      "Sat": 8,
+      "Sun": 0
+    },
+    "repeat_rate": 0.05,
+    "recur_rate": 0.05,
+    "go_profile": {
+      "goes_per_day": 2,
+      "sortie_hours": 2,
+      "turn_hours": 8
+    }
+  },
+  "sources": {
+    "everything": "Synthetic placeholder values for illustration.",
+    "sute": "Synthetic deployed figures: aircraft (PAA), O&M days, and sorties."
+  }
+}

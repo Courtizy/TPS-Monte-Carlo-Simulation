@@ -7,10 +7,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import example  # noqa: E402
-from tps_core.L1_engine.engine import _Draws, run_week  # noqa: E402
-from tps_core.L0_inputs.rules import RuleSet, aircraft_required, calculated_spares, commit_aircraft, day_spares, risk_band  # noqa: E402
-from tps_core.L4_evidence.runs import run_plan  # noqa: E402
-from tps_core.L0_inputs.schemas import DayPlan, load_scenario  # noqa: E402
+from tps.L1_engine.engine import _Draws, run_week  # noqa: E402
+from tps.L0_inputs.rules import RuleSet, aircraft_required, calculated_spares, commit_aircraft, day_spares, risk_band  # noqa: E402
+from tps.L4_evidence.runs import run_plan  # noqa: E402
+from tps.L0_inputs.schemas import DayPlan, load_scenario  # noqa: E402
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri")
 

@@ -7,14 +7,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import ROOT, example  # noqa: E402
-from tps_core.L1_engine.engine import run_week  # noqa: E402
-from tps_core.L3_levers.levers import sustainable_candidates  # noqa: E402
-from tps_core.L4_evidence.runs import run_plan  # noqa: E402
-from tps_core.L0_inputs.schemas import load_scenario, plan_warnings, profile_go_times, required_from_sute  # noqa: E402
+from tps.L1_engine.engine import run_week  # noqa: E402
+from tps.L3_levers.levers import sustainable_candidates  # noqa: E402
+from tps.L4_evidence.runs import run_plan  # noqa: E402
+from tps.L0_inputs.schemas import load_scenario, plan_warnings, profile_go_times, required_from_sute  # noqa: E402
 
 import json  # noqa: E402
 
-THREE_GO = json.loads((ROOT / "examples" / "plans" / "synthetic_3go.json").read_text())
+THREE_GO = json.loads((ROOT / "configs" / "public" / "synthetic_3go.json").read_text())
 
 
 # [T-2]

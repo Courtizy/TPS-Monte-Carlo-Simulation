@@ -1,7 +1,7 @@
-name: Test and publish the proof of concept
+name: Test and publish
 
-# Runs from the repo root: tests in tests/, model in model/, page in app/.
-# GitHub only runs workflows from .github/workflows/.
+# test -> export -> publish. Deploys on every push to main (TPS's choice; the kit default is manual
+# until the public-release review). The public site shows synthetic inputs only.
 
 on:
   push:
@@ -18,43 +18,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - run: pip install pytest
-      - name: Model tests (must pass before anything publishes)
-        run: pytest -q
-
-  build:
-    needs: test
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Check the brand kit is present
-        run: |
-          if [ ! -f app/brand/css/brand.css ]; then
-            echo "::warning::No app/brand/ folder. The site will publish without the brand styles."
-          fi
-      - name: Build the site with the version and commit stamped in
-        run: python scripts/build_site.py --out site --commit "$GITHUB_SHA"
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: site
-
-  deploy:
-    needs: build
+  publish:
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - name: Tests, including the golden outputs (nothing publishes unless they pass)
+        run: pytest -q
+      - name: Export the site from the public configs, stamped ?v=<commit>
+        run: python scripts/export_site.py --commit "$GITHUB_SHA" --stamp
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
       - id: deployment
         uses: actions/deploy-pages@v5

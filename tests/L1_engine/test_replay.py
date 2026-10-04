@@ -7,15 +7,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import ROOT, example  # noqa: E402
 from test_engine_equivalence import _random_config  # noqa: E402
-from tps_core import web_api  # noqa: E402
-from tps_core.L1_engine import engine  # noqa: E402
-from tps_core.L1_engine import reference  # noqa: E402
-from tps_core.L2_metrics.metrics import score_week  # noqa: E402
-from tps_core.L1_engine.replay import clock, pick_weeks, replay  # noqa: E402
-from tps_core.L4_evidence.runs import run_plan, simulate  # noqa: E402
-from tps_core.L0_inputs.schemas import load_scenario, validate_config  # noqa: E402
+from tps import web_api  # noqa: E402
+from tps.L1_engine import engine  # noqa: E402
+from tps.L1_engine import reference  # noqa: E402
+from tps.L2_metrics.metrics import score_week  # noqa: E402
+from tps.L1_engine.replay import clock, pick_weeks, replay  # noqa: E402
+from tps.L4_evidence.runs import run_plan, simulate  # noqa: E402
+from tps.L0_inputs.schemas import load_scenario, validate_config  # noqa: E402
 
-EXAMPLES = [json.loads((ROOT / "examples" / "plans" / f).read_text())
+EXAMPLES = [json.loads((ROOT / "configs" / "public" / f).read_text())
             for f in ("synthetic_week.json", "synthetic_3go.json", "synthetic_4go.json")]
 
 

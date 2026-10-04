@@ -1,0 +1,8 @@
+/* Stand-in styles for .hub-bar and .app-status until brand/ is replaced with the kit copy that has them.
+   Loaded BEFORE brand/css/brand.css, so the kit's own rules win as soon as they exist. Delete this file then. */
+.hub-bar { background: var(--panel); border-bottom: 1px solid var(--line); font-size: 0.85rem; }
+.hub-bar__inner { max-width: 1240px; margin: 0 auto; padding: 0.45rem 1.25rem; display: flex; justify-content: space-between; gap: 1rem; color: var(--ink-secondary); }
+.hub-bar a { color: var(--ink); text-decoration: none; font-weight: 500; }
+.hub-bar a:hover { color: var(--accent); }
+.app-status { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.2rem 0.6rem; border: 1px solid var(--line); color: var(--ink-secondary); font-size: 0.85rem; white-space: nowrap; align-self: center; }
+.app-status__dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; border: 2px solid var(--ink-secondary); }

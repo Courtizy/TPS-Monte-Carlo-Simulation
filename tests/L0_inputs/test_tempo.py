@@ -7,10 +7,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import example  # noqa: E402
-from tps_core import web_api  # noqa: E402
-from tps_core.L4_evidence.runs import run_plan  # noqa: E402
-from tps_core.L0_inputs.schemas import validate_config  # noqa: E402
-from tps_core.L0_inputs.tempo import home_requirements, solve_tempo  # noqa: E402
+from tps import web_api  # noqa: E402
+from tps.L4_evidence.runs import run_plan  # noqa: E402
+from tps.L0_inputs.schemas import validate_config  # noqa: E402
+from tps.L0_inputs.tempo import home_requirements, solve_tempo  # noqa: E402
 
 
 # [M-9]

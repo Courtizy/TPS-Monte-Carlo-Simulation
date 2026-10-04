@@ -6,10 +6,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import example  # noqa: E402
-from tps_core import web_api  # noqa: E402
-from tps_core.L2_metrics.metrics import wilson_interval  # noqa: E402
-from tps_core.L4_evidence.runs import run_plan, verify_record  # noqa: E402
-from tps_core.L3_levers.sweep import apply_patch, derive_seed, plan_sweep, run_sweep  # noqa: E402
+from tps import web_api  # noqa: E402
+from tps.L2_metrics.metrics import wilson_interval  # noqa: E402
+from tps.L4_evidence.runs import run_plan, verify_record  # noqa: E402
+from tps.L3_levers.sweep import apply_patch, derive_seed, plan_sweep, run_sweep  # noqa: E402
 
 
 def test_same_seed_same_record_metrics():

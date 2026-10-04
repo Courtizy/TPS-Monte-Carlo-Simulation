@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import ROOT, example  # noqa: E402
-from tps_core import web_api  # noqa: E402
+from tps import web_api  # noqa: E402
 
 
 class JsNull:   # stand-in with the same type name Pyodide uses
@@ -30,5 +30,5 @@ def test_blank_seed_from_the_browser_picks_a_seed():
 
 
 def test_worker_never_sends_null_for_optional_values():
-    worker = (ROOT / "app" / "web" / "worker.js").read_text()
+    worker = (ROOT / "site" / "worker.js").read_text()
     assert not re.search(r"\?\?\s*null", worker), "send undefined (or leave the value out), not null, to Python"

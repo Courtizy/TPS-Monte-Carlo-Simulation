@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DOC = (ROOT / "docs" / "MODEL_LOGIC.md").read_text(encoding="utf-8")
-PACKAGE = ROOT / "model" / "tps_core"
+PACKAGE = ROOT / "src" / "tps"
 # Keyed by path inside the package (e.g. "L1_engine/reference.py"); several files share the name __init__.py.
 CODE = {str(p.relative_to(PACKAGE)).replace("\\", "/"): p.read_text(encoding="utf-8") for p in PACKAGE.rglob("*.py")}
 TESTS = {str(p.relative_to(ROOT / "tests")): p.read_text(encoding="utf-8") for p in (ROOT / "tests").rglob("test_*.py")
@@ -26,7 +26,7 @@ def test_document_has_rules():
 def test_every_rule_is_in_the_code_and_a_test():
     code_tags = {t for text in CODE.values() for t in TAG.findall(text)}
     test_tags = {t for text in TESTS.values() for t in TAG.findall(text)}
-    assert not set(RULES) - code_tags, f"rules with no [tag] in tps_core: {sorted(set(RULES) - code_tags)}"
+    assert not set(RULES) - code_tags, f"rules with no [tag] in tps: {sorted(set(RULES) - code_tags)}"
     assert not set(RULES) - test_tags, f"rules with no [tag] in tests: {sorted(set(RULES) - test_tags)}"
 
 
@@ -46,7 +46,7 @@ def test_named_tests_exist():
 
 def _code_file(token: str) -> str | None:
     """The package file a document path refers to, matched from the end (e.g. "L1_engine/reference.py")."""
-    token = token.removeprefix("tps_core/")
+    token = token.removeprefix("tps/")
     if token in CODE:            # an exact path inside the package wins (e.g. the top-level __init__.py)
         return token
     hits = [path for path in CODE if path.endswith("/" + token)]
@@ -68,4 +68,4 @@ def test_named_code_exists():
 
 def test_document_version_matches_the_model():
     version = re.search(r'__version__ = "(\d+\.\d+)', CODE["version.py"]).group(1)
-    assert f"`tps_core` {version}" in DOC.split("\n", 4)[2], "update the version line at the top of MODEL_LOGIC.md"
+    assert f"`tps` {version}" in DOC.split("\n", 4)[2], "update the version line at the top of MODEL_LOGIC.md"

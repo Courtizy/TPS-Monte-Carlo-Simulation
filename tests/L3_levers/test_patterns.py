@@ -8,16 +8,16 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import ROOT, example  # noqa: E402
-from tps_core import web_api  # noqa: E402
-from tps_core.L3_levers.patterns import (  # noqa: E402
+from tps import web_api  # noqa: E402
+from tps.L3_levers.patterns import (  # noqa: E402
     DIAGNOSTIC, FAMILIES, analyze, classify, daily_compositions, generate, split_day, week_targets,
 )
-from tps_core.L0_inputs.rules import commit_aircraft, day_spares  # noqa: E402
-from tps_core.L4_evidence.runs import run_plan  # noqa: E402
-from tps_core.L0_inputs.schemas import DayPlan, load_scenario  # noqa: E402
-from tps_core.L3_levers.sweep import plan_sweep  # noqa: E402
+from tps.L0_inputs.rules import commit_aircraft, day_spares  # noqa: E402
+from tps.L4_evidence.runs import run_plan  # noqa: E402
+from tps.L0_inputs.schemas import DayPlan, load_scenario  # noqa: E402
+from tps.L3_levers.sweep import plan_sweep  # noqa: E402
 
-THREE_GO = json.loads((ROOT / "examples" / "plans" / "synthetic_3go.json").read_text())
+THREE_GO = json.loads((ROOT / "configs" / "public" / "synthetic_3go.json").read_text())
 
 
 # [P-3]

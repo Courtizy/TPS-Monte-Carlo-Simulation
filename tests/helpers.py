@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-EXAMPLE = json.loads((ROOT / "examples" / "plans" / "synthetic_week.json").read_text())
+EXAMPLE = json.loads((ROOT / "configs" / "public" / "synthetic_week.json").read_text())
 
 
 def example(**changes):

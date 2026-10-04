@@ -4,51 +4,32 @@
 
 Personal project · public or synthetic data only · not endorsed by DoD or the U.S. Air Force.
 
-## Repo layout
+Status: **In development.** Public pages show synthetic inputs only.
 
-The folders follow the portfolio's app framework (`app_layer_frameworks.md`): each model layer has its own folder, with matching tests.
+## How the repo is built (two front doors)
 
-```
-docs/                 MODEL_LOGIC.md (start here) and REFERENCES.md
-model/tps_core/       the model, standard library only
-  L0_inputs/          config schema, planning rules, deployed tempo
-  L1_engine/          the simulation (readable reference + fast engine) and week replay
-  L2_metrics/         judging each week and summarizing a run
-  L3_levers/          fixes, turn-pattern search, break-even margins, sweeps
-  L4_evidence/        run records and backtesting against past weeks
-  web_api.py          the bridge the page calls (L5)
-tests/                one folder per layer (L0_inputs/ ... L4_evidence/, app/), plus the docs sync test
-app/web/              the page (L5): index.html, app.js, styles.css, worker.js
-app/brand/            the Decision Models brand kit
-examples/plans/       synthetic example plans
-examples/history/     a template history file for backtesting
-scripts/build_site.py builds site/ for GitHub Pages
-.github/workflows/    tests, builds, and deploys on every push to main
-```
-
-| Where | What |
-| --- | --- |
-| `docs/MODEL_LOGIC.md` | **Start here.** Every rule the model applies, in the order a week unfolds: plain words, the math, where it comes from (DAFI 21-101, unit convention, or model choice), and the code and test behind it. A test keeps it in sync with the code. |
-| `docs/REFERENCES.md` | Sources for Monte Carlo simulation, the analysis methods, verification and validation, and prior Air Force and commercial aviation simulation work. |
-| `examples/` | Synthetic plans and a history template. **Never commit real unit data.** |
-
-## Turn on GitHub Pages (once)
-
-1. Push these files to `main`.
-2. In the repo on GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-3. Watch **Actions**. When "Test and publish the proof of concept" finishes, the site link appears on the run and under Settings → Pages.
-
-If any test fails, nothing publishes.
-
-## Run it on your own machine
+| Folder | Door | Purpose |
+| --- | --- | --- |
+| `src/tps/` | both | The engine, standard library only, seeded. Layers: `L0_inputs/` (config, rules, tempo, presets), `L1_engine/` (simulation, replay), `L2_metrics/`, `L3_levers/` (fixes, pattern search, margins, sweeps), `L4_evidence/` (run records, backtesting). |
+| `configs/public/` | public | Synthetic unit configs and the history template. |
+| `scripts/export_site.py` | public | Runs the engine on every public preset, writes `site/data/*.json`, copies `brand/` into `site/brand/`, bundles the engine for Run ▸. |
+| `site/` | public | Overview · Results · Method (display the JSON only) and the planner behind **Run ▸**. |
+| `.github/workflows/pages.yml` | public | test → export → publish, on every push to `main`. |
+| `app/run_private.py` | private | The same engine and pages on your own inputs, on your own machine. |
+| `private/` | private | Gitignored except its README and example. Personal-time data only. **Work data goes through official channels, never a repo.** |
+| `brand/` | both | The Decision Models brand kit (identical across repos). |
+| `docs/` | | `MODEL_LOGIC.md` (start here) and `REFERENCES.md`. |
+| `tests/` | | One folder per layer, plus the golden outputs and the docs sync test. |
 
 ```bash
-pytest                            # all tests (configured in pyproject.toml)
-python scripts/build_site.py      # builds ./site
-python -m http.server -d site 8000
+pip install -e ".[dev]"
+pytest -q                                   # includes the golden outputs
+python scripts/export_site.py               # build site/data
+python -m http.server -d site 8000          # view at http://localhost:8000
+python app/run_private.py --config private/inputs.json
 ```
 
-Then open http://localhost:8000. It needs internet access the first time to download Pyodide.
+**Run ▸** runs the full planner (fixes, turn-pattern search, watch a week, backtesting) in the visitor's browser. Nothing is sent to a server, but it's a personal public site: use public or synthetic values only. Saving runs in the browser is opt-in, and one button clears everything the site stores.
 
 ## Describing your unit
 
@@ -66,7 +47,7 @@ Day-based patterns only for now: every sortie launches and lands at home the sam
 
 ## Branding
 
-The page uses the Decision Models brand kit in `app/brand/` (TPS is app 01: teal, "Can the fleet meet the flying schedule?"). `<html data-app="tps">` picks the app; the build copies `app/brand/css`, `icons` and `js` into the site. Dark is the default and light follows the device, with the Auto/Light/Dark switch forcing either. Page colors are aliases for the brand tokens (`app/web/styles.css`, top). Chart marks use the series colors, good and bad meanings use the status colors with a label, and the disclaimer footer appears on every page and printout. To change colors, edit `app/brand/palette.py` and follow `app/brand/README.md`.
+The page uses the Decision Models brand kit in `brand/` (TPS is app 01: teal, "Can the fleet meet the flying schedule?"). `<html data-app="tps">` picks the app; the build copies `brand/css`, `icons` and `js` into the site. Dark is the default and light follows the device, with the Auto/Light/Dark switch forcing either. Page colors are aliases for the brand tokens (`site/styles.css`, top). Chart marks use the series colors, good and bad meanings use the status colors with a label, and the disclaimer footer appears on every page and printout. To change colors, edit `brand/palette.py` and follow `brand/README.md`.
 
 ## Page layout
 
@@ -76,7 +57,7 @@ Deployed tempo takes three inputs: deployed aircraft (PAA), O&M days, and sortie
 
 ## Backtesting against past weeks
 
-The **Check the model against past weeks** section loads a history file (one row per flying day; see `examples/history/history_template.csv` or use **Download the template**). Each week is predicted from its planned schedule and the rates of the weeks before it, then compared with what happened: calibration by prediction band, a Brier accuracy score against always guessing the overall rate, sorties coverage, and day-level agreement. **Try with synthetic history** shows the whole flow on 60 weeks the model generates itself. The file is read in the browser and never uploaded. Rules B-1 to B-4 in `docs/MODEL_LOGIC.md`.
+The **Check the model against past weeks** section loads a history file (one row per flying day; see `configs/public/history_template.csv` or use **Download the template**). Each week is predicted from its planned schedule and the rates of the weeks before it, then compared with what happened: calibration by prediction band, a Brier accuracy score against always guessing the overall rate, sorties coverage, and day-level agreement. **Try with synthetic history** shows the whole flow on 60 weeks the model generates itself. The file is read in the browser and never uploaded. Rules B-1 to B-4 in `docs/MODEL_LOGIC.md`.
 
 ## Three views of the same run
 

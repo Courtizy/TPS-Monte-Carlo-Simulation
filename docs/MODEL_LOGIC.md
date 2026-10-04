@@ -1,6 +1,6 @@
 # TPS Model Logic
 
-**Turn Pattern Sustainability, model `tps_core` 0.9**
+**Turn Pattern Sustainability, model `tps` 0.10**
 
 TPS answers one planning question: **can this unit fly this weekly schedule, week after week, without running out of aircraft?** It plays the week out thousands of times. Each time, breaks, aborts, and fixes land differently, and the model counts how often the plan holds up and why it fails when it doesn't.
 
@@ -20,7 +20,7 @@ Every rule is tagged with where it comes from:
 
 Sources for the method itself (Monte Carlo simulation, the confidence interval, sensitivity analysis, verification and validation, and prior Air Force and aviation simulation work) are in `REFERENCES.md`. No rule comes from restricted publications. Planning values (rates, commit, spares) are inputs from each unit, never built into the code.
 
-**Where the code lives.** The model is `model/tps_core/`, in the layers of the portfolio's app framework: `L0_inputs/` (config, planning rules, deployed tempo), `L1_engine/` (the simulation and week replay), `L2_metrics/` (judging weeks and summarizing runs), `L3_levers/` (fixes, pattern search, margins, sweeps), and `L4_evidence/` (run records and backtesting). The page (L5) is in `app/`. Tests sit in matching folders under `tests/`. Read `L1_engine/reference.py` to follow the simulation line by line; `L1_engine/engine.py` is an optimized copy that a test proves gives identical results, so you never need to read it to understand the model.
+**Where the code lives.** The model is `src/tps/`, in the layers of the portfolio's app framework: `L0_inputs/` (config, planning rules, deployed tempo), `L1_engine/` (the simulation and week replay), `L2_metrics/` (judging weeks and summarizing runs), `L3_levers/` (fixes, pattern search, margins, sweeps), and `L4_evidence/` (run records and backtesting). The public pages are in `site/` and display JSON written by `scripts/export_site.py`; the private front door is `app/run_private.py`. Tests sit in matching folders under `tests/`. Read `L1_engine/reference.py` to follow the simulation line by line; `L1_engine/engine.py` is an optimized copy that a test proves gives identical results, so you never need to read it to understand the model.
 
 ---
 
@@ -109,6 +109,12 @@ $$go_{k+1} \le go_k, \qquad \text{goes used} \le \text{goes per day}$$
 
 **Code:** `L0_inputs/schemas.py` → `validate_config`.
 **Test:** `test_validation_catches_problems`.
+
+### R-6: Public presets
+**Source:** Model choice.
+**Rule:** The public Results page shows each synthetic unit under three scenarios and two recovery models. **Baseline** is the week as configured. **Surge** adds one sortie to every go each day where commit and the go limits allow. **Short-staffed recovery** removes weekend repair hours and cuts every fix window's rate by 15%. **Scheduled spares** covers losses with spares only; **fleet flex** also lets idle mission-capable aircraft cover them (2407 adds). These are synthetic what-ifs that show the method, not any unit's readiness.
+**Code:** `L0_inputs/presets.py` → `scenario_config`.
+**Test:** `test_presets_are_valid_and_change_what_they_say`.
 
 ---
 
@@ -473,10 +479,16 @@ $$seed_i = \mathrm{SHA256}(\text{"tps-sweep:"} \,\|\, seed \,\|\, \text{":"} \,\
 **Code:** `L1_engine/engine.py` → `run_compiled_week`.
 **Test:** `test_fast_engine_matches_reference`.
 
+### A-5: Golden outputs
+**Source:** Model choice; the migration rule in the brand kit (capture golden outputs first; they must keep passing).
+**Rule:** For every public config, the engine's raw week-by-week output at fixed seeds is fingerprinted and stored in `tests/golden/golden.json`. Any change that moves it fails the tests; a deliberate change to the simulation re-captures it and says why in `CHANGELOG.md`.
+**Code:** `L1_engine/engine.py` → `run_compiled_week`.
+**Test:** `test_engine_matches_golden_outputs`.
+
 ### A-4: Runs anywhere
 **Source:** Model choice.
 **Rule:** The model uses only Python's standard library, so it runs unchanged in the browser (Pyodide) and on a server.
-**Code:** `tps_core/__init__.py`.
+**Code:** `tps/__init__.py`.
 **Test:** `test_only_standard_library_imports`.
 
 ---

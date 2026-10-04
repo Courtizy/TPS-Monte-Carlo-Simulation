@@ -1,0 +1,32 @@
+{
+  "synthetic_3go": {
+    "engine_digest": {
+      "11": "d232a10b23edcdf7327d6ecb1884c06b6b2243cd686d02d62a99cb5085650391",
+      "2026": "6f3492f33503de28b53bb47dabf0d4a7929575f38e60ebba7b0b6b2b7bbf9451"
+    },
+    "probability_success": {
+      "11": 0.773,
+      "2026": 0.737
+    }
+  },
+  "synthetic_4go": {
+    "engine_digest": {
+      "11": "c8d814e5dee5d7105031a77d4f5fbba15d77265800b447ba3e16a0dcc0c9333d",
+      "2026": "b3939fbceeed0c4e0ccda97d2702a1c1ef3bc070806b83d1430c6cbdd8080e6a"
+    },
+    "probability_success": {
+      "11": 0.847,
+      "2026": 0.847
+    }
+  },
+  "synthetic_week": {
+    "engine_digest": {
+      "11": "9939eff79de4ef86d2eaba5bef15cb7935f6347bf485fdd775bc6f98c593301d",
+      "2026": "0b3c8dc5248e8afca2f9d9e4c35cd7e99b634347614ab5cead63e7208423db22"
+    },
+    "probability_success": {
+      "11": 0.937,
+      "2026": 0.922
+    }
+  }
+}

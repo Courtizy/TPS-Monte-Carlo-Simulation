@@ -7,9 +7,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from helpers import example  # noqa: E402
-from tps_core import web_api  # noqa: E402
-from tps_core.L4_evidence.backtest import parse_history, prepare, summarize, synthetic_history, trailing_rates  # noqa: E402
-from tps_core.L4_evidence.runs import run_plan  # noqa: E402
+from tps import web_api  # noqa: E402
+from tps.L4_evidence.backtest import parse_history, prepare, summarize, synthetic_history, trailing_rates  # noqa: E402
+from tps.L4_evidence.runs import run_plan  # noqa: E402
 
 HEADER = "week_start,day,pai,mc_at_start,next_monday_mc,required_sorties,planned_go1,planned_go2,spares,flown_go1,flown_go2,breaks,aborts,fixed_8h,fixed_24h\n"
 
