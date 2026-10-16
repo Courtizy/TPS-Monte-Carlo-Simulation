@@ -242,19 +242,19 @@ def summarize(prepared: dict[str, Any], metrics: list[dict[str, Any]]) -> dict[s
 def _sentences(r: dict[str, Any]) -> list[str]:
     pct = lambda v: f"{v * 100:.0f}%"  # noqa: E731
     out = [f"Across {r['weeks']} past weeks the model predicted {pct(r['mean_predicted'])} success on average; "
-           f"{pct(r['observed_success'])} of those weeks actually succeeded."]
+           f"{pct(r['observed_success'])} of those weeks succeeded."]
     if r["bins"]:
         out.append(f"In {r['bins_agreeing']} of {len(r['bins'])} prediction bands, the share of weeks that succeeded "
-                   "is within chance of what the model predicted.")
+                   "is within normal variation of the prediction.")
     if r["skill"] is not None:
         verdict = ("better than" if r["skill"] > 0.05 else "about the same as" if r["skill"] > -0.05 else "worse than")
         out.append(f"Accuracy score (Brier) {r['brier']:.3f}: {verdict} always guessing the overall rate "
                    f"({r['brier_naive']:.3f}), a skill of {r['skill']:+.2f}.")
-    out.append(f"Actual sorties landed inside the predicted middle-80% range in {pct(r['sorties_inside_range'])} of weeks "
-               f"(at least 80% expected; most weeks fly everything planned, the top of the range, so higher is normal). "
-               f"The typical prediction was {abs(r['sorties_bias']):.1f} sorties {'high' if r['sorties_bias'] > 0 else 'low'} on average.")
+    out.append(f"Sorties flown fell inside the predicted middle-80% range in {pct(r['sorties_inside_range'])} of weeks. "
+               f"Expect 80% or more: most weeks fly the full plan, which sits at the top of the range. "
+               f"On average the prediction ran {abs(r['sorties_bias']):.1f} sorties {'high' if r['sorties_bias'] > 0 else 'low'}.")
     if r["day_risk_when_missed"] is not None and r["day_risk_when_held"] is not None:
-        out.append(f"Days that actually missed their plan had been rated {pct(r['day_risk_when_missed'])} risk on average, "
+        out.append(f"Days that missed their plan had been rated {pct(r['day_risk_when_missed'])} risk on average, "
                    f"against {pct(r['day_risk_when_held'])} for days that held.")
     if r["riskiest_day_matched"] is not None:
         out.append(f"In weeks that missed a day, the first miss fell on the model's riskiest day "

@@ -50,7 +50,7 @@
       h("section", { class: "ov-hero" },
         h("p", { class: "eyebrow", text: "01 · Operations" }),
         h("h2", { class: "ov-headline", text: "A turn pattern that works on average can still fail most weeks." }),
-        h("p", { class: "ov-lead", text: "This model runs the week thousands of times with random breaks and repairs, and reports how often the pattern actually holds: sorties flown, aircraft available, and how fast the fleet recovers." }),
+        h("p", { class: "ov-lead", text: "The model runs the same week thousands of times with random breaks and repairs, then reports how often the pattern holds: sorties flown, aircraft available, and how fast the fleet recovers." }),
         h("div", { class: "button-row" },
           h("a", { class: "button primary", href: "#results", text: "See results" }),
           h("a", { class: "button secondary", href: "#method", text: "How it works" }))),
@@ -71,7 +71,7 @@
         h("div", { class: "card" }, h("h3", { text: "What it can't tell you" }),
           h("p", { text: "Inputs are public or synthetic, so results show the method, not any unit's readiness. Breaks are drawn independently; real fleets have correlated failures. Parts supply and manpower limits aren't modeled yet." })),
         h("div", { class: "card" }, h("h3", { text: "Built on" }),
-          h("p", { text: "A Python Monte Carlo engine, standard library only. These pages show results the engine precomputed from synthetic inputs; Run ▸ runs the same engine in your browser." }),
+          h("p", { text: "A Python Monte Carlo engine with no outside dependencies. These pages show results it precomputed from synthetic inputs; Run ▸ runs the same engine in your browser." }),
           h("p", {}, h("a", { href: REPO, text: "Code on GitHub" }), " · ", h("a", { href: `${REPO}/blob/main/docs/MODEL_LOGIC.md`, text: "Model logic" })))),
     );
   }
@@ -146,7 +146,7 @@
   function renderMethod() {
     const p = state.preset, inp = p.simulation.inputs;
     const sections = [
-      ["problem", "Problem", [h("p", { text: "Turn patterns are usually checked against averages. Averages hide how often a week actually fails. The question here is direct: for a given weekly pattern, what's the probability it holds?" })]],
+      ["problem", "Problem", [h("p", { text: "Turn patterns are usually checked against average rates, and averages hide how often a week fails. This model answers one question: for a given weekly pattern, how likely is it to hold?" })]],
       ["inputs", "Inputs and sources", [
         h("div", { class: "table-wrap" }, h("table", { class: "data-table" },
           h("thead", {}, h("tr", {}, ["Input", "Value", "Source", "Status"].map((t) => h("th", { text: t })))),
@@ -159,15 +159,15 @@
         h("p", { class: "note", text: "Values tied to policy appear here only after the public-release review." })]],
       ["model", "The model", [
         h("ol", { class: "steps" },
-          h("li", {}, h("strong", { text: "Simulate" }), h("p", { text: "Each run draws breaks, aborts and fix times for every aircraft and every sortie, on a timeline of goes." })),
-          h("li", {}, h("strong", { text: "Recover" }), h("p", { text: "Scheduled spares cover losses, or fleet flex also lets idle mission-capable aircraft step in, within each fix window." })),
+          h("li", {}, h("strong", { text: "Simulate" }), h("p", { text: "Each run draws breaks, aborts and fix times for every aircraft and sortie, on a timeline of goes." })),
+          h("li", {}, h("strong", { text: "Recover" }), h("p", { text: "Scheduled spares cover losses. Under fleet flex, idle mission-capable aircraft can also step in. Repairs finish within each fix window." })),
           h("li", {}, h("strong", { text: "Score" }), h("p", { text: "A week passes only if sorties, the schedule, availability, commit, recovery and backlog all hold." }))),
         h("p", {}, "Full detail, rule by rule: ", h("a", { href: `${REPO}/blob/main/docs/MODEL_LOGIC.md`, text: "MODEL_LOGIC.md" }))]],
       ["validation", "Validation", [
         h("ul", { class: "checklist" }, [
           ["Same seed reproduces the same results, and run records can be re-verified", "Done"],
           ["The fast engine matches the readable reference engine on randomized scenarios", "Done"],
-          ["Golden outputs unchanged through the move to the kit layout", "Done"],
+          ["Reference outputs unchanged through the code restructure", "Done"],
           ["Simple cases match hand-worked examples (for example, a 2-hour fix makes a 3-hour turn)", "Done"],
           ["Every rule documented and tied to its code and a test", "Done"],
           ["Sensitivity: how far each rate can slip before the plan fails (in Run ▸)", "Done"],

@@ -26,7 +26,7 @@
     { page: "results", action: async () => { await site().pick(site().defaultPick()); await view("lead"); }, target: "#res-chooser", title: "Pick what to look at",
       text: "Choose a unit, a scenario and a recovery model. The engine ran every combination ahead of time; this page only displays what it computed." },
     { page: "results", target: "#brief", title: "Leadership view: the call",
-      text: "The same results page the planner shows, opened on Leadership: can we do it, what the plan costs, the decisions, and how much margin each rate has." },
+      text: "The planner's own results view, opened on Leadership: whether the plan works, what it costs, the decisions to make, and how much margin each rate has." },
     { page: "results", target: "#season-card", title: "Through the year",
       text: () => { const sv = site().preset().insights.season || []; const worst = sv.reduce((a, b) => (b.success < a.success ? b : a), sv[0] || { month: "", success: 1 });
         return `The same weekly pattern under each month's conditions. Heat in summer means more breaks and slower fixes; winter brings more aborts; holiday weeks lose a flying day. Weakest month here: ${worst.month} (${pct(worst.success)}).`; } },
@@ -36,7 +36,7 @@
     { page: "results", target: "#brief", title: "Short on weekend repairs",
       action: async (ctx) => { await site().pick({ recovery: "spares", scenario: "baseline" }); ctx.monBase = dayRow("Next Mon").p_day_met;
         await site().pick({ scenario: "short_staffed" }); await view("lead"); },
-      text: (ctx) => `Short-staffed recovery removes weekend repair hours and slows every fix: the chance of enough aircraft next Monday goes ${pct(ctx.monBase)} → ${pct(dayRow("Next Mon").p_day_met)}. Recovery, not the flying days, is what this lever hits.` },
+      text: (ctx) => `Short-staffed recovery removes weekend repair hours and slows every fix: the chance of enough aircraft next Monday goes ${pct(ctx.monBase)} → ${pct(dayRow("Next Mon").p_day_met)}. This lever hits recovery, not the flying days.` },
     { page: "results", target: "#brief .headline", title: "Ask for more flying",
       action: async (ctx) => { await site().pick({ scenario: "baseline" }); ctx.surgeBase = kpi().weeks_meeting_every_requirement;
         ctx.sortiesBase = site().preset().simulation.inputs.weekly_sorties; await site().pick({ scenario: "surge" }); await view("lead"); },
@@ -96,7 +96,7 @@
       text: "Sorties on each go, each day. Later goes fly aircraft back from earlier goes. Grey spares come from the spare rate." },
     { page: "run", target: "#summary", title: "Run it",
       action: async (ctx) => { ctx.base = await runPlanner(ctx); },
-      text: (ctx) => `1,000 simulated weeks: ${pct(ctx.base.probability_success)} meet every requirement. The weakest day is ${ctx.base.weakest_day || "none"}.` },
+      text: (ctx) => `1,000 simulated weeks: ${pct(ctx.base.probability_success)} meet every requirement. ${ctx.base.weakest_day ? `The weakest day is ${ctx.base.weakest_day}.` : "No day stands out as weak."}` },
     { page: "run", target: "section.card:has(#where-h)", title: "Where it runs tight",
       text: "Aircraft ready against aircraft needed each day, and each day's chance of missing its plan." },
     { page: "run", target: "section.card:has(#why-h)", title: "Why sorties are lost",
@@ -118,7 +118,7 @@
       text: "Leadership (the default view) sees the verdict, what the plan costs, the decisions and the season. Planner and Analyst add the detail and the evidence." },
     { page: "run", target: "section.card:has(#patterns-h)", title: "Search turn patterns",
       action: async () => { q(".view-toggle button[data-view='plan']").click(); await sleep(500); },
-      text: "Tests many week shapes (waterfall, flat, recovery valley and more) at the sortie levels you choose, and says which hold." },
+      text: "Tests standard week shapes (waterfall, flat, recovery valley and others) at the sortie levels you choose and reports which ones hold." },
     { page: "run", target: "#backtest", title: "Check it against past weeks",
       text: "Load a history file, or try the synthetic history, to see whether weeks rated 80% held about 80% of the time. Public or synthetic history only on this site." },
     { page: "run", target: ".run-intro", title: "Your turn",

@@ -355,35 +355,35 @@ CAUSE_WORDS = {
 def plain_summary(m: dict[str, Any]) -> str:
     p = m["probability_success"]
     if p >= 0.995:
-        text = "Succeeds in nearly every simulated week."
+        text = "Holds in nearly every simulated week."
     elif p <= 0.005:
         text = "Fails in nearly every simulated week."
     else:
-        text = f"Succeeds in about {round(p * 100)} of every 100 simulated weeks."
+        text = f"Holds in {round(p * 100)} of every 100 simulated weeks."
     failures = m["failures"]
     reasons = [k for k in failures["failure_mode_counts"] if k in FAILURE_WORDS]
     if failures["failed_weeks"] and reasons:
         reason = reasons[0]
-        lead = " In the rare weeks it fails, the most common reason is" if p >= 0.99 else " The most common reason it fails is"
-        text += f"{lead} that {FAILURE_WORDS[reason]}"
+        lead = " Failures are rare; when one happens, it is usually because" if p >= 0.99 else " When it fails, it is usually because"
+        text += f"{lead} {FAILURE_WORDS[reason]}"
         if reason in ("Daily Schedule Miss", "Aircraft Availability", "TTP Commit"):
             days = [d for d in failures["first_failure_day_counts"] if d in DAY_NAMES]
             if days:
-                text += f", most often starting {DAY_NAMES[days[0]]}"
+                text += f", starting most often on {DAY_NAMES[days[0]]}"
         text += "."
-    sute = m.get("sute") or {}
-    if sute.get("target"):
-        text += (f" Planned SUTE is {sute['planned']:.2f} against a deployed target of {sute['target']:.2f};"
-                 f" the SUTE actually flown meets the target in {round(sute['share_weeks_meeting_target'] * 100)}% of weeks.")
+    main = m.get("causes", {}).get("main_cause")
+    if failures["failed_weeks"] and main:
+        text += f" Most lost sorties happen when {CAUSE_WORDS[main]}."
     goes = m.get("goes") or {}
     if len(goes.get("by_go", [])) > 1 and failures["failed_weeks"]:
         weakest = goes["by_go"][goes["weakest_go"] - 1]
         if weakest["share_flown"] < 0.999:
-            text += f" Go {weakest['go']} loses the most, flying {weakest['share_flown'] * 100:.1f}% of its planned sorties."
-    main = m.get("causes", {}).get("main_cause")
-    if failures["failed_weeks"] and main:
-        text += f" Most lost sorties happen because {CAUSE_WORDS[main]}."
+            text += f" Go {weakest['go']} loses the most ({weakest['share_flown'] * 100:.1f}% of its sorties flown)."
+    sute = m.get("sute") or {}
+    if sute.get("target"):
+        text += (f" Planned SUTE is {sute['planned']:.2f} against a deployed target of {sute['target']:.2f};"
+                 f" the SUTE flown meets it in {round(sute['share_weeks_meeting_target'] * 100)}% of weeks.")
     adds = m["reported"]["mean_2407_adds_per_week"]
     if adds >= 0.05:
-        text += f" It relies on about {adds:.1f} 2407 adds per week."
+        text += f" The plan depends on about {adds:.1f} 2407 adds a week."
     return text

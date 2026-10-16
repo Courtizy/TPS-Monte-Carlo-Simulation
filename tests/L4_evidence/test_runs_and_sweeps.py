@@ -48,7 +48,7 @@ def test_wilson_interval():
 
 def test_summary_text_is_plain():
     text = run_plan(example(), 1000, 3)["metrics"]["summary_text"]
-    assert text.startswith("Succeeds") or text.startswith("Fails")
+    assert text.startswith("Holds") or text.startswith("Fails")
 
 
 # [A-2]

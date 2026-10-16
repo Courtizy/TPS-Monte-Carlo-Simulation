@@ -2,6 +2,10 @@
 
 All notable changes to Turn Pattern Sustainability. Versions follow semantic versioning; dates are when each version was built.
 
+## [0.11.1] - 2026-10-16
+- Tighter wording on every page and in the results text the engine writes: the summary leads with how often the plan holds and why it fails, full day names replace abbreviations in sentences, and repeated or filler phrases are gone.
+- Simulation results are unchanged. The summary text is part of each run record, so records made with 0.11.0 re-verify as an earlier model version.
+
 ## [0.11.0] - 2026-10-04
 - One results experience in both doors: the public Results page uses the planner's own Leadership, Planner and Analyst views, fed results the engine precomputed for each synthetic preset (fixes, margins, replayed weeks, season, and the pattern search for each unit's baseline). Leadership opens first everywhere.
 - Seasonality: monthly rates, fix speed, holiday weeks and surges per month; a season strip in the answer layer and a month-by-month table for analysts. Monthly rates can come from a history file in the planner.
