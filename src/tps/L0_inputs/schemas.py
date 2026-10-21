@@ -86,7 +86,7 @@ class Options:
     allow_2407_adds: bool = False
     weekend_coverage_hours: tuple[tuple[str, int], ...] = (("Sat", 24), ("Sun", 24))
     go_profile: tuple[int, float, float] | None = None  # (goes per day, sortie hours, turn window hours)
-    first_launch_time: str | None = None   # "07:30": shows real clock times in the play-by-play [X-5]
+    first_launch_time: str | None = None   # "0730": shows real clock times in the play-by-play [X-5]
     fly_windows: tuple[tuple[str, float, float], ...] | None = None  # (day, first launch, last land) in clock hours, past 24 after midnight [T-4]
     repeat_rate: float = 0.0
     recur_rate: float = 0.0
@@ -286,8 +286,8 @@ def _validate_options(options: Any) -> list[str]:
     if options.get("fix_mode", "Random") not in FIX_MODES:
         errors.append(f"options.fix_mode must be one of: {', '.join(FIX_MODES)}")
     first = options.get("first_launch_time")
-    if first is not None and not (isinstance(first, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", first)):
-        errors.append('options.first_launch_time must be a 24-hour time like "07:30"')
+    if first is not None and not (isinstance(first, str) and CLOCK_TIME.fullmatch(first) and clock_hours(first) < 24):
+        errors.append('options.first_launch_time must be a military time like "0730"')
     errors += _validate_fly_windows(options.get("fly_windows"))
     if options.get("fly_windows") is not None and first is not None:
         errors.append("Use options.fly_windows or options.first_launch_time, not both: the first day's window sets the clock")
@@ -324,13 +324,20 @@ def _validate_options(options: Any) -> list[str]:
     return errors
 
 
-CLOCK_TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d|24:00")
+# Military time, "0730"; "07:30" is read too.
+CLOCK_TIME = re.compile(r"([01]\d|2[0-3]):?[0-5]\d|24:?00")
 
 
 def clock_hours(text: str) -> float:
-    """'07:30' as 7.5."""
-    h, m = text.split(":")
-    return int(h) + int(m) / 60
+    """'0730' (or '07:30') as 7.5."""
+    digits = text.replace(":", "")
+    return int(digits[:2]) + int(digits[2:]) / 60
+
+
+def military(hours: float) -> str:
+    """7.5 as '0730'."""
+    h, m = divmod(round(hours * 60), 60)
+    return f"{h:02d}{m:02d}"
 
 
 def _window_hours(first_launch: str, last_land: str) -> tuple[float, float]:
@@ -343,13 +350,13 @@ def _validate_fly_windows(windows: Any) -> list[str]:
     if windows is None:
         return []
     if not isinstance(windows, dict) or not windows:
-        return ['options.fly_windows must map each flying day to ["first launch", "last land"], like {"Mon": ["07:00", "22:00"]}']
+        return ['options.fly_windows must map each flying day to ["first launch", "last land"], like {"Mon": ["0700", "2200"]}']
     errors = []
     for day, window in windows.items():
         if not (isinstance(window, list) and len(window) == 2
                 and all(isinstance(t, str) and CLOCK_TIME.fullmatch(t) for t in window)):
-            errors.append(f'options.fly_windows.{day} must be two 24-hour times like ["07:00", "22:00"]')
-        elif window[0] == "24:00" or window[1] == window[0]:
+            errors.append(f'options.fly_windows.{day} must be two military times like ["0700", "2200"]')
+        elif clock_hours(window[0]) == 24 or clock_hours(window[1]) == clock_hours(window[0]):
             errors.append(f"options.fly_windows.{day}: the first launch and last land can't be the same time")
     return errors
 
@@ -448,15 +455,17 @@ def day_starts(scenario: Scenario) -> list[float]:
 
 def launch_clock(options: Options) -> str | None:
     """Clock time of hour 0: the first flying day's window opening, or the first launch time [X-5]."""
-    return _clock_text(options.fly_windows[0][1]) if options.fly_windows else options.first_launch_time
+    if options.fly_windows:
+        return _clock_text(options.fly_windows[0][1])
+    return military(clock_hours(options.first_launch_time)) if options.first_launch_time else None
 
 
 def _clock_text(hours: float) -> str:
-    """7.5 as '07:30'; past midnight, '01:00 the next day'."""
+    """7.5 as '0730'; past midnight, '0100 the next day'."""
     if round(hours * 60) == 1440:
-        return "24:00"
+        return "2400"
     days, minutes = divmod(round(hours * 60), 1440)
-    return f"{minutes // 60:02d}:{minutes % 60:02d}" + (" the next day" if days else "")
+    return military(minutes / 60) + (" the next day" if days else "")
 
 
 # [M-7]

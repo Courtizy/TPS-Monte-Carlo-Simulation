@@ -24,7 +24,7 @@ from typing import Any
 
 from tps.L2_metrics.metrics import wilson_interval
 from tps.L0_inputs.rules import aircraft_required, day_spares
-from tps.L0_inputs.schemas import CLOCK_TIME, DayPlan, clock_hours, load_scenario
+from tps.L0_inputs.schemas import CLOCK_TIME, DayPlan, clock_hours, load_scenario, military
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 WEEK_COLUMNS = ("week_start", "pai", "mc_at_start", "next_monday_mc", "required_sorties")
@@ -81,11 +81,11 @@ def parse_history(text: str) -> dict[str, Any]:
             # [B-5]
             for source in TIME_SOURCES:
                 pair = [(row.get(f"{source}_{end}") or "").strip() for end in ("first_launch", "last_land")]
-                pair = [f"0{t}" if re.fullmatch(r"\d:\d\d", t) else t for t in pair]   # 7:30 reads as 07:30
+                pair = [t.replace(":", "").zfill(4) if t else t for t in pair]   # 730, 7:30 and 07:30 read as 0730
                 if not any(pair):
                     continue
-                if not all(CLOCK_TIME.fullmatch(t) for t in pair) or pair[0] == pair[1] or pair[0] == "24:00":
-                    problems.append(f"Row {line}: {source} first launch and last land need two different times like 07:00 and 22:00.")
+                if not all(CLOCK_TIME.fullmatch(t) for t in pair) or pair[0] == pair[1] or pair[0] == "2400":
+                    problems.append(f"Row {line}: {source} first launch and last land need two different military times like 0700 and 2200.")
                     continue
                 week["days"][day]["times"][source] = pair
         except ValueError:
@@ -317,10 +317,9 @@ def columns(windows: list[float]) -> list[str]:
 
 def _late(text: str, minutes: int) -> str:
     """A clock time some minutes later, wrapping past midnight."""
-    total = round(clock_hours(text) * 60) + minutes
-    if text == "24:00" and minutes == 0:
-        return text
-    return f"{total // 60 % 24:02d}:{total % 60:02d}"
+    if clock_hours(text) == 24 and minutes == 0:
+        return "2400"
+    return military(((round(clock_hours(text) * 60) + minutes) % 1440) / 60)
 
 
 def synthetic_history(base: dict[str, Any], weeks: int = 60, seed: int = 7, start: str = "2025-01-06") -> str:

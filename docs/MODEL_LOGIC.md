@@ -153,7 +153,7 @@ $$\text{flies go } k \iff ready \le launch_k$$
 
 ### T-4: Fly windows
 **Source:** Unit convention: each flying day has a window from first launch to last land, and it can differ by day (a short Friday, a late Tuesday start).
-**Rule:** Fly windows are optional. If set, every flying day has one, given as clock times (`"07:00"` to `"22:00"`). A last land at or before the first launch is the next morning (T-5). Hour 0 of the week is the first flying day's opening time. Each flying day's first launch moves by how much earlier or later its window opens, and its goes move with it:
+**Rule:** Fly windows are optional. If set, every flying day has one, given as military times (`"0700"` to `"2200"`; `"07:00"` is read too). A last land at or before the first launch is the next morning (T-5). Hour 0 of the week is the first flying day's opening time. Each flying day's first launch moves by how much earlier or later its window opens, and its goes move with it:
 
 $$start_i = 24i + (open_i - open_{\text{first day}})$$
 
@@ -163,7 +163,7 @@ Fixes still run around the clock on weekdays (F-4), so a window that opens later
 
 ### T-5: Sorties past midnight
 **Source:** Unit convention: a late window can run past midnight; the sortie belongs to the day it launched, and aircraft that land late lose fix time before the next day's first launch.
-**Rule:** A fly window may close after midnight (`"14:00"` to `"02:00"`). Its goes count to the day they launch on, and the next day's first launch is still set by that day's own window. A break on a sortie that lands after midnight starts its fix clock at landing (F-2), so it has less time before the next day's first launch. An aircraft still in the air at the next day's first launch can't fly it: it's busy until it lands. A day that opens before the day before's last go lands gets a warning.
+**Rule:** A fly window may close after midnight (`"1400"` to `"0200"`). Its goes count to the day they launch on, and the next day's first launch is still set by that day's own window. A break on a sortie that lands after midnight starts its fix clock at landing (F-2), so it has less time before the next day's first launch. An aircraft still in the air at the next day's first launch can't fly it: it's busy until it lands. A day that opens before the day before's last go lands gets a warning.
 **Code:** `L0_inputs/schemas.py` → `_window_hours`, `plan_warnings`; `L1_engine/reference.py` → `run_week` (`starts[index + 1]`).
 **Test:** `test_a_window_can_close_after_midnight`, `test_landing_past_midnight_cuts_the_next_days_fix_time`, `test_an_aircraft_still_flying_misses_the_next_days_first_launch`.
 
@@ -550,7 +550,7 @@ Any week number can also be replayed.
 
 ### X-5: Real clock times
 **Source:** Unit convention.
-**Rule:** Times read as hours after the day's first launch (+10:00). With an optional first launch time, such as 07:30, or with fly windows (T-4), they read as real times, moving to the next day after midnight.
+**Rule:** Times read as hours after the day's first launch (+10:00). With an optional first launch time, such as 0730, or with fly windows (T-4), they read as real times, moving to the next day after midnight.
 **Code:** `L1_engine/replay.py` → `clock`; `L0_inputs/schemas.py` → `_validate_options` (`first_launch_time`), `launch_clock`.
 **Test:** `test_clock_times`.
 

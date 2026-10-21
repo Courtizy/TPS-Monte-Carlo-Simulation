@@ -89,10 +89,12 @@ def test_failure_explanations_name_the_cause():
 def test_clock_times():
     days = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Next Mon")
     assert clock(58, days, None) == "Wed +10:00"
-    assert clock(58, days, "07:30") == "Wed 17:30"
-    assert clock(68, days, "07:30") == "Thu 03:30"    # past midnight moves to the next day
+    assert clock(58, days, "0730") == "Wed 1730"
+    assert clock(68, days, "0730") == "Thu 0330"      # past midnight moves to the next day
+    assert clock(58, days, "07:30") == "Wed 1730"     # a colon is read too, but times show as military
     assert validate_config(example(options={"first_launch_time": "7:30"}))
-    assert not validate_config(example(options={"first_launch_time": "07:30"}))
+    assert validate_config(example(options={"first_launch_time": "2400"}))
+    assert not validate_config(example(options={"first_launch_time": "0730"}))
 
 
 def test_tail_bars_are_well_formed_and_web_api_round_trip():

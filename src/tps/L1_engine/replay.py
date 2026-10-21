@@ -14,7 +14,7 @@ from typing import Any
 from tps.L1_engine import reference
 from tps.L1_engine.engine import compile_plan, coverage_by_day, run_compiled_week
 from tps.L2_metrics.metrics import score_week
-from tps.L0_inputs.schemas import day_starts, launch_clock, load_scenario
+from tps.L0_inputs.schemas import clock_hours, day_starts, launch_clock, load_scenario, military
 
 DAY_NAMES = {"Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thursday", "Fri": "Friday",
              "Sat": "Saturday", "Sun": "Sunday", "Next Mon": "next Monday"}
@@ -24,17 +24,15 @@ MAX_REPLAY_WEEK = 200_000
 
 # ---------------------------------------------------------------- clock
 def clock(hours: float, all_days: tuple[str, ...], first_launch: str | None) -> str:
-    """'Wed +10:00', or with a first launch time, 'Wed 17:30' [X-5]."""
+    """'Wed +10:00' (hours after the first launch), or with a first launch time, 'Wed 1730' [X-5]."""
     day = min(int(hours // 24), len(all_days) - 1)
     offset = hours - 24 * day
     if not first_launch:
         h, m = divmod(round(offset * 60), 60)
         return f"{all_days[day]} +{h}:{m:02d}"
-    fh, fm = (int(x) for x in first_launch.split(":"))
-    total = fh * 60 + fm + round(offset * 60)
+    total = round(clock_hours(first_launch) * 60) + round(offset * 60)
     day = min(day + total // 1440, len(all_days) - 1)
-    h, m = divmod(total % 1440, 60)
-    return f"{all_days[day]} {h:02d}:{m:02d}"
+    return f"{all_days[day]} {military((total % 1440) / 60)}"
 
 
 # ---------------------------------------------------------------- choosing weeks
