@@ -438,9 +438,11 @@ a.button.primary { background: var(--brand-fill); border-color: var(--brand-fill
 .method-section[open] > summary { margin-bottom: 0.6rem; }
 .checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.45rem; }
 .checklist li { display: flex; gap: 0.75rem; align-items: baseline; }
-.check-status { min-width: 5.5rem; font-weight: 600; font-size: 0.85rem; }
+.check-status { min-width: 6.75rem; font-weight: 600; font-size: 0.85rem; }
 .check-done { color: var(--status-good-text); }
 .check-done::before { content: "✓ "; }
+.check-done-locally { color: var(--status-good-text); }
+.check-done-locally::before { content: "✓ "; }
 .check-planned { color: var(--ink-2); }
 .check-planned::before { content: "○ "; }
 .changelog { list-style: none; padding: 0; margin: 0 0 0.5rem; display: grid; gap: 0.3rem; }

@@ -288,7 +288,9 @@ def _sentences(r: dict[str, Any]) -> list[str]:
     out = [f"Across {r['weeks']} past weeks the model predicted {pct(r['mean_predicted'])} success on average; "
            f"{pct(r['observed_success'])} of those weeks succeeded."]
     if r.get("timed_weeks"):
-        out.append(f"{r['timed_weeks']} of {r['weeks']} weeks were timed by their own {r['times']} first launch and "
+        out.append(f"All {r['weeks']} weeks were timed by their own {r['times']} first launch and last land."
+                   if r["timed_weeks"] == r["weeks"] else
+                   f"{r['timed_weeks']} of {r['weeks']} weeks were timed by their own {r['times']} first launch and "
                    f"last land; the rest used the plan setup's times.")
     if r["bins"]:
         out.append(f"In {r['bins_agreeing']} of {len(r['bins'])} prediction bands, the share of weeks that succeeded "
@@ -307,6 +309,39 @@ def _sentences(r: dict[str, Any]) -> list[str]:
         out.append(f"In weeks that missed a day, the first miss fell on the model's riskiest day "
                    f"{pct(r['riskiest_day_matched'])} of the time.")
     return out
+
+
+# ---------------------------------------------------------------- running it in Python
+# [B-6]
+def run_backtest(text: str, base: dict[str, Any], lookback: int = 4, times: str = "planned",
+                 runs: int = 2000, seed: int = 42) -> dict[str, Any]:
+    """The whole backtest in one call, as the browser runs it: prepare, predict each week, score.
+
+    For the private front door, so a unit's real history can be checked on its own machine.
+    """
+    from tps.L4_evidence.runs import run_plan
+    prepared = prepare(text, base, lookback=lookback, times=times)
+    metrics = [run_plan(week["config"], runs, seed)["metrics"] for week in prepared["weeks"]]
+    slim = {**prepared, "weeks": [{k: v for k, v in w.items() if k != "config"} for w in prepared["weeks"]]}
+    report = summarize(slim, metrics)
+    report.update(runs=runs, seed=seed)
+    return report
+
+
+REPORT_COLUMNS = ("week_start", "predicted", "succeeded", "flown", "planned", "sorties_p10", "sorties_p90",
+                  "missed_days", "riskiest_day", "timed_from")
+
+
+def report_csv(report: dict[str, Any]) -> str:
+    """One row per predicted week, the same columns as the browser's download."""
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(REPORT_COLUMNS)
+    for r in report["rows"]:
+        writer.writerow([r["week_start"], round(r["predicted"], 4), r["succeeded"], r["flown"], r["planned"],
+                         r["sorties_p10"], r["sorties_p90"], " ".join(r["missed_days"]), r["weakest_day"] or "",
+                         r["timed_from"]])
+    return out.getvalue()
 
 
 # ---------------------------------------------------------------- template and synthetic history
@@ -351,6 +386,8 @@ def synthetic_history(base: dict[str, Any], weeks: int = 60, seed: int = 7, star
                     plan[names[i]] = max(0, min(first if i == 1 else plan[names[i - 1]], plan[names[i]] + rng.choice((-1, 0, 0, 1))))
         # [B-5] With fly windows set, launches run a little late some days; the week is flown on those times.
         planned_times = (base.get("options") or {}).get("fly_windows")
+        if planned_times:   # blank days run on the day before's window [T-4]
+            planned_times = fill_fly_windows(planned_times, scenario0.rules.flying_days)
         flown_times = None
         if planned_times:
             flown_times = {day: [_late(a, rng.choice((0, 0, 0, 15, 30, 60))), _late(b, rng.choice((0, 0, 15, 30)))]

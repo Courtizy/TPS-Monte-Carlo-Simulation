@@ -1,6 +1,6 @@
 # TPS Model Logic
 
-**Turn Pattern Sustainability, model `tps` 0.12**
+**Turn Pattern Sustainability, model `tps` 0.13**
 
 TPS answers one planning question: **can this unit fly this weekly schedule, week after week, without running out of aircraft?** It plays the week out thousands of times. Each time, breaks, aborts, and fixes land differently, and the model counts how often the plan holds up and why it fails when it doesn't.
 
@@ -592,6 +592,12 @@ Other settings (commit, spare rate, goes, weekend hours, first-day rule) come fr
 **Code:** `L4_evidence/backtest.py` → `parse_history`, `week_windows`, `week_config`, `prepare`, `synthetic_history`.
 **Test:** `test_weeks_use_their_own_planned_or_flown_times`, `test_synthetic_history_carries_planned_and_flown_times`.
 
+
+### B-6: Private backtest
+**Source:** Model choice; operational validity (Sargent 2013). A unit's real history must stay on its own machine.
+**Rule:** `run_backtest` runs the whole backtest in Python exactly as the browser does: prepare the weeks (B-1, B-5), predict each with the engine (2,000 simulated weeks, seed 42 by default), and score them (B-3). The private front door (`app/run_private.py`) runs it on `private/history.csv`, or any file given with `--history`, against the first config, with `--times planned|flown` and `--lookback`. It prints the summary and writes `backtest.json` and `backtest_weeks.csv` (one row per week) to `private/data` and the private site. The private Method page then marks "Backtest against real past weeks" as **Done locally** and shows the results. `private/` is gitignored, and the public site never has a backtest file, so there it stays **Planned**.
+**Code:** `L4_evidence/backtest.py` → `run_backtest`, `report_csv`.
+**Test:** `test_private_backtest_runs_in_python_and_writes_its_report`.
 ---
 
 ## 12. Not modeled yet

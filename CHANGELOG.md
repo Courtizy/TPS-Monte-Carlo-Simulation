@@ -2,6 +2,10 @@
 
 All notable changes to Turn Pattern Sustainability. Versions follow semantic versioning; dates are when each version was built.
 
+## [0.13.0] - 2026-10-21
+- Private backtest: save your unit's history as `private/history.csv` and run `app/run_private.py`. It backtests every week on your own machine, prints the summary, saves the results week by week, and marks the backtest "Done locally" on the private Method page. Use `--times flown` to time weeks by when they actually flew.
+- Synthetic history now works when only some days have fly windows set, and the backtest summary says "All 28 weeks were timed..." instead of "28 of 28 ...; the rest used...".
+
 ## [0.12.2] - 2026-10-21
 - Fly-window boxes take a typed time or one picked from a list. A day left blank runs on the day before's window, shown in grey, so a plan with some days set always runs.
 - Simulation results are unchanged.

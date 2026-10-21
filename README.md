@@ -26,7 +26,7 @@ pip install -e ".[dev]"
 pytest -q                                   # includes the golden outputs
 python scripts/export_site.py               # build site/data
 python -m http.server -d site 8000          # view at http://localhost:8000
-python app/run_private.py --config private/inputs.json
+python app/run_private.py --config private/inputs.json   # also backtests private/history.csv if present
 ```
 
 **One results page, two data sources.** The public Results tab and the planner show the same Leadership, Planner and Analyst views (Leadership first). Public results are precomputed by `scripts/export_site.py` for every synthetic preset, so the public pages never run the engine; Run ▸ and the private door compute the same views live.
@@ -64,7 +64,7 @@ Deployed tempo takes three inputs: deployed aircraft (PAA), O&M days, and sortie
 
 ## Backtesting against past weeks
 
-The **Check the model against past weeks** section loads a history file (one row per flying day; see `configs/public/history_template.csv` or use **Download the template**). Each week is predicted from its planned schedule and the rates of the weeks before it, then compared with what happened: calibration by prediction band, a Brier accuracy score against always guessing the overall rate, sorties coverage, and day-level agreement. **Try with synthetic history** shows the whole flow on 60 weeks the model generates itself. Optional `planned_first_launch`, `planned_last_land`, `flown_first_launch` and `flown_last_land` columns time each week by its own fly windows; choose planned (tests the plan) or flown (tests the model) when you run it. The file is read in the browser and never uploaded. Rules B-1 to B-5 in `docs/MODEL_LOGIC.md`.
+The **Check the model against past weeks** section loads a history file (one row per flying day; see `configs/public/history_template.csv` or use **Download the template**). Each week is predicted from its planned schedule and the rates of the weeks before it, then compared with what happened: calibration by prediction band, a Brier accuracy score against always guessing the overall rate, sorties coverage, and day-level agreement. **Try with synthetic history** shows the whole flow on 60 weeks the model generates itself. Optional `planned_first_launch`, `planned_last_land`, `flown_first_launch` and `flown_last_land` columns time each week by its own fly windows; choose planned (tests the plan) or flown (tests the model) when you run it. The file is read in the browser and never uploaded. To backtest real history without it leaving your machine, save it as `private/history.csv` and run `app/run_private.py` (add `--times flown` for flown times); the private Method page then shows the backtest as Done locally. Rules B-1 to B-6 in `docs/MODEL_LOGIC.md`.
 
 ## Three views of the same run
 
