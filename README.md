@@ -44,6 +44,7 @@ Each config describes one unit's pattern. The three synthetic examples show a 2-
 | Config field | What it sets |
 | --- | --- |
 | `options.go_profile` | `goes_per_day` (1–4), `sortie_hours`, and `turn_hours`. Launch and landing times follow from these, with the first launch at hour 0. |
+| `options.fly_windows` | Optional. Each flying day's first launch and last land as clock times, like `{"Mon": ["07:00", "22:00"], "Fri": ["07:00", "16:00"]}`; set every flying day or none. A day that opens later gives overnight fixes more time. A go landing after its window closes is a warning. Rule T-4. |
 | `rates.fix_windows` | Cumulative fix rates as `[{"hours": 4, "rate": 0.45}, ...]`. Any hours, rising. Not fixed within the longest window means down for the week. The older `fix_8hr_rate`/`fix_12hr_rate`/`fix_24hr_rate` fields still work. |
 | `rules.first_day_fix_hours` | On the first flying day, fixes longer than this wait for the next day (8 by default). |
 | `rules.standard_patterns` | Optional MAJCOM standard turn patterns, like `[[8, 6, 4], [6, 4]]`. When set, plans are checked against them and the sustainable-plan search tries only these. |

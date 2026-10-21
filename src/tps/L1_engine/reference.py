@@ -5,7 +5,8 @@ MODEL_LOGIC.md, whose rule IDs (like [F-3]) appear as comments below.
 tps.engine must match it exactly for the same seed.
 
 Model hours [T-1]: day i of rules.all_days spans [24*i, 24*(i+1)); hour 0 of
-each day is the first-go launch.
+each day is the first-go launch. Fly windows move each flying day's first launch
+by how much earlier or later its window opens [T-4].
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from random import Random
 from typing import Any
 
 from tps.L0_inputs.rules import aircraft_required, can_use_long_fix, commit_aircraft, day_spares, floor_count
-from tps.L0_inputs.schemas import MAX_GOES, DayPlan, Options, Scenario, window_key
+from tps.L0_inputs.schemas import MAX_GOES, DayPlan, Options, Scenario, day_starts, window_key
 
 GOLDEN = 0.6180339887498949  # even-spread sequence for "Expected" draws
 NEVER = math.inf
@@ -122,6 +123,7 @@ def run_week(
     all_days = policy.all_days
     flying = set(policy.flying_days)
     coverage = coverage_by_day(all_days, options)
+    starts = day_starts(scenario)
     last = len(all_days) - 1
 
     # Cumulative fix rates, never falling from one window to the next.
@@ -167,7 +169,7 @@ def run_week(
         start = event_time
         if hours > policy.first_day_fix_hours and not can_use_long_fix(all_days[day_index], policy):
             later = [j for j in range(day_index + 1, len(all_days)) if can_use_long_fix(all_days[j], policy)]
-            start = 24.0 * (later[0] if later else len(all_days))
+            start = starts[later[0]] if later else 24.0 * len(all_days)
         jet.ready_at = ready_time(start, hours, coverage)
         returns.append((jet.ready_at, hours))
         latent = latent_draws.next()
@@ -184,7 +186,7 @@ def run_week(
         return False
 
     for index, day in enumerate(all_days):
-        day_start = 24.0 * index
+        day_start = starts[index]
         plan = scenario.schedule.get(day, DayPlan()) if day in flying else DayPlan()
         spares = day_spares(plan, policy)
         required = aircraft_required(plan, policy) if day in flying else 0
@@ -312,7 +314,7 @@ def run_week(
                         if send_to_fix(jet, land, index, "repeat or recur" if rebreak else "break"):
                             counts["new_beyond_24hr"] += 1
 
-        horizon = day_start if index == last else day_start + 24.0
+        horizon = day_start if index == last else starts[index + 1]
         available = sum(1 for jet in fleet if jet.ready_at <= horizon)
         actual_front = len(front) + len(added)
         rows.append({

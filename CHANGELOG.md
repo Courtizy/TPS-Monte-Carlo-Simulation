@@ -2,6 +2,12 @@
 
 All notable changes to Turn Pattern Sustainability. Versions follow semantic versioning; dates are when each version was built.
 
+## [0.12.0] - 2026-10-21
+- Fly windows: set each flying day's first launch and last land, for example 07:00 to 22:00, with a shorter Friday. A day that opens later gives overnight fixes more time before its first launch, and one that opens earlier gives them less.
+- A go that lands after its day's window closes gets a warning. The plan still runs as entered.
+- With fly windows set, the play-by-play shows clock times.
+- Plans without fly windows give the same results as before.
+
 ## [0.11.1] - 2026-10-16
 - Clearer wording on every page and in the results summary: it now leads with how often the plan holds and why it fails.
 - The pattern search labels its screening figures as estimates, so they aren't confused with the headline result.
