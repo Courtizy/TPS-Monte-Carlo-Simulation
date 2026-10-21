@@ -84,7 +84,7 @@ def test_synthetic_history_round_trips():
 TIMED_HEADER = HEADER.rstrip("\n") + ",planned_first_launch,planned_last_land,flown_first_launch,flown_last_land\n"
 
 
-def _timed_week(start, planned=("07:00", "22:00"), flown=("08:00", "23:30"), blank_days=()):
+def _timed_week(start, planned=("0700", "2200"), flown=("0800", "2330"), blank_days=()):
     rows = _week(start, 1).splitlines()
     out = []
     for row, day in zip(rows, ("Mon", "Tue", "Wed", "Thu", "Fri")):
@@ -96,18 +96,18 @@ def _timed_week(start, planned=("07:00", "22:00"), flown=("08:00", "23:30"), bla
 # [B-5]
 def test_weeks_use_their_own_planned_or_flown_times():
     text = (TIMED_HEADER + _timed_week("2025-01-06") + _timed_week("2025-01-13")
-            + _timed_week("2025-01-20", flown=("14:00", "1:30"), blank_days=("Wed",)))
+            + _timed_week("2025-01-20", flown=("1400", "1:30"), blank_days=("Wed",)))
     text += _week("2025-01-27", 1).replace("\n", ",,,,\n")    # a week with no times
     planned = prepare(text, example(), min_history=2)
     flown = prepare(text, example(), min_history=2, times="flown")
     assert [w["timed_from"] for w in planned["weeks"]] == ["planned", "setup"]
     assert [w["timed_from"] for w in flown["weeks"]] == ["flown", "setup"]
-    assert planned["weeks"][0]["config"]["options"]["fly_windows"]["Mon"] == ["07:00", "22:00"]
+    assert planned["weeks"][0]["config"]["options"]["fly_windows"]["Mon"] == ["0700", "2200"]
     windows = flown["weeks"][0]["config"]["options"]["fly_windows"]
-    assert windows["Mon"] == ["14:00", "01:30"]       # past midnight; 1:30 reads as 01:30
-    assert windows["Wed"] == ["14:00", "01:30"]       # a blank day takes the week's first time (no setup windows)
+    assert windows["Mon"] == ["1400", "0130"]       # past midnight; 1:30 reads as 0130
+    assert windows["Wed"] == ["1400", "0130"]       # a blank day takes the week's first time (no setup windows)
     assert "fly_windows" not in flown["weeks"][1]["config"]["options"]
-    bad = TIMED_HEADER + _timed_week("2025-01-06", planned=("07:00", "07:00"))
+    bad = TIMED_HEADER + _timed_week("2025-01-06", planned=("0700", "0700"))
     assert any("planned first launch and last land" in p for p in parse_history(bad)["problems"])
     with pytest.raises(ValueError):
         prepare(text, example(), times="actual")
@@ -116,10 +116,10 @@ def test_weeks_use_their_own_planned_or_flown_times():
 def test_synthetic_history_carries_planned_and_flown_times():
     plain = synthetic_history(example(), weeks=3, seed=3)
     assert plain.splitlines()[0].endswith(",".join(TIME_COLUMNS)) and plain.splitlines()[1].endswith(",,,,")
-    config = example(options={"fly_windows": {d: ["07:00", "22:00"] for d in ("Mon", "Tue", "Wed", "Thu", "Fri")}})
+    config = example(options={"fly_windows": {d: ["0700", "2200"] for d in ("Mon", "Tue", "Wed", "Thu", "Fri")}})
     text = synthetic_history(config, weeks=12, seed=3)
     days = [d for w in parse_history(text)["weeks"] for d in w["days"].values()]
-    assert all(d["times"]["planned"] == ["07:00", "22:00"] for d in days)
-    assert any(d["times"]["flown"][0] != "07:00" for d in days)      # some launches ran late
+    assert all(d["times"]["planned"] == ["0700", "2200"] for d in days)
+    assert any(d["times"]["flown"][0] != "0700" for d in days)      # some launches ran late
     summary = json.loads(web_api.backtest_prepare(text, json.dumps(config), 4, "flown"))
     assert summary["times"] == "flown" and all(w["timed_from"] == "flown" for w in summary["weeks"])

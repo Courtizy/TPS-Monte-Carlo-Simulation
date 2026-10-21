@@ -174,12 +174,19 @@ function buildGrid(cfg, goes) {
   }
 }
 
+// Military time: "730", "7:30" and "07:30" all become "0730".
+const militaryTime = (text) => {
+  const digits = String(text || "").trim().replace(":", "");
+  return /^\d{3,4}$/.test(digits) ? digits.padStart(4, "0") : String(text || "").trim();
+};
+
 // [T-4]
 function buildFlyWindows(cfg) {
   const windows = (cfg.options && cfg.options.fly_windows) || {};
   $("fly-window-body").replaceChildren(...flyingDays(cfg).map((day) => {
-    const [open, close] = (windows[day] || ["", ""]).map((t) => (t === "24:00" ? "00:00" : t));   // time inputs stop at 23:59
-    const input = (field, value, label) => el("input", { type: "time", step: 60, "data-fly-day": day, "data-fly": field, value, "aria-label": `${day} ${label}` });
+    const [open, close] = (windows[day] || ["", ""]).map(militaryTime);
+    const input = (field, value, label) => el("input", { type: "text", inputmode: "numeric", maxlength: 5, placeholder: field === "open" ? "0700" : "2200",
+      "data-fly-day": day, "data-fly": field, value, "aria-label": `${day} ${label}, military time` });
     return el("tr", {}, el("th", { scope: "row", text: day }),
       el("td", {}, input("open", open, "first launch")), el("td", {}, input("close", close, "last land")));
   }));
@@ -189,7 +196,7 @@ function flyWindowsFromForm() {
   const windows = {};
   for (const row of $("fly-window-body").querySelectorAll("tr")) {
     const open = row.querySelector('[data-fly="open"]'), close = row.querySelector('[data-fly="close"]');
-    if (open.value || close.value) windows[open.dataset.flyDay] = [open.value, close.value === "00:00" ? "24:00" : close.value];
+    if (open.value.trim() || close.value.trim()) windows[open.dataset.flyDay] = [militaryTime(open.value), militaryTime(close.value)];
   }
   return windows;
 }
@@ -453,7 +460,7 @@ const WINDOW_TEXT = [[/^rates\.fix_windows\[(\d+)\]\.hours must be above the win
   [/^schedule\.(\w+) plans more goes than the (\d+) per day the go profile allows$/, "$1 plans more goes than the $2 your unit flies"],
   [/^options\.fly_windows is missing (.+): set a window for every flying day, or none$/, "Fly windows: set $1 too, or clear every day"],
   [/^options\.fly_windows\.(.+): the first launch and last land can't be the same time$/, "$1 fly window: the first launch and last land can't be the same time"],
-  [/^options\.fly_windows\.(.+) must be two 24-hour times like .*$/, "$1 fly window: enter both the first launch and the last land"]];
+  [/^options\.fly_windows\.(.+) must be two military times like .*$/, "$1 fly window: enter both times in military time, like 0700 and 2200"]];
 const friendly = (text) => WINDOW_TEXT.reduce((t, [pattern, to]) => t.replace(pattern, to), text)
   .replace(/^([a-z_]+(?:\.[a-z_0-9]+)?) must be between 0 and 1$/, (m, key) => (FIELD_LABELS[key] ? `${FIELD_LABELS[key]} must be between 0% and 100%` : m))
   .replace(/^(inventory\.pai|required_sorties) must be/, (m, key) => `${FIELD_LABELS[key]} must be`)
@@ -1928,6 +1935,9 @@ function wireForm() {
   });
   $("required_from_sute").addEventListener("change", () => { updateTotals(); scheduleCheck(); });
   $("edit-plan").addEventListener("click", () => setPlanCollapsed(false));
+  $("fly-window-body").addEventListener("change", (event) => {
+    if (event.target.dataset.fly) event.target.value = militaryTime(event.target.value);   // 700 shows as 0700
+  });
   $("copy-fly-window").addEventListener("click", () => {
     const rows = [...$("fly-window-body").querySelectorAll("tr")];
     if (!rows.length) return;
