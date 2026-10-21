@@ -1441,7 +1441,7 @@ async function runBacktest() {
   const status = el("p", { class: "note", role: "status", text: "Reading the history…" });
   out.replaceChildren(status);
   try {
-    const prepared = await main.request("backtest_prepare", { csv: backtest.csv, config: JSON.stringify(formToConfig()), lookback: Number($("bt-lookback").value) });
+    const prepared = await main.request("backtest_prepare", { csv: backtest.csv, config: JSON.stringify(formToConfig()), lookback: Number($("bt-lookback").value), times: $("bt-times").value });
     if (prepared.errors) { out.replaceChildren(el("p", { class: "message message-error", text: prepared.errors.join(" ") })); return; }
     if (!prepared.weeks.length) { out.replaceChildren(el("p", { class: "message message-warn", text: "No week had enough history before it to predict. Add more weeks or shorten the lookback." })); return; }
     while (pool.length < poolSize()) pool.push(new PythonWorker());

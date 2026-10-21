@@ -7,6 +7,7 @@ All notable changes to Turn Pattern Sustainability. Versions follow semantic ver
 - A go that lands after its day's window closes gets a warning. The plan still runs as entered.
 - Windows can run past midnight, for example 14:00 to 02:00. Those sorties count to the day they launch on. Aircraft that land after midnight have less time for fixes before the next day's first launch, and an aircraft still flying can't make that launch.
 - With fly windows set, the play-by-play shows clock times.
+- Backtesting can time each past week by its own first launch and last land: history files take optional planned and flown time columns, and you choose which set to use. Planned times test the plan; flown times test the model. Files without them work as before.
 - Plans without fly windows give the same results as before.
 
 ## [0.11.1] - 2026-10-16

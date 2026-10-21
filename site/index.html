@@ -278,6 +278,9 @@
           <label class="field">Rates from the weeks before
             <select id="bt-lookback"><option value="2">2 weeks</option><option value="4" selected>4 weeks</option><option value="8">8 weeks</option></select>
           </label>
+          <label class="field">Time each week by
+            <select id="bt-times"><option value="planned" selected>Planned launch and land times</option><option value="flown">Flown launch and land times</option></select>
+          </label>
           <label class="field">Weeks simulated per prediction
             <select id="bt-iterations"><option value="1000">1,000</option><option value="2000" selected>2,000</option></select>
           </label>
@@ -287,7 +290,7 @@
           <button type="button" id="bt-synthetic" class="secondary">Try with synthetic history</button>
           <button type="button" id="bt-template" class="secondary">Download the template</button>
         </div>
-        <p class="note">Spares, commit, goes, weekend hours, and other rules come from the plan setup above.</p>
+        <p class="note">Spares, commit, goes, weekend hours, and other rules come from the plan setup above. If the file has first launch and last land times, each week is timed by its own: planned times test the plan as it was known beforehand; flown times test the model on how the week actually ran. Weeks without times use the plan setup's.</p>
         <div id="bt-out" aria-live="polite"></div>
       </section>
       <section class="records card no-print" aria-labelledby="records-heading">

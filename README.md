@@ -64,7 +64,7 @@ Deployed tempo takes three inputs: deployed aircraft (PAA), O&M days, and sortie
 
 ## Backtesting against past weeks
 
-The **Check the model against past weeks** section loads a history file (one row per flying day; see `configs/public/history_template.csv` or use **Download the template**). Each week is predicted from its planned schedule and the rates of the weeks before it, then compared with what happened: calibration by prediction band, a Brier accuracy score against always guessing the overall rate, sorties coverage, and day-level agreement. **Try with synthetic history** shows the whole flow on 60 weeks the model generates itself. The file is read in the browser and never uploaded. Rules B-1 to B-4 in `docs/MODEL_LOGIC.md`.
+The **Check the model against past weeks** section loads a history file (one row per flying day; see `configs/public/history_template.csv` or use **Download the template**). Each week is predicted from its planned schedule and the rates of the weeks before it, then compared with what happened: calibration by prediction band, a Brier accuracy score against always guessing the overall rate, sorties coverage, and day-level agreement. **Try with synthetic history** shows the whole flow on 60 weeks the model generates itself. Optional `planned_first_launch`, `planned_last_land`, `flown_first_launch` and `flown_last_land` columns time each week by its own fly windows; choose planned (tests the plan) or flown (tests the model) when you run it. The file is read in the browser and never uploaded. Rules B-1 to B-5 in `docs/MODEL_LOGIC.md`.
 
 ## Three views of the same run
 

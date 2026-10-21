@@ -586,6 +586,12 @@ Other settings (commit, spare rate, goes, weekend hours, first-day rule) come fr
 **Code:** `L4_evidence/backtest.py` → `synthetic_history`, `template`.
 **Test:** `test_synthetic_history_round_trips`.
 
+### B-5: Each week's own launch and land times
+**Source:** Unit convention: flying schedules record each day's planned and actual first launch and last land.
+**Rule:** A history file may add four columns to each day's row: `planned_first_launch`, `planned_last_land`, `flown_first_launch`, `flown_last_land` (clock times; a last land before the first launch is the next morning, T-5). The backtest times each week by one set, chosen when it runs: **planned** (the default) keeps to B-1, since only what was known beforehand goes into the prediction, and tests the plan; **flown** tests the model on how the week actually ran. A week with times becomes that week's fly windows (T-4); a flying day without times takes the plan setup's window, or else the first time given that week. A week with no times uses the plan setup's, so files without these columns work as before. Synthetic history fills these columns when the plan has fly windows: launches run 0 to 60 minutes late on some days, and the week is played out on the flown times.
+**Code:** `L4_evidence/backtest.py` → `parse_history`, `week_windows`, `week_config`, `prepare`, `synthetic_history`.
+**Test:** `test_weeks_use_their_own_planned_or_flown_times`, `test_synthetic_history_carries_planned_and_flown_times`.
+
 ---
 
 ## 12. Not modeled yet

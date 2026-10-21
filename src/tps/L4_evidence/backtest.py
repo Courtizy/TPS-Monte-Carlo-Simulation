@@ -24,12 +24,14 @@ from typing import Any
 
 from tps.L2_metrics.metrics import wilson_interval
 from tps.L0_inputs.rules import aircraft_required, day_spares
-from tps.L0_inputs.schemas import DayPlan, load_scenario
+from tps.L0_inputs.schemas import CLOCK_TIME, DayPlan, clock_hours, load_scenario
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 WEEK_COLUMNS = ("week_start", "pai", "mc_at_start", "next_monday_mc", "required_sorties")
 DAY_COLUMNS = ("day", "planned_go1", "planned_go2", "planned_go3", "planned_go4", "spares",
                "flown_go1", "flown_go2", "flown_go3", "flown_go4", "breaks", "aborts")
+TIME_COLUMNS = ("planned_first_launch", "planned_last_land", "flown_first_launch", "flown_last_land")
+TIME_SOURCES = ("planned", "flown")
 FIXED = re.compile(r"^fixed_(\d+(?:\.\d+)?)h$")
 BINS = (0.0, 0.5, 0.7, 0.85, 0.95, 1.0000001)
 
@@ -74,7 +76,18 @@ def parse_history(text: str) -> dict[str, Any]:
                 "breaks": int(_num(row.get("breaks")) or 0),
                 "aborts": int(_num(row.get("aborts")) or 0),
                 "fixed": {h: int(_num(row.get(f"fixed_{h:g}h")) or 0) for h in windows},
+                "times": {},
             }
+            # [B-5]
+            for source in TIME_SOURCES:
+                pair = [(row.get(f"{source}_{end}") or "").strip() for end in ("first_launch", "last_land")]
+                pair = [f"0{t}" if re.fullmatch(r"\d:\d\d", t) else t for t in pair]   # 7:30 reads as 07:30
+                if not any(pair):
+                    continue
+                if not all(CLOCK_TIME.fullmatch(t) for t in pair) or pair[0] == pair[1] or pair[0] == "24:00":
+                    problems.append(f"Row {line}: {source} first launch and last land need two different times like 07:00 and 22:00.")
+                    continue
+                week["days"][day]["times"][source] = pair
         except ValueError:
             problems.append(f"Row {line}: a number couldn't be read.")
     ordered = [weeks[k] for k in sorted(weeks)]
@@ -109,7 +122,24 @@ def trailing_rates(weeks: list[dict], index: int, windows: list[float], lookback
     return rates
 
 
-def week_config(base: dict[str, Any], week: dict[str, Any], rates: dict[str, Any]) -> dict[str, Any]:
+# [B-5]
+def week_windows(base: dict[str, Any], week: dict[str, Any], source: str) -> dict[str, list[str]] | None:
+    """The week's fly windows from its own planned or flown times, or None to use the plan setup's.
+
+    A flying day with no times of its own takes the plan setup's window for that day if there is one,
+    else the first time given that week, so a day off or a blank row doesn't stop the week.
+    """
+    given = {day: d["times"][source] for day, d in week["days"].items() if source in d.get("times", {})}
+    if not given:
+        return None
+    setup = (base.get("options") or {}).get("fly_windows") or {}
+    fallback = next(iter(given.values()))
+    flying = (base.get("rules") or {}).get("flying_days", DAYS[:5])
+    return {day: list(given.get(day) or setup.get(day) or fallback) for day in flying}
+
+
+def week_config(base: dict[str, Any], week: dict[str, Any], rates: dict[str, Any],
+                windows: dict[str, list[str]] | None = None) -> dict[str, Any]:
     config = copy.deepcopy(base)
     config["name"] = f"Week of {week['week_start']}"
     config["inventory"] = {**config.get("inventory", {}), "pai": int(week["pai"])}
@@ -136,6 +166,9 @@ def week_config(base: dict[str, Any], week: dict[str, Any], rates: dict[str, Any
         profile["goes_per_day"] = goes_used
     if week.get("required_sorties") is not None:
         config["required_sorties"] = int(week["required_sorties"])
+    if windows:
+        config.setdefault("options", {})["fly_windows"] = windows
+        config["options"].pop("first_launch_time", None)
     return config
 
 
@@ -156,8 +189,15 @@ def actual_outcome(week: dict[str, Any], config: dict[str, Any]) -> dict[str, An
             "succeeded": flown_ok and (recovered is not False)}
 
 
-def prepare(text: str, base: dict[str, Any], lookback: int = 4, min_history: int = 2) -> dict[str, Any]:
-    """Every week that has enough history before it, ready to predict."""
+def prepare(text: str, base: dict[str, Any], lookback: int = 4, min_history: int = 2,
+            times: str = "planned") -> dict[str, Any]:
+    """Every week that has enough history before it, ready to predict.
+
+    times picks which fly windows in the file time each week [B-5]: "planned" tests the plan
+    as it was known beforehand; "flown" tests the model on the times the unit actually flew.
+    """
+    if times not in TIME_SOURCES:
+        raise ValueError(f"times must be one of: {', '.join(TIME_SOURCES)}")
     history = parse_history(text)
     weeks, out, skipped = history["weeks"], [], []
     for i, week in enumerate(weeks):
@@ -165,7 +205,8 @@ def prepare(text: str, base: dict[str, Any], lookback: int = 4, min_history: int
         if rates is None:
             skipped.append(week["week_start"])
             continue
-        config = week_config(base, week, rates)
+        windows = week_windows(base, week, times)
+        config = week_config(base, week, rates, windows)
         try:
             load_scenario(config)
         except Exception as error:   # a week the model can't take as entered
@@ -173,9 +214,10 @@ def prepare(text: str, base: dict[str, Any], lookback: int = 4, min_history: int
             continue
         out.append({"week_start": week["week_start"], "config": config, "rates": rates,
                     "actual": actual_outcome(week, config),
-                    "has_recovery": week.get("next_monday_mc") is not None})
+                    "has_recovery": week.get("next_monday_mc") is not None,
+                    "timed_from": times if windows else "setup"})
     return {"weeks": out, "skipped_for_history": skipped, "problems": history["problems"],
-            "windows": history["windows"], "lookback": lookback}
+            "windows": history["windows"], "lookback": lookback, "times": times}
 
 
 # ---------------------------------------------------------------- scoring
@@ -191,7 +233,7 @@ def summarize(prepared: dict[str, Any], metrics: list[dict[str, Any]]) -> dict[s
             "flown": a["flown"], "planned": a["planned"], "sorties_p10": dist["p10"], "sorties_p50": dist["p50"],
             "sorties_p90": dist["p90"], "missed_days": a["missed_days"], "weakest_day": m.get("weakest_day"),
             "day_risk": {d: m["daily"][d]["share_missing_schedule"] for d in m["daily"] if d in DAYS[:5]},
-            "rates": week["rates"],
+            "rates": week["rates"], "timed_from": week.get("timed_from", "setup"),
         })
     n = len(rows)
     if not n:
@@ -234,6 +276,8 @@ def summarize(prepared: dict[str, Any], metrics: list[dict[str, Any]]) -> dict[s
         "day_risk_when_held": mean(held) if held else None,
         "riskiest_day_matched": first_day_match, "failed_weeks": len(failed_weeks),
         "rows": rows, "problems": prepared["problems"],
+        "times": prepared.get("times", "planned"),
+        "timed_weeks": sum(1 for w in prepared["weeks"] if w.get("timed_from", "setup") != "setup"),
     }
     report["sentences"] = _sentences(report)
     return report
@@ -243,6 +287,9 @@ def _sentences(r: dict[str, Any]) -> list[str]:
     pct = lambda v: f"{v * 100:.0f}%"  # noqa: E731
     out = [f"Across {r['weeks']} past weeks the model predicted {pct(r['mean_predicted'])} success on average; "
            f"{pct(r['observed_success'])} of those weeks succeeded."]
+    if r.get("timed_weeks"):
+        out.append(f"{r['timed_weeks']} of {r['weeks']} weeks were timed by their own {r['times']} first launch and "
+                   f"last land; the rest used the plan setup's times.")
     if r["bins"]:
         out.append(f"In {r['bins_agreeing']} of {len(r['bins'])} prediction bands, the share of weeks that succeeded "
                    "is within normal variation of the prediction.")
@@ -264,7 +311,16 @@ def _sentences(r: dict[str, Any]) -> list[str]:
 
 # ---------------------------------------------------------------- template and synthetic history
 def columns(windows: list[float]) -> list[str]:
-    return list(WEEK_COLUMNS[:1]) + ["day"] + list(WEEK_COLUMNS[1:]) + list(DAY_COLUMNS[1:]) + [f"fixed_{h:g}h" for h in windows]
+    return (list(WEEK_COLUMNS[:1]) + ["day"] + list(WEEK_COLUMNS[1:]) + list(DAY_COLUMNS[1:])
+            + [f"fixed_{h:g}h" for h in windows] + list(TIME_COLUMNS))
+
+
+def _late(text: str, minutes: int) -> str:
+    """A clock time some minutes later, wrapping past midnight."""
+    total = round(clock_hours(text) * 60) + minutes
+    if text == "24:00" and minutes == 0:
+        return text
+    return f"{total // 60 % 24:02d}:{total % 60:02d}"
 
 
 def synthetic_history(base: dict[str, Any], weeks: int = 60, seed: int = 7, start: str = "2025-01-06") -> str:
@@ -294,11 +350,22 @@ def synthetic_history(base: dict[str, Any], weeks: int = 60, seed: int = 7, star
             for i in range(1, 4):
                 if plan.get(names[i]):
                     plan[names[i]] = max(0, min(first if i == 1 else plan[names[i - 1]], plan[names[i]] + rng.choice((-1, 0, 0, 1))))
+        # [B-5] With fly windows set, launches run a little late some days; the week is flown on those times.
+        planned_times = (base.get("options") or {}).get("fly_windows")
+        flown_times = None
+        if planned_times:
+            flown_times = {day: [_late(a, rng.choice((0, 0, 0, 15, 30, 60))), _late(b, rng.choice((0, 0, 15, 30)))]
+                           for day, (a, b) in planned_times.items()}
+            for day, (a, b) in flown_times.items():
+                if a == b:
+                    flown_times[day] = list(planned_times[day])
+            config["options"]["fly_windows"] = flown_times
         try:
             scenario = load_scenario(config)
         except Exception:
             scenario = scenario0
             config = copy.deepcopy(base)
+            flown_times = planned_times
         log: list[dict] = []
         days, week = reference.run_week(scenario, Random(rng.randrange(10**9)), log)
         start_mc = week["repair_backlog"] + days[-1]["available_eod"]
@@ -319,7 +386,8 @@ def synthetic_history(base: dict[str, Any], weeks: int = 60, seed: int = 7, star
                  scenario.inventory.pai if first_row else "", start_mc if first_row else "",
                  days[-1]["available_eod"] if first_row else "", scenario.required_sorties if first_row else ""]
                 + list(d["planned_by_go"]) + [day_spares(plan, scenario.rules)] + list(d["flown_by_go"])
-                + [d["code_3"], d["ground_abort"]] + [fixed_by_day[d["day"]][h] for h in windows])
+                + [d["code_3"], d["ground_abort"]] + [fixed_by_day[d["day"]][h] for h in windows]
+                + (list(planned_times[d["day"]]) + list(flown_times[d["day"]]) if planned_times else ["", "", "", ""]))
         monday += timedelta(days=7)
     return out.getvalue()
 

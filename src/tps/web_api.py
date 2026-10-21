@@ -101,10 +101,12 @@ def break_even(config_json: str, name: str, seed: int, iterations: int, bar: flo
     return json.dumps(result)
 
 
-def backtest_prepare(csv_text: str, config_json: str, lookback: int) -> str:
+def backtest_prepare(csv_text: str, config_json: str, lookback: int, times=None) -> str:
     from tps.L4_evidence.backtest import prepare
+    if times is None or type(times).__name__ in ("JsNull", "JsUndefined"):
+        times = "planned"
     try:
-        return json.dumps(prepare(str(csv_text), json.loads(config_json), int(lookback)))
+        return json.dumps(prepare(str(csv_text), json.loads(config_json), int(lookback), times=str(times)))
     except (ValueError, KeyError) as error:
         return json.dumps({"errors": [str(error)]})
 
