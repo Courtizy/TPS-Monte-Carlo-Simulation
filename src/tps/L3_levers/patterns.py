@@ -426,20 +426,29 @@ def _verdict(scenario, bar, focus, per_target, max_sustained, family_rows, curre
     required = scenario.required_sorties
     bar_pct = round(bar * 100)
     lines = []
+    screened = []   # patterns quoted from the screen rather than a confirming run
+
+    def rate(item: dict[str, Any]) -> str:
+        if item.get("confirmed"):
+            return f"{round(item['success'] * 100)}%"
+        screened.append(item["iterations"])
+        return f"about {round(item['success'] * 100)}%"
+
     row = next((p for p in per_target if p["weekly_sorties"] == focus), None)
     if row and row["best"]:
         b = row["best"]
         need = f"{focus} sorties a week" + (" (the requirement)" if focus == required else f" (closest tested to the {required} required)")
         if row["meets"]:
             lines.append(f"To fly {need} with {pai} PAI at {mc}% MC, the best pattern tested is {b['family']} {b['detail']}. "
-                         f"It succeeds in {round(b['success'] * 100)}% of weeks; it fails {b['fails_where']}.")
+                         f"It holds in {rate(b)} of weeks and fails {b['fails_where']}.")
         else:
             lines.append(f"No pattern tested flies {need} in {bar_pct}% of weeks with {pai} PAI at {mc}% MC. "
-                         f"The best, {b['family']} {b['detail']}, succeeds in {round(b['success'] * 100)}%; it fails {b['fails_where']}.")
+                         f"The best, {b['family']} {b['detail']}, holds in {rate(b)} and fails {b['fails_where']}.")
         meeting = [r for r in family_rows if not r["diagnostic"] and r["success"] >= bar]
         recommendable = [r for r in family_rows if not r["diagnostic"]]
         if recommendable:
-            lines.append(f"{len(meeting)} of {len(recommendable)} pattern families tested at {focus} a week reach {bar_pct}%.")
+            share = "All" if len(meeting) == len(recommendable) > 1 else f"{len(meeting)} of"
+            lines.append(f"{share} {len(recommendable)} pattern families tested at {focus} a week reach {bar_pct}%.")
     if max_sustained:
         gap = required - max_sustained["weekly_sorties"]
         text = (f"At the {bar_pct}% bar, this fleet sustains up to {max_sustained['weekly_sorties']} sorties a week "
@@ -447,10 +456,13 @@ def _verdict(scenario, bar, focus, per_target, max_sustained, family_rows, curre
         text += f", {gap} short of the requirement." if gap > 0 else "."
         lines.append(text)
     elif per_target:
-        lines.append(f"None of the weekly targets tested reach the {bar_pct}% bar. Fly less, add aircraft or spares, or accept more risk.")
+        lines.append(f"None of the weekly targets tested reach the {bar_pct}% bar. The options are to fly less, add aircraft or spares, or accept more risk.")
     if current:
-        lines.append(f"Your current plan ({current['detail']}, {current['weekly_sorties']} a week) succeeds in "
-                     f"{round(current['success'] * 100)}% of weeks.")
+        lines.append(f"Your current plan ({current['detail']}, {current['weekly_sorties']} a week) screens at "
+                     f"{rate(current)} of weeks.")
+    if screened:
+        lines.append(f"Figures given as \"about\" are screening estimates from {min(screened):,} simulated weeks "
+                     "per pattern; the headline result uses the full run.")
     return lines
 
 

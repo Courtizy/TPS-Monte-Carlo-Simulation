@@ -2,42 +2,48 @@
 
 All notable changes to Turn Pattern Sustainability. Versions follow semantic versioning; dates are when each version was built.
 
+## [0.11.1] - 2026-10-16
+- Clearer wording on every page and in the results summary: it now leads with how often the plan holds and why it fails.
+- The pattern search labels its screening figures as estimates, so they aren't confused with the headline result.
+- Simulation results are unchanged. The summary text is part of each run record, so records made with 0.11.0 re-verify as an earlier model version.
+
 ## [0.11.0] - 2026-10-04
-- One results experience in both doors: the public Results page uses the planner's own Leadership, Planner and Analyst views, fed results the engine precomputed for each synthetic preset (fixes, margins, replayed weeks, season, and the pattern search for each unit's baseline). Leadership opens first everywhere.
-- Seasonality: monthly rates, fix speed, holiday weeks and surges per month; a season strip in the answer layer and a month-by-month table for analysts. Monthly rates can come from a history file in the planner.
-- The availability chart uses the brand's TPS form: median bars, 10–90% range, dashed requirement line.
+- The public Results page now shows the same Leadership, Planner and Analyst views as the planner, for every synthetic unit and scenario.
+- Seasonality: monthly rates, repair speed, holiday weeks and surges, shown as a month-by-month strip. Monthly rates can come from a history file in the planner.
+- The availability chart shows median aircraft, the 10–90% range and a dashed requirement line.
 
 ## [0.10.0] - 2026-10-04
-- Aligned with the Decision Models kit: `src/tps/` package, root `brand/`, public and private front doors, Overview · Results · Method pages with the full planner behind Run ▸.
-- Results page shows precomputed presets for each synthetic unit (baseline, surge, short-staffed recovery) under scheduled spares and fleet flex.
-- Golden outputs captured before the move and checked on every deploy; simulation results unchanged.
+- New Overview, Results and Method pages, with the full planner behind Run ▸.
+- Precomputed results for each synthetic unit (baseline, surge, short-staffed recovery) under scheduled spares and fleet flex.
+- Code restructured with reference outputs captured first and checked on every deploy; simulation results unchanged.
 - Saving runs in the browser is now opt-in, with one button to clear everything the site stores.
-- Two guided tours from the "Take the tour" strip: the results tour switches presets and the planner tour edits and runs the plan, each showing what changes what with the engine's real numbers.
+- Two guided tours: one walks through the results, the other edits and runs a plan using the engine's real numbers.
 
 ## [0.9.0] - 2026-10-03
-- Backtesting against past weeks in the browser: calibration by band, Brier skill, sorties coverage, day-level agreement.
-- Decision Models brand kit applied; repo reorganized into layers L0 to L4.
+- Backtesting: check the model's predictions against past weeks, in the browser.
+- Decision Models brand applied; code reorganized into layers, from inputs to evidence.
 
 ## [0.8.0] - 2026-10-02
-- Role views built around each audience's questions; break-even margins; efficient frontier; convergence and replication checks.
+- Separate views for leadership, planners and analysts, plus how far each rate can slip before the plan fails.
+- Efficient frontier of turn patterns, and checks that results are stable across run lengths and seeds.
 
 ## [0.7.0] - 2026-10-01
-- Deployed tempo from aircraft, O&M days and sorties; collapsible setup that folds away after a run.
+- Deployed tempo worked out from aircraft, O&M days and sorties; plan setup folds away after a run.
 
 ## [0.6.0] - 2026-10-01
-- Deployed tempo from any combination of report figures; home requirement matched by SUTE or by sorties per aircraft.
+- Deployed tempo from any combination of report figures; the home requirement can match SUTE or sorties per aircraft.
 
 ## [0.5.0] - 2026-09-30
-- Watch a week: exact replay of any simulated week, with a tail board, the story, and why it failed.
+- Replay any simulated week exactly: what each aircraft did, in order, and why the week failed.
 
 ## [0.4.0] - 2026-09-30
-- Turn-pattern search across recognizable families, with a requirement check.
+- Turn-pattern search across standard week shapes, checked against the weekly requirement.
 
 ## [0.3.0] - 2026-09-30
-- Multi-go units (1 to 4 goes), configurable fix windows, SUTE, results by go.
+- Units flying 1 to 4 goes a day, configurable fix windows, SUTE, and results by go.
 
 ## [0.2.0] - 2026-09-30
-- Root causes of lost sorties, fleet margin chart, fixes ranked by impact, leadership summary.
+- Causes of lost sorties, a fleet margin chart, fixes ranked by effect, and a leadership summary.
 
 ## [0.1.0] - 2026-09-30
-- Go-level engine run in the browser with Pyodide; run records anyone can verify.
+- First release: the engine runs in the browser, and every run produces a record anyone can verify.

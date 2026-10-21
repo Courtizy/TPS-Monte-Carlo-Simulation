@@ -33,7 +33,7 @@ python app/run_private.py --config private/inputs.json
 
 **Seasonality.** A config's optional `seasonality` block sets each month's rates, fix speed, holiday weeks and surges; the season strip shows how often the same weekly pattern holds in each month. In the planner, load your history in the backtest and use **Use these monthly rates as the season profile**. The public profile is synthetic. Rule R-7 in `docs/MODEL_LOGIC.md`.
 
-**Take the tour** (the strip under the tabs) offers two guided tours that show cause and effect with the engine's real numbers: the results tour switches units, scenarios and recovery models; the planner tour runs the plan, then allows 2407 adds, raises the break rate and tests fixes, and puts the plan back afterward. ← → move, Esc closes.
+The tour strip under the tabs offers two guided tours that show cause and effect with the engine's real numbers: the results tour switches units, scenarios and recovery models; the planner tour runs the plan, then allows 2407 adds, raises the break rate and tests fixes, and puts the plan back afterward. ← → move, Esc closes.
 
 **Run ▸** runs the full planner (fixes, turn-pattern search, watch a week, backtesting) in the visitor's browser. Nothing is sent to a server, but it's a personal public site: use public or synthetic values only. Saving runs in the browser is opt-in, and one button clears everything the site stores.
 

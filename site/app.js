@@ -29,6 +29,7 @@ const FAILURE_NAMES = {
   "Recovery": "Too few aircraft ready next Monday",
   "Repair Backlog": "Repair backlog above limit",
 };
+const LONG_DAY = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", "Next Mon": "next Monday" };
 
 const $ = (id) => document.getElementById(id);
 
@@ -369,7 +370,7 @@ function scheduleTempo(planned, weekly, pai, days) {
     if (!t.sute) {
       lastTempo = null; updateSummaries();
       document.querySelectorAll("[data-tempo]").forEach((input) => { input.placeholder = ""; });
-      out.replaceChildren(el("p", { class: "message message-warn", text: "These figures don't pin down the deployed tempo yet. Add one more, such as O&M days or possessed aircraft." }));
+      out.replaceChildren(el("p", { class: "message message-warn", text: "These figures don't set the deployed tempo yet. Add one more, such as O&M days or possessed aircraft." }));
       return;
     }
     // Show what the figures work out to in the boxes left empty.
@@ -556,7 +557,7 @@ function marginChart(record) {
   const band = points.map((p, i) => `${x(i)},${y(p.p90)}`).concat(points.slice().reverse().map((p, i) => `${x(points.length - 1 - i)},${y(p.p10)}`)).join(" ");
   const median = points.map((p, i) => `${x(i)},${y(p.p50)}`).join(" ");
   const tight = points.reduce((a, p) => (p.p10 - p.needed < a.p10 - a.needed ? p : a));
-  const label = `Aircraft ready compared with aircraft needed. Tightest: ${tight.day}, typically ${Math.round(tight.p50)} ready for ${tight.needed} needed; in the worst 10% of weeks, ${Math.round(tight.p10)} or fewer.`;
+  const label = `Aircraft ready compared with aircraft needed. Tightest: ${LONG_DAY[tight.day] || tight.day}, typically ${Math.round(tight.p50)} ready for ${tight.needed} needed; in the worst 10% of weeks, ${Math.round(tight.p10)} or fewer.`;
   return el("figure", { class: "chart" },
     svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": label, class: "margin-svg" },
       ticks.map((v) => svg("g", {},
@@ -576,7 +577,7 @@ function marginChart(record) {
       el("span", {}, el("span", { class: "key key-range" }), "10–90% range"),
       el("span", {}, el("span", { class: "key key-need" }), "Needed (first go + spares; next Monday: recovery target)"),
     ),
-    el("p", { class: "chart-note", text: `Tightest margin: ${tight.day}. Typically ${Math.round(tight.p50)} aircraft ready for ${tight.needed} needed, and ${Math.round(tight.p10)} or fewer in the worst 10% of weeks.` }),
+    el("p", { class: "chart-note", text: `Tightest margin: ${LONG_DAY[tight.day] || tight.day}. A typical week has ${Math.round(tight.p50)} aircraft ready for ${tight.needed} needed; the worst 10% of weeks have ${Math.round(tight.p10)} or fewer.` }),
   );
 }
 
@@ -596,7 +597,7 @@ function causesView(m) {
   const lostPerWeek = m.causes.mean_lost_per_week;
   const pieces = [];
   if (all.lost_sorties) {
-    pieces.push(el("p", { text: `About ${lostPerWeek.toFixed(2)} sorties are lost in an average week. Here is where they come from:` }));
+    pieces.push(el("p", { text: `An average week loses ${lostPerWeek.toFixed(2)} sorties. By cause:` }));
     pieces.push(barList(CAUSES.map(([key, label]) => [label, all.shares[key]]), 0));
   } else {
     pieces.push(el("p", { text: "No sorties were lost in any simulated week." }));
@@ -648,7 +649,7 @@ function suteView(m) {
         sute.target ? el("span", {}, el("span", { class: "key key-bandtarget" }), sute.ceiling ? "Deployed target to surge ceiling" : "At or above deployed target") : null),
     ),
     el("p", { class: "chart-note", text: sute.target
-      ? `The SUTE actually flown meets the deployed target in ${pctText(sute.share_weeks_meeting_target)} of weeks.` + (sute.planned_above_ceiling ? " The plan is above the surge ceiling." : "")
+      ? `The SUTE flown meets the deployed target in ${pctText(sute.share_weeks_meeting_target)} of weeks.` + (sute.planned_above_ceiling ? " The plan is above the surge ceiling." : "")
       : "Add the deployed tempo in the plan to compare against a target." }),
     sute.per_aircraft ? el("div", { class: "table-wrap" }, el("table", { class: "data-table tempo-table" },
       el("thead", {}, el("tr", {}, ["Side by side", "SUTE", "Sorties per aircraft a week"].map((h) => el("th", { text: h })))),
@@ -834,6 +835,9 @@ function patternButton(item) {
   return el("button", { type: "button", class: "link-button", text: item.detail, onclick: () => showRecord(result.record) });
 }
 
+// A screened figure is an estimate until a confirming run at full length replaces it.
+const searchRate = (row) => (row.confirmed ? pctText(row.success) : `${pctText(row.success)} est.`);
+
 function renderSearch(record) {
   const { gen, results, analysis, screenWeeks } = insight.search;
   const tested = results.filter((r) => !r.is_current);
@@ -843,13 +847,13 @@ function renderSearch(record) {
     el("div", { class: "verdict" }, analysis.verdict.map((line) => el("p", { text: line }))),
     suteCurve(record, tested),
     analysis.frontier && analysis.frontier.length ? el("h3", { text: "Efficient frontier" }) : null,
-    analysis.frontier && analysis.frontier.length ? el("p", { class: "note", text: "Patterns nothing else beats on all three: more sorties a week, higher success, fewer resources (scheduled spares plus 2407 adds a week)." }) : null,
+    analysis.frontier && analysis.frontier.length ? el("p", { class: "note", text: "Patterns no other pattern beats on all three counts: sorties a week, success rate, and resources (scheduled spares plus 2407 adds a week)." }) : null,
     analysis.frontier && analysis.frontier.length ? el("div", { class: "table-wrap" }, el("table", { class: "data-table" },
       el("thead", {}, el("tr", {}, ["Pattern", "Sorties / week", "Success", "Resources / week", ""].map((t) => el("th", { text: t })))),
       el("tbody", {}, analysis.frontier.map((row) => el("tr", { class: row.is_current ? "base-row" : "" },
         el("td", { class: "pattern-cell" }, row.is_current ? el("span", { text: "Your plan" }) : patternButton(row)),
         el("td", { text: String(row.weekly_sorties) }),
-        el("td", { class: row.success >= analysis.success_target ? "meets" : "misses", text: pctText(row.success) }),
+        el("td", { class: row.success >= analysis.success_target ? "meets" : "misses", text: searchRate(row) }),
         el("td", { text: `${row.spares_per_week} spares` + (row.adds_per_week >= 0.05 ? ` + ${row.adds_per_week.toFixed(1)} adds` : "") }),
         el("td", { class: "note", text: row.family || "" })))))) : null,
     el("h3", { text: `Best pattern in each family at ${analysis.focus_target} sorties a week` }),
@@ -859,7 +863,7 @@ function renderSearch(record) {
         el("td", {}, el("span", { class: "family-name", text: row.family }),
           el("span", { class: "family-note", text: row.diagnostic ? "Diagnostic only: shown, never recommended" : row.family_note })),
         el("td", { class: "pattern-cell" }, patternButton(row), row.confirmed ? el("span", { class: "tag", text: `Confirmed at ${whole(record.iterations)} weeks` }) : null),
-        el("td", { class: row.success >= analysis.success_target ? "meets" : "misses", text: pctText(row.success) }),
+        el("td", { class: row.success >= analysis.success_target ? "meets" : "misses", text: searchRate(row) }),
         el("td", { class: "nowrap", text: `${(row.ci95_low * 100).toFixed(0)}\u2013${pctText(row.ci95_high)}` }),
         el("td", { class: "cost", text: row.fails_short }),
       ))),
@@ -872,12 +876,14 @@ function renderSearch(record) {
         el("td", { text: row.sute.toFixed(2) }),
         el("td", { text: (row.weekly_sorties / record.config.inventory.pai).toFixed(2) }),
         el("td", {}, row.best ? el("span", {}, `${row.best.family} `, patternButton(row.best)) : "None fit"),
-        el("td", { text: row.best ? pctText(row.best.success) : "" }),
+        el("td", { text: row.best ? searchRate(row.best) : "" }),
         el("td", { class: row.meets ? "meets" : "misses", text: row.meets ? "Yes" : "No" }),
       ))),
     )),
-    el("p", { class: "note", text: `Screened ${tested.length} weeks across ${families.size} families at ${analysis.per_target.length} weekly targets, ${whole(screenWeeks)} simulated weeks each, all on seed ${record.seed}. ` +
-      `${confirmedCount} leading patterns were re-run at ${whole(record.iterations)} weeks. Each tested week is judged on flying its own total; the verdict compares that with the ${analysis.required_sorties} required.` }),
+    el("p", { class: "note", text: `Screened ${tested.length} patterns across ${families.size} families at ${analysis.per_target.length} weekly targets, ${whole(screenWeeks)} simulated weeks each, all on seed ${record.seed}. ` +
+      `"Est." marks a screening estimate; the headline result uses the full run. ` +
+      (confirmedCount ? `${confirmedCount} leading patterns were re-run at ${whole(record.iterations)} weeks to confirm. ` : "") +
+      `Each pattern is scored on flying its own weekly total; the verdict compares that total with the ${analysis.required_sorties} required.` }),
   );
 }
 
@@ -989,7 +995,7 @@ function watchSection(record) {
   const weekInput = el("input", { id: "week-number", type: "number", min: 1, max: record.iterations, step: 1, inputmode: "numeric", placeholder: "Any week" });
   return el("section", { class: "card no-print", "aria-labelledby": "watch-h" },
     el("h3", { id: "watch-h", text: "Watch a week" }),
-    el("p", { class: "note", text: "Replay any simulated week exactly: what each aircraft did, the step-by-step story, and why it failed." }),
+    el("p", { class: "note", text: "Replay any simulated week exactly: what each aircraft did, in order, and why the week failed." }),
     el("div", { class: "row-fields" },
       el("div", { class: "week-tabs", role: "group", "aria-label": "Choose a week" },
         WEEK_CHOICES.filter(([key]) => picks[key] !== null && picks[key] !== undefined).map(([key, label]) =>
@@ -1051,11 +1057,10 @@ function renderBrief(record) {
   const m = record.metrics;
   const facts = record.plan_facts || {};
   const weakest = m.weakest_day;
-  const dayNames = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday" };
   const verdict = m.probability_success >= 0.85 ? "The plan holds."
-    : m.probability_success >= 0.55 ? "The plan holds most weeks, with real risk." : "The plan doesn't hold as written.";
-  const goNote = m.goes && m.goes.by_go.length > 1 && m.goes.weakest_go ? ` Go ${m.goes.weakest_go} loses the most sorties across the week.` : "";
-  const where = weakest ? ` The riskiest day is ${dayNames[weakest] || weakest}.${goNote}` : "";
+    : m.probability_success >= 0.55 ? "The plan holds most weeks, but not reliably." : "The plan doesn't hold as written.";
+  const goNote = m.goes && m.goes.by_go.length > 1 && m.goes.weakest_go ? ` Go ${m.goes.weakest_go} loses the most sorties.` : "";
+  const where = weakest ? ` The riskiest day is ${LONG_DAY[weakest] || weakest}.${goNote}` : "";
   const row = (label, value, tag) => el("div", { class: "brief-row" }, el("span", { text: label }), value ? el("span", { class: tag || "brief-value", text: value }) : null);
 
   // 1. Can we do it?
@@ -1096,7 +1101,7 @@ function renderBrief(record) {
           el("span", {}, f.label, el("span", { class: "brief-sub", text: f.cost })),
           el("span", { class: "delta up", text: `+${f.delta.toFixed(1)} pts` }))));
       } else {
-        decisions.push(el("p", { class: "note", text: items.length ? "None of these help by more than half a point for this plan." : "None apply to this plan." }));
+        decisions.push(el("p", { class: "note", text: items.length ? "None improves this plan by more than half a point." : "None apply to this plan." }));
       }
     }
   } else {
@@ -1116,7 +1121,7 @@ function renderBrief(record) {
   if (insight.search && insight.search.analysis.max_sustained) {
     const top = insight.search.analysis.max_sustained;
     const gap = top.weekly_sorties - m.plan.planned_sorties;
-    focus.push(row(`Most the fleet sustains: ${top.weekly_sorties} sorties a week at the ${pctText(insight.search.analysis.success_target)} bar`, gap >= 0 ? `${gap} above plan` : `${-gap} below plan`, "tag-low"));
+    focus.push(row(`Fleet ceiling: ${top.weekly_sorties} sorties a week at the ${pctText(insight.search.analysis.success_target)} bar`, gap >= 0 ? `${gap} above plan` : `${-gap} below plan`, "tag-low"));
   }
 
   box.replaceChildren(
@@ -1509,8 +1514,8 @@ function renderSummary(record) {
     if (top) {
       const delta = (top.record.metrics.probability_success - base) * 100;
       findings.push(delta > 0.5
-        ? `Best fix tested: ${top.label.toLowerCase()}, raising success to ${pctText(top.record.metrics.probability_success)} (${delta >= 0 ? "+" : ""}${delta.toFixed(1)} points). Trade-off: ${top.cost.charAt(0).toLowerCase()}${top.cost.slice(1)}.`
-        : "None of the fixes tested improved the plan by more than half a point.");
+        ? `Best fix tested: ${top.label.charAt(0).toLowerCase()}${top.label.slice(1)}, raising success to ${pctText(top.record.metrics.probability_success)} (${delta >= 0 ? "+" : ""}${delta.toFixed(1)} points). Trade-off: ${top.cost.charAt(0).toLowerCase()}${top.cost.slice(1)}.`
+        : "No fix tested improves the plan by more than half a point.");
     }
   }
   if (insight.search) findings.push(...insight.search.analysis.verdict.slice(0, 3));
@@ -1602,6 +1607,12 @@ function seasonSentence(season) {
   return `below 85% in ${weak.length} of 12 months; weakest ${MONTH_NAMES[worst.month]} (${pctText(worst.success)})`;
 }
 
+// A month's note plus its flags, without repeating a flag the note already names.
+function seasonConditions(m, flagText) {
+  const note = m.note || "";
+  return [note, ...m.flags.map((f) => flagText[f]).filter((t) => !note.toLowerCase().includes(t))].filter(Boolean);
+}
+
 function renderSeason() {
   const card = $("season-card");
   if (!card) return;
@@ -1613,7 +1624,7 @@ function renderSeason() {
     el("h3", { text: "Through the year" }),
     el("p", { class: "note", text: `The same weekly pattern under each month's conditions: ${seasonSentence(season)}.` }),
     el("ol", { class: "season-strip", "aria-label": "Chance the plan holds, by month" }, season.map((m) => el("li", {
-      class: `season-cell season-${seasonLevel(m.success)}`, title: [m.note, ...m.flags.map((f) => flagText[f])].filter(Boolean).join(" · ") },
+      class: `season-cell season-${seasonLevel(m.success)}`, title: seasonConditions(m, flagText).join(" · ") },
       el("span", { class: "season-month", text: m.month }),
       el("span", { class: "season-pct num", text: pctText(m.success) }),
       m.flags.length ? el("span", { class: "season-flag", text: m.flags.map((f) => (f === "holiday" ? "H" : "S")).join(" ") }) : null))),
@@ -1625,7 +1636,7 @@ function renderSeason() {
         el("td", { class: "num", text: `${pctText(m.ci95[0])}–${pctText(m.ci95[1])}` }),
         el("td", { text: m.weakest_day || "None" }),
         el("td", { text: m.main_cause ? { lost_abort_uncovered: "aborts use up spares", lost_turn_short: "no aircraft back for a turn", lost_first_go_short: "day starts short" }[m.main_cause] : "None" }),
-        el("td", { text: [m.note, ...m.flags.map((f) => flagText[f])].filter(Boolean).join("; ") || "Base week" })))))),
+        el("td", { text: seasonConditions(m, flagText).join("; ") || "Base week" })))))),
   );
 }
 
@@ -1698,14 +1709,14 @@ function renderResult(record) {
     el("div", { "data-views": "plan ana" }, watchSection(record)),
     el("section", { class: "card no-print", "aria-labelledby": "fix-h" },
       el("h3", { id: "fix-h", text: "What would fix it" }),
-      el("p", { class: "note", text: "Changes a planner can make, ranked by how much each one helps." }),
+      el("p", { class: "note", text: "Changes a planner can make, ranked by effect on success." }),
       el("div", { class: "button-row no-print" },
         el("button", { type: "button", class: "secondary", "data-needs-idle": true, text: "Test fixes", onclick: () => testFixes(record) })),
       el("div", { id: "fixes-out" }),
     ),
     el("section", { class: "card no-print", "data-views": "plan ana", "aria-labelledby": "patterns-h" },
       el("h3", { id: "patterns-h", text: "Test turn patterns" }),
-      el("p", { class: "note", text: "Generates weeks in families leadership will recognize (waterfall, flat, recovery valley, and more), tests each one, and reports what works at the sortie levels that matter." }),
+      el("p", { class: "note", text: "Builds candidate weeks from standard shapes (waterfall, flat, recovery valley and others), simulates each one, and reports which hold at your weekly sortie targets." }),
       el("div", { class: "row-fields no-print static-hide" },
         el("label", { class: "field" }, "Success bar", targetSelect),
         el("label", { class: "field" }, "Weekly sortie targets",
