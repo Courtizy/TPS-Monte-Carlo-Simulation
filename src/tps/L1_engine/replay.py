@@ -14,7 +14,7 @@ from typing import Any
 from tps.L1_engine import reference
 from tps.L1_engine.engine import compile_plan, coverage_by_day, run_compiled_week
 from tps.L2_metrics.metrics import score_week
-from tps.L0_inputs.schemas import load_scenario
+from tps.L0_inputs.schemas import day_starts, launch_clock, load_scenario
 
 DAY_NAMES = {"Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thursday", "Fri": "Friday",
              "Sat": "Saturday", "Sun": "Sunday", "Next Mon": "next Monday"}
@@ -77,7 +77,7 @@ def replay(config: dict[str, Any], seed: int, week_index: int) -> dict[str, Any]
     rules = scenario.rules
     all_days = rules.all_days
     score = score_week(days, week, rules.flying_days)
-    first_launch = scenario.options.first_launch_time
+    first_launch = launch_clock(scenario.options)
     t = lambda hours: clock(hours, all_days, first_launch)  # noqa: E731
     return {
         "week": week_index + 1,
@@ -90,6 +90,7 @@ def replay(config: dict[str, Any], seed: int, week_index: int) -> dict[str, Any]
         "flying_days": rules.flying_days,
         "go_times": [list(p) for p in scenario.options.go_times],
         "first_launch_time": first_launch,
+        "day_starts": day_starts(scenario),
         "week_hours": 24 * len(all_days),
         "start_mc": week["repair_backlog"] + days[-1]["available_eod"],
         "down_at_start": scenario.inventory.pai - (week["repair_backlog"] + days[-1]["available_eod"]),
@@ -264,7 +265,7 @@ def _why(log, days, score, scenario, t) -> list[str]:
             lines.append(f"{name} started with {day_event['ready']} aircraft ready for a front line of {day_event['needed']}.")
         if day_event and day_event["ready"] < day_event["first_go"]:
             for d in day_event["down"][:3]:
-                lines.append(_down_reason(log, d["tail"], 24 * days.index(row), t))
+                lines.append(_down_reason(log, d["tail"], day_starts(scenario)[days.index(row)], t))
         seen: set[tuple[int, str]] = set()
         for e in lost:
             key = (e["go"], e["cause"])

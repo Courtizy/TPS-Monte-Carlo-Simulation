@@ -174,6 +174,26 @@ function buildGrid(cfg, goes) {
   }
 }
 
+// [T-4]
+function buildFlyWindows(cfg) {
+  const windows = (cfg.options && cfg.options.fly_windows) || {};
+  $("fly-window-body").replaceChildren(...flyingDays(cfg).map((day) => {
+    const [open, close] = (windows[day] || ["", ""]).map((t) => (t === "24:00" ? "00:00" : t));   // time inputs stop at 23:59
+    const input = (field, value, label) => el("input", { type: "time", step: 60, "data-fly-day": day, "data-fly": field, value, "aria-label": `${day} ${label}` });
+    return el("tr", {}, el("th", { scope: "row", text: day }),
+      el("td", {}, input("open", open, "first launch")), el("td", {}, input("close", close, "last land")));
+  }));
+}
+
+function flyWindowsFromForm() {
+  const windows = {};
+  for (const row of $("fly-window-body").querySelectorAll("tr")) {
+    const open = row.querySelector('[data-fly="open"]'), close = row.querySelector('[data-fly="close"]');
+    if (open.value || close.value) windows[open.dataset.flyDay] = [open.value, close.value === "00:00" ? "24:00" : close.value];
+  }
+  return windows;
+}
+
 function configToForm(cfg) {
   $("name").value = cfg.name || "";
   $("pai").value = cfg.inventory.pai;
@@ -210,6 +230,7 @@ function configToForm(cfg) {
   $("recur_rate").value = toPct(options.recur_rate ?? 0);
   $("allow_2407_adds").checked = Boolean(options.allow_2407_adds);
   buildGrid(cfg, profile.goes_per_day);
+  buildFlyWindows(cfg);
   updateTotals();
   $("config-json").value = JSON.stringify(cfg, null, 2);
 }
@@ -228,6 +249,13 @@ function formToConfig() {
   cfg.options = cfg.options || {};
   delete cfg.options.go_times;
   cfg.options.go_profile = { goes_per_day: goes, sortie_hours: numberOr("sortie_hours", 0), turn_hours: numberOr("turn_hours", 0) };
+  const flyWindows = flyWindowsFromForm();
+  if (Object.keys(flyWindows).length) {
+    cfg.options.fly_windows = flyWindows;
+    delete cfg.options.first_launch_time;   // the first day's window sets the clock
+  } else {
+    delete cfg.options.fly_windows;
+  }
 
   const tempo = tempoBlock();
   if (Object.keys(tempo).length) {
@@ -322,7 +350,8 @@ function updateSummaries() {
   const pai = numberOr("pai", 0);
   const required = $("required").value;
   set("sum-plan", `${pai} PAI, ${weekly} sorties, ${required ? `${required} required` : "no requirement set"}`);
-  set("sum-unit", `${goes} go${goes > 1 ? "es" : ""}, ${$("sortie_hours").value}-hr sorties, ${$("turn_hours").value}-hr turns`);
+  set("sum-unit", `${goes} go${goes > 1 ? "es" : ""}, ${$("sortie_hours").value}-hr sorties, ${$("turn_hours").value}-hr turns`
+    + (Object.keys(flyWindowsFromForm()).length ? ", fly windows set" : ""));
   set("sum-tempo", lastTempo && lastTempo.sute
     ? `SUTE ${lastTempo.sute.toFixed(2)}` + (lastTempo.possessed_aircraft && lastTempo.om_days && lastTempo.sorties
       ? ` from ${fix2(lastTempo.possessed_aircraft)} PAA, ${fix2(lastTempo.om_days)} days, ${fix2(lastTempo.sorties)} sorties` : "")
@@ -421,7 +450,10 @@ const FIELD_LABELS = {
 const WINDOW_TEXT = [[/^rates\.fix_windows\[(\d+)\]\.hours must be above the window before it$/, (m, i) => `Fix window ${Number(i) + 1}: hours must be longer than the window above it`],
   [/^rates\.fix_windows\[(\d+)\]\.rate must be between 0 and 1$/, (m, i) => `Fix window ${Number(i) + 1}: share fixed must be between 0% and 100%`],
   [/^options\.go_profile\.(\w+) must be a positive number of hours$/, (m, k) => `${k === "sortie_hours" ? "Sortie length" : "Turn window"} must be more than 0 hours`],
-  [/^schedule\.(\w+) plans more goes than the (\d+) per day the go profile allows$/, "$1 plans more goes than the $2 your unit flies"]];
+  [/^schedule\.(\w+) plans more goes than the (\d+) per day the go profile allows$/, "$1 plans more goes than the $2 your unit flies"],
+  [/^options\.fly_windows is missing (.+): set a window for every flying day, or none$/, "Fly windows: set $1 too, or clear every day"],
+  [/^options\.fly_windows\.(.+): the first launch and last land can't be the same time$/, "$1 fly window: the first launch and last land can't be the same time"],
+  [/^options\.fly_windows\.(.+) must be two 24-hour times like .*$/, "$1 fly window: enter both the first launch and the last land"]];
 const friendly = (text) => WINDOW_TEXT.reduce((t, [pattern, to]) => t.replace(pattern, to), text)
   .replace(/^([a-z_]+(?:\.[a-z_0-9]+)?) must be between 0 and 1$/, (m, key) => (FIELD_LABELS[key] ? `${FIELD_LABELS[key]} must be between 0% and 100%` : m))
   .replace(/^(inventory\.pai|required_sorties) must be/, (m, key) => `${FIELD_LABELS[key]} must be`)
@@ -929,7 +961,7 @@ function boardSvg(r, zoomDay) {
     label.addEventListener("click", () => { watch.zoom = zoomDay === day ? null : day; renderWeek(); });
     parts.push(label);
     if (flying) r.go_times.forEach(([launch], g) => {
-      const t = a + launch;
+      const t = (r.day_starts ? r.day_starts[i] : a) + launch;
       if (t >= start && t <= end) parts.push(svg("line", { x1: x(t), x2: x(t), y1: top - 6, y2: H - 4, class: "go-line" }),
         dayIndex !== null ? svg("text", { x: x(t) + 3, y: top - 10, class: "axis-text", text: `Go ${g + 1}` }) : null);
     });
@@ -1409,7 +1441,7 @@ async function runBacktest() {
   const status = el("p", { class: "note", role: "status", text: "Reading the history…" });
   out.replaceChildren(status);
   try {
-    const prepared = await main.request("backtest_prepare", { csv: backtest.csv, config: JSON.stringify(formToConfig()), lookback: Number($("bt-lookback").value) });
+    const prepared = await main.request("backtest_prepare", { csv: backtest.csv, config: JSON.stringify(formToConfig()), lookback: Number($("bt-lookback").value), times: $("bt-times").value });
     if (prepared.errors) { out.replaceChildren(el("p", { class: "message message-error", text: prepared.errors.join(" ") })); return; }
     if (!prepared.weeks.length) { out.replaceChildren(el("p", { class: "message message-warn", text: "No week had enough history before it to predict. Add more weeks or shorten the lookback." })); return; }
     while (pool.length < poolSize()) pool.push(new PythonWorker());
@@ -1896,6 +1928,17 @@ function wireForm() {
   });
   $("required_from_sute").addEventListener("change", () => { updateTotals(); scheduleCheck(); });
   $("edit-plan").addEventListener("click", () => setPlanCollapsed(false));
+  $("copy-fly-window").addEventListener("click", () => {
+    const rows = [...$("fly-window-body").querySelectorAll("tr")];
+    if (!rows.length) return;
+    const [open, close] = [...rows[0].querySelectorAll("input")].map((i) => i.value);
+    for (const row of rows.slice(1)) {
+      const [a, b] = row.querySelectorAll("input");
+      a.value = open; b.value = close;
+    }
+    updateTotals();
+    scheduleCheck();
+  });
   $("add-window").addEventListener("click", () => {
     const rows = [...$("window-body").querySelectorAll("tr")];
     const last = rows.length ? Number(rows[rows.length - 1].querySelector('[data-window="hours"]').value || 0) : 0;

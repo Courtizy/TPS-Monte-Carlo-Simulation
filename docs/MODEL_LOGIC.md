@@ -1,6 +1,6 @@
 # TPS Model Logic
 
-**Turn Pattern Sustainability, model `tps` 0.11**
+**Turn Pattern Sustainability, model `tps` 0.12**
 
 TPS answers one planning question: **can this unit fly this weekly schedule, week after week, without running out of aircraft?** It plays the week out thousands of times. Each time, breaks, aborts, and fixes land differently, and the model counts how often the plan holds up and why it fails when it doesn't.
 
@@ -128,7 +128,7 @@ $$go_{k+1} \le go_k, \qquad \text{goes used} \le \text{goes per day}$$
 
 ### T-1: Model hours
 **Source:** Model choice.
-**Rule:** Day *i* of the week spans hours `24i` to `24i + 24`. Hour 0 of each day is its first launch.
+**Rule:** Day *i* of the week spans hours `24i` to `24i + 24`. Hour 0 of each day is its first launch, unless fly windows move it (T-4).
 **Code:** `L1_engine/reference.py` → `run_week`.
 **Test:** `test_return_timing_table`.
 
@@ -149,6 +149,23 @@ $$\text{flies go } k \iff ready \le launch_k$$
 
 **Code:** `L1_engine/reference.py` → `run_week` (`ready`).
 **Test:** `test_a_4_hour_fix_misses_a_3_hour_turn_but_makes_the_third_go`.
+
+
+### T-4: Fly windows
+**Source:** Unit convention: each flying day has a window from first launch to last land, and it can differ by day (a short Friday, a late Tuesday start).
+**Rule:** Fly windows are optional. If set, every flying day has one, given as clock times (`"07:00"` to `"22:00"`). A last land at or before the first launch is the next morning (T-5). Hour 0 of the week is the first flying day's opening time. Each flying day's first launch moves by how much earlier or later its window opens, and its goes move with it:
+
+$$start_i = 24i + (open_i - open_{\text{first day}})$$
+
+Fixes still run around the clock on weekdays (F-4), so a window that opens later gives overnight fixes more time before the first launch, and one that opens earlier gives them less. The first-day rule (F-3) waits for the next allowed day's first launch. Each day's front line is counted at its first launch, and aircraft ready at the end of a day are counted at the next day's first launch. Weekend days and next Monday keep the first day's clock. A go that lands after its day's window closes is a warning, not an error: the plan still runs as entered. Fly windows also set the clock times in the play-by-play (X-5).
+**Code:** `L0_inputs/schemas.py` → `day_starts`, `launch_clock`, `_validate_fly_windows`, `plan_warnings`; `L1_engine/reference.py` → `run_week` (`starts`).
+**Test:** `test_fly_windows_move_each_days_first_launch`, `test_a_later_window_gives_an_overnight_fix_time_to_finish`, `test_fly_window_checks`, `test_a_go_landing_after_the_window_closes_is_a_warning`.
+
+### T-5: Sorties past midnight
+**Source:** Unit convention: a late window can run past midnight; the sortie belongs to the day it launched, and aircraft that land late lose fix time before the next day's first launch.
+**Rule:** A fly window may close after midnight (`"14:00"` to `"02:00"`). Its goes count to the day they launch on, and the next day's first launch is still set by that day's own window. A break on a sortie that lands after midnight starts its fix clock at landing (F-2), so it has less time before the next day's first launch. An aircraft still in the air at the next day's first launch can't fly it: it's busy until it lands. A day that opens before the day before's last go lands gets a warning.
+**Code:** `L0_inputs/schemas.py` → `_window_hours`, `plan_warnings`; `L1_engine/reference.py` → `run_week` (`starts[index + 1]`).
+**Test:** `test_a_window_can_close_after_midnight`, `test_landing_past_midnight_cuts_the_next_days_fix_time`, `test_an_aircraft_still_flying_misses_the_next_days_first_launch`.
 
 ---
 
@@ -241,7 +258,7 @@ $$\text{fixed within } h_i, \quad i = \min\{\, i : u < F_i \,\}; \qquad u \ge F_
 
 ### F-4: Weekday and weekend fix clocks
 **Source:** Unit convention: weekend duty is a yes/no decision, and fix rates continue when it's worked. DAFI 21-101 ¶1.14 limits continuous duty to 12 hours (extendable to 16 with squadron commander approval) and requires 8 hours of rest, which is why weekend options are framed as shifts.
-**Rule:** On weekdays the clock runs all 24 hours, because the fix rates already reflect normal weekday manning. On Saturday and Sunday it runs only during the covered hours (0, 8, 12, 16, or 24), starting at the day's hour 0, and pauses otherwise. "Around the clock" implies more than one crew.
+**Rule:** On weekdays the clock runs all 24 hours, because the fix rates already reflect normal weekday manning. On Saturday and Sunday it runs only during the covered hours (0, 8, 12, 16, or 24), starting at the day's hour 0 (with fly windows, the first flying day's opening time), and pauses otherwise. "Around the clock" implies more than one crew.
 **Code:** `L1_engine/reference.py` → `coverage_by_day`, `ready_time`.
 **Test:** `test_weekend_clock`.
 
@@ -533,8 +550,8 @@ Any week number can also be replayed.
 
 ### X-5: Real clock times
 **Source:** Unit convention.
-**Rule:** Times read as hours after the day's first launch (+10:00). With an optional first launch time, such as 07:30, they read as real times, moving to the next day after midnight.
-**Code:** `L1_engine/replay.py` → `clock`; `L0_inputs/schemas.py` → `_validate_options` (`first_launch_time`).
+**Rule:** Times read as hours after the day's first launch (+10:00). With an optional first launch time, such as 07:30, or with fly windows (T-4), they read as real times, moving to the next day after midnight.
+**Code:** `L1_engine/replay.py` → `clock`; `L0_inputs/schemas.py` → `_validate_options` (`first_launch_time`), `launch_clock`.
 **Test:** `test_clock_times`.
 
 ---
@@ -569,12 +586,18 @@ Other settings (commit, spare rate, goes, weekend hours, first-day rule) come fr
 **Code:** `L4_evidence/backtest.py` → `synthetic_history`, `template`.
 **Test:** `test_synthetic_history_round_trips`.
 
+### B-5: Each week's own launch and land times
+**Source:** Unit convention: flying schedules record each day's planned and actual first launch and last land.
+**Rule:** A history file may add four columns to each day's row: `planned_first_launch`, `planned_last_land`, `flown_first_launch`, `flown_last_land` (clock times; a last land before the first launch is the next morning, T-5). The backtest times each week by one set, chosen when it runs: **planned** (the default) keeps to B-1, since only what was known beforehand goes into the prediction, and tests the plan; **flown** tests the model on how the week actually ran. A week with times becomes that week's fly windows (T-4); a flying day without times takes the plan setup's window, or else the first time given that week. A week with no times uses the plan setup's, so files without these columns work as before. Synthetic history fills these columns when the plan has fly windows: launches run 0 to 60 minutes late on some days, and the week is played out on the flown times.
+**Code:** `L4_evidence/backtest.py` → `parse_history`, `week_windows`, `week_config`, `prepare`, `synthetic_history`.
+**Test:** `test_weeks_use_their_own_planned_or_flown_times`, `test_synthetic_history_carries_planned_and_flown_times`.
+
 ---
 
 ## 12. Not modeled yet
 
 - **Multi-week tempo:** each run is one week starting fresh. Fatigue, phase clocks, and hangar queens need multi-week mode.
-- **Long or off-station sorties:** sorties that cross midnight or leave the aircraft away (mobility, bomber).
+- **Off-station flying:** handled outside TPS by changing the aircraft available.
 - **Crew, equipment, and fuel queues:** contention is assumed to be inside the unit's fix rates.
 - **Scheduled maintenance by day:** phase and inspection pulls are folded into the starting MC rate.
 - **Supply and cannibalization:** assumed to be inside the fix rates.

@@ -6,7 +6,8 @@ draws in exactly the same order as tps.reference, so a seed gives
 identical results. tests_core/test_engine_equivalence.py enforces that.
 
 Model hours: day i of rules.all_days spans [24*i, 24*(i+1)); hour 0 of each day
-is the first-go launch. An aircraft can fly a go if ready_at <= launch.
+is the first-go launch, moved by the day's fly window if set [T-4]. An aircraft
+can fly a go if ready_at <= launch.
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ from random import Random
 from typing import Any
 
 from tps.L0_inputs.rules import aircraft_required, can_use_long_fix, commit_aircraft, day_spares, floor_count
-from tps.L0_inputs.schemas import MAX_GOES, DayPlan, Options, Scenario, window_key
+from tps.L0_inputs.schemas import MAX_GOES, DayPlan, Options, Scenario, day_starts, window_key
 
 GOLDEN = 0.6180339887498949  # even-spread sequence for "Expected" draws
 NEVER = math.inf
@@ -163,6 +164,7 @@ def compile_plan(scenario: Scenario) -> _Plan:
     start_mc = floor_count(scenario.inventory.pai * home.mc_rate)
     commit_limit = commit_aircraft(scenario.inventory.pai, policy)
     allowed = [can_use_long_fix(day, policy) for day in all_days]
+    starts = day_starts(scenario)
 
     days = []
     slot_count = 0
@@ -172,7 +174,7 @@ def compile_plan(scenario: Scenario) -> _Plan:
         spares = day_spares(plan, policy)
         required = aircraft_required(plan, policy) if is_flying else 0
         active = is_flying and plan.daily_sorties > 0
-        start = 24.0 * index
+        start = starts[index]
         goes = []
         if active:
             for go, needed in enumerate((plan.first_go, plan.second_go, plan.third_go, plan.fourth_go)):
@@ -189,13 +191,13 @@ def compile_plan(scenario: Scenario) -> _Plan:
         long_start = None
         if not allowed[index]:
             later = [j for j in range(index + 1, len(all_days)) if allowed[j]]
-            long_start = 24.0 * (later[0] if later else len(all_days))
+            long_start = starts[later[0]] if later else 24.0 * len(all_days)
         days.append(_Day(
             index=index,
             flying=is_flying,
             active=active,
             start=start,
-            horizon=start if index == last else start + 24.0,
+            horizon=start if index == last else starts[index + 1],
             first_go=plan.first_go,
             required=required,
             goes=tuple(goes),
@@ -375,6 +377,8 @@ def run_compiled_week(plan: _Plan, rng: Random) -> tuple[list[dict[str, Any]], d
                     flown_count += 1
                     flown_by_go[go.index] += 1
                     flown.add(jet)
+                    if go.land > day.horizon and ready[jet] < go.land:   # still in the air at the next day's first launch
+                        ready[jet] = go.land
                     if jet not in lineup_set and jet not in primary_set and jet not in adds_set:
                         spares_used += 1
                     elif jet in adds_set and jet not in front_set:

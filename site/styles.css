@@ -239,6 +239,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 .window-table th { text-align: left; font-size: 0.8rem; color: var(--ink-2); font-weight: 500; padding: 0 0.75rem 0.25rem 0; }
 .window-table td { padding: 0.2rem 0.75rem 0.2rem 0; }
 .window-table input { width: 5.5rem; }
+.window-table input[type="time"] { width: 8.5rem; }
 .sub-legend { font-size: 1rem; margin: 1rem 0 0.2rem; }
 button.small { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
 
