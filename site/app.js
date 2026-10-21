@@ -835,6 +835,9 @@ function patternButton(item) {
   return el("button", { type: "button", class: "link-button", text: item.detail, onclick: () => showRecord(result.record) });
 }
 
+// A screened figure is an estimate until a confirming run at full length replaces it.
+const searchRate = (row) => (row.confirmed ? pctText(row.success) : `${pctText(row.success)} est.`);
+
 function renderSearch(record) {
   const { gen, results, analysis, screenWeeks } = insight.search;
   const tested = results.filter((r) => !r.is_current);
@@ -850,7 +853,7 @@ function renderSearch(record) {
       el("tbody", {}, analysis.frontier.map((row) => el("tr", { class: row.is_current ? "base-row" : "" },
         el("td", { class: "pattern-cell" }, row.is_current ? el("span", { text: "Your plan" }) : patternButton(row)),
         el("td", { text: String(row.weekly_sorties) }),
-        el("td", { class: row.success >= analysis.success_target ? "meets" : "misses", text: pctText(row.success) }),
+        el("td", { class: row.success >= analysis.success_target ? "meets" : "misses", text: searchRate(row) }),
         el("td", { text: `${row.spares_per_week} spares` + (row.adds_per_week >= 0.05 ? ` + ${row.adds_per_week.toFixed(1)} adds` : "") }),
         el("td", { class: "note", text: row.family || "" })))))) : null,
     el("h3", { text: `Best pattern in each family at ${analysis.focus_target} sorties a week` }),
@@ -860,7 +863,7 @@ function renderSearch(record) {
         el("td", {}, el("span", { class: "family-name", text: row.family }),
           el("span", { class: "family-note", text: row.diagnostic ? "Diagnostic only: shown, never recommended" : row.family_note })),
         el("td", { class: "pattern-cell" }, patternButton(row), row.confirmed ? el("span", { class: "tag", text: `Confirmed at ${whole(record.iterations)} weeks` }) : null),
-        el("td", { class: row.success >= analysis.success_target ? "meets" : "misses", text: pctText(row.success) }),
+        el("td", { class: row.success >= analysis.success_target ? "meets" : "misses", text: searchRate(row) }),
         el("td", { class: "nowrap", text: `${(row.ci95_low * 100).toFixed(0)}\u2013${pctText(row.ci95_high)}` }),
         el("td", { class: "cost", text: row.fails_short }),
       ))),
@@ -873,11 +876,12 @@ function renderSearch(record) {
         el("td", { text: row.sute.toFixed(2) }),
         el("td", { text: (row.weekly_sorties / record.config.inventory.pai).toFixed(2) }),
         el("td", {}, row.best ? el("span", {}, `${row.best.family} `, patternButton(row.best)) : "None fit"),
-        el("td", { text: row.best ? pctText(row.best.success) : "" }),
+        el("td", { text: row.best ? searchRate(row.best) : "" }),
         el("td", { class: row.meets ? "meets" : "misses", text: row.meets ? "Yes" : "No" }),
       ))),
     )),
     el("p", { class: "note", text: `Screened ${tested.length} patterns across ${families.size} families at ${analysis.per_target.length} weekly targets, ${whole(screenWeeks)} simulated weeks each, all on seed ${record.seed}. ` +
+      `"Est." marks a screening estimate; the headline result uses the full run. ` +
       (confirmedCount ? `${confirmedCount} leading patterns were re-run at ${whole(record.iterations)} weeks to confirm. ` : "") +
       `Each pattern is scored on flying its own weekly total; the verdict compares that total with the ${analysis.required_sorties} required.` }),
   );
