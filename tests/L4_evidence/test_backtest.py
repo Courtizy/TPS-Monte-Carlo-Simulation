@@ -123,3 +123,26 @@ def test_synthetic_history_carries_planned_and_flown_times():
     assert any(d["times"]["flown"][0] != "0700" for d in days)      # some launches ran late
     summary = json.loads(web_api.backtest_prepare(text, json.dumps(config), 4, "flown"))
     assert summary["times"] == "flown" and all(w["timed_from"] == "flown" for w in summary["weeks"])
+
+
+# [B-6]
+def test_private_backtest_runs_in_python_and_writes_its_report(tmp_path):
+    from tps.L4_evidence.backtest import REPORT_COLUMNS, report_csv, run_backtest
+    config = example(options={"fly_windows": {"Mon": ["0700", "2200"]}})
+    text = synthetic_history(config, weeks=8, seed=3)
+    report = run_backtest(text, config, times="flown", runs=200)
+    assert report["weeks"] == 6 and report["timed_weeks"] == 6 and report["runs"] == 200
+    assert 0 <= report["observed_success"] <= 1 and report["sentences"]
+    rows = report_csv(report).splitlines()
+    assert rows[0] == ",".join(REPORT_COLUMNS) and len(rows) == 7
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "app"))
+    from run_private import backtest
+    history, config_path = tmp_path / "history.csv", tmp_path / "inputs.json"
+    history.write_text(text)
+    config_path.write_text(json.dumps(config))
+    written = backtest(history, config_path, [tmp_path / "data"], "planned", 4, 200)
+    saved = json.loads((tmp_path / "data" / "backtest.json").read_text())
+    assert saved["weeks"] == written["weeks"] == 6 and saved["times"] == "planned"
+    assert saved["history_file"] == "history.csv"
+    assert (tmp_path / "data" / "backtest_weeks.csv").read_text().startswith("week_start,predicted")

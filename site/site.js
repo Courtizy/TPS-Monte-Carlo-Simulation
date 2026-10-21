@@ -171,9 +171,13 @@
           ["Simple cases match hand-worked examples (for example, a 2-hour fix makes a 3-hour turn)", "Done"],
           ["Every rule documented and tied to its code and a test", "Done"],
           ["Sensitivity: how far each rate can slip before the plan fails (in Run ▸)", "Done"],
-          ["Backtest against real past weeks", "Planned"],
-        ].map(([t, st]) => h("li", {}, h("span", { class: `check-status check-${st.toLowerCase()}`, text: st }), h("span", { text: t })))),
-        h("p", { class: "note", text: "Done means covered by tests that run on every deploy." })]],
+          ["Backtest against real past weeks", state.backtest && state.backtest.weeks ? "Done locally" : "Planned"],
+        ].map(([t, st]) => h("li", {}, h("span", { class: `check-status check-${st.toLowerCase().replace(" ", "-")}`, text: st }), h("span", { text: t })))),
+        state.backtest && state.backtest.weeks ? h("div", { class: "card" },
+          h("h3", { text: `Backtest: ${state.backtest.history_file || "your history"}, ${state.backtest.times} times` }),
+          h("ul", {}, state.backtest.sentences.map((line) => h("li", { text: line }))),
+          h("p", { class: "note", text: `${state.backtest.runs.toLocaleString("en-US")} simulated weeks per prediction, seed ${state.backtest.seed}, rates from the ${state.backtest.lookback} weeks before each. Week by week: data/backtest_weeks.csv.` })) : null,
+        h("p", { class: "note", text: "Done means covered by tests that run on every deploy. Done locally means run on this machine's own data, which never leaves it." })]],
       ["limits", "Limits", [h("p", { text: "Public or synthetic inputs only, so results show the method, not any unit's readiness. Breaks are independent draws; real fleets have correlated failures. Parts supply and manpower aren't modeled yet." })]],
       ["changelog", "Changelog", [
         h("ul", { class: "changelog" }, state.changelog.slice(0, 4).map((c) => h("li", {},
@@ -220,6 +224,8 @@
     try {
       state.index = await getJSON("data/presets.json");
       state.changelog = await getJSON("data/changelog.json").catch(() => []);
+      // Only the private front door writes a backtest of real history [B-6]; the public site has none.
+      state.backtest = await getJSON("data/backtest.json").catch(() => null);
       const [unit, scenario, recovery] = state.index.default.split("__");
       state.pick = { unit, scenario, recovery };
       await loadPreset();
