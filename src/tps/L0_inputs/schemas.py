@@ -87,7 +87,7 @@ class Options:
     weekend_coverage_hours: tuple[tuple[str, int], ...] = (("Sat", 24), ("Sun", 24))
     go_profile: tuple[int, float, float] | None = None  # (goes per day, sortie hours, turn window hours)
     first_launch_time: str | None = None   # "07:30": shows real clock times in the play-by-play [X-5]
-    fly_windows: tuple[tuple[str, float, float], ...] | None = None  # (day, first launch, last land) in clock hours [T-4]
+    fly_windows: tuple[tuple[str, float, float], ...] | None = None  # (day, first launch, last land) in clock hours, past 24 after midnight [T-4]
     repeat_rate: float = 0.0
     recur_rate: float = 0.0
     repeat_window_hours: float = 24.0
@@ -333,6 +333,12 @@ def clock_hours(text: str) -> float:
     return int(h) + int(m) / 60
 
 
+def _window_hours(first_launch: str, last_land: str) -> tuple[float, float]:
+    """Clock hours of a fly window. A last land at or before the first launch is the next morning [T-5]."""
+    start, end = clock_hours(first_launch), clock_hours(last_land)
+    return start, end if end > start else end + 24
+
+
 def _validate_fly_windows(windows: Any) -> list[str]:
     if windows is None:
         return []
@@ -343,8 +349,8 @@ def _validate_fly_windows(windows: Any) -> list[str]:
         if not (isinstance(window, list) and len(window) == 2
                 and all(isinstance(t, str) and CLOCK_TIME.fullmatch(t) for t in window)):
             errors.append(f'options.fly_windows.{day} must be two 24-hour times like ["07:00", "22:00"]')
-        elif window[0] == "24:00" or clock_hours(window[1]) <= clock_hours(window[0]):
-            errors.append(f"options.fly_windows.{day}: the last land must come after the first launch, by 24:00")
+        elif window[0] == "24:00" or window[1] == window[0]:
+            errors.append(f"options.fly_windows.{day}: the first launch and last land can't be the same time")
     return errors
 
 
@@ -489,8 +495,7 @@ def load_scenario(config: dict[str, Any]) -> Scenario:
     elif "go_times" in raw_options:
         raw_options["go_times"] = tuple((float(a), float(b)) for a, b in raw_options["go_times"])
     if raw_options.get("fly_windows") is not None:
-        raw_options["fly_windows"] = tuple((day, clock_hours(raw_options["fly_windows"][day][0]),
-                                            clock_hours(raw_options["fly_windows"][day][1]))
+        raw_options["fly_windows"] = tuple((day, *_window_hours(*raw_options["fly_windows"][day]))
                                            for day in rules.flying_days)
     if raw_options.get("spares_cover_goes") is not None:
         raw_options["spares_cover_goes"] = tuple(raw_options["spares_cover_goes"])
@@ -529,6 +534,7 @@ def plan_warnings(scenario: Scenario) -> list[str]:
     warnings = []
     commit = commit_aircraft(scenario.inventory.pai, rules)
     previous = None
+    previous_land = None   # clock hour the day before's last go lands, with fly windows
     for day in rules.flying_days:
         plan = scenario.schedule[day]
         if aircraft_required(plan, rules) > commit:
@@ -550,16 +556,17 @@ def plan_warnings(scenario: Scenario) -> list[str]:
         previous = plan.daily_sorties
         if plan.daily_sorties and len([g for g in plan.goes if g]) > len(scenario.options.go_times):
             warnings.append(f"{day}: more goes planned than the {len(scenario.options.go_times)} the go profile allows.")
-        # [T-4]
-        if scenario.options.fly_windows and plan.daily_sorties:
-            window = next(w for w in scenario.options.fly_windows if w[0] == day)
+        # [T-4] [T-5]
+        if scenario.options.fly_windows:
+            _, opens, closes = next(w for w in scenario.options.fly_windows if w[0] == day)
             goes = [g for g, count in enumerate(plan.goes) if count and g < len(scenario.options.go_times)]
-            if goes:
-                last_go = goes[-1]
-                lands = window[1] + scenario.options.go_times[last_go][1]
-                if lands > window[2] + 1e-9:
-                    warnings.append(f"{day}: go {last_go + 1} lands at {_clock_text(lands)}, after the fly window "
-                                    f"closes at {_clock_text(window[2])}.")
+            if goes and previous_land is not None and previous_land - 24 > opens + 1e-9:
+                warnings.append(f"{day}: first launch at {_clock_text(opens)} comes before the day before's last go "
+                                f"lands ({_clock_text(previous_land - 24)}). Aircraft still flying can't make it.")
+            previous_land = opens + scenario.options.go_times[goes[-1]][1] if goes else None
+            if previous_land is not None and previous_land > closes + 1e-9:
+                warnings.append(f"{day}: go {goes[-1] + 1} lands at {_clock_text(previous_land)}, after the fly window "
+                                f"closes at {_clock_text(closes)}.")
         if rules.standard_patterns and plan.daily_sorties:
             flown = tuple(g for g in plan.goes if g)
             if flown not in rules.standard_patterns:

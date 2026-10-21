@@ -294,6 +294,9 @@ def run_week(
                     counts["sorties_flown"] += 1
                     flown_by_go[go] += 1
                     flown_today.add(jet.id)
+                    # [T-5] Still in the air at the next day's first launch: busy until it lands.
+                    if land > starts[index + 1] and jet.ready_at < land:
+                        jet.ready_at = land
                     if tier == "backup" and jet.id not in lineup_ids:
                         counts["spares_used"] += 1
                     # [S-3]

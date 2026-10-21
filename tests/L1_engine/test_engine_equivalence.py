@@ -59,7 +59,8 @@ def _random_config(r):
     if goes < 4 and "go_profile" not in options_extra:
         config["options"]["go_times"] = [[0, 2], [10, 12], [14, 16], [18, 20]][:goes]
     if r.random() < 0.4:   # [T-4] windows opening at a different hour each day
-        config["options"]["fly_windows"] = {d: [f"{r.randint(0, 9):02d}:{r.choice(['00', '30'])}", "24:00"] for d in schedule}
+        config["options"]["fly_windows"] = {   # [T-5] some close after midnight
+            d: [f"{r.randint(0, 9):02d}:{r.choice(['00', '30'])}", r.choice(["24:00", "02:15", "06:45"])] for d in schedule}
     return config
 
 

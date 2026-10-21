@@ -452,7 +452,7 @@ const WINDOW_TEXT = [[/^rates\.fix_windows\[(\d+)\]\.hours must be above the win
   [/^options\.go_profile\.(\w+) must be a positive number of hours$/, (m, k) => `${k === "sortie_hours" ? "Sortie length" : "Turn window"} must be more than 0 hours`],
   [/^schedule\.(\w+) plans more goes than the (\d+) per day the go profile allows$/, "$1 plans more goes than the $2 your unit flies"],
   [/^options\.fly_windows is missing (.+): set a window for every flying day, or none$/, "Fly windows: set $1 too, or clear every day"],
-  [/^options\.fly_windows\.(.+): the last land must come after the first launch, by 24:00$/, "$1 fly window: the last land must come after the first launch, by midnight"],
+  [/^options\.fly_windows\.(.+): the first launch and last land can't be the same time$/, "$1 fly window: the first launch and last land can't be the same time"],
   [/^options\.fly_windows\.(.+) must be two 24-hour times like .*$/, "$1 fly window: enter both the first launch and the last land"]];
 const friendly = (text) => WINDOW_TEXT.reduce((t, [pattern, to]) => t.replace(pattern, to), text)
   .replace(/^([a-z_]+(?:\.[a-z_0-9]+)?) must be between 0 and 1$/, (m, key) => (FIELD_LABELS[key] ? `${FIELD_LABELS[key]} must be between 0% and 100%` : m))

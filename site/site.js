@@ -174,7 +174,7 @@
           ["Backtest against real past weeks", "Planned"],
         ].map(([t, st]) => h("li", {}, h("span", { class: `check-status check-${st.toLowerCase()}`, text: st }), h("span", { text: t })))),
         h("p", { class: "note", text: "Done means covered by tests that run on every deploy." })]],
-      ["limits", "Limits", [h("p", { text: "Public or synthetic inputs only, so results show the method, not any unit's readiness. Breaks are independent draws; real fleets have correlated failures. Parts supply and manpower aren't modeled yet. Sorties that cross midnight aren't supported yet." })]],
+      ["limits", "Limits", [h("p", { text: "Public or synthetic inputs only, so results show the method, not any unit's readiness. Breaks are independent draws; real fleets have correlated failures. Parts supply and manpower aren't modeled yet." })]],
       ["changelog", "Changelog", [
         h("ul", { class: "changelog" }, state.changelog.slice(0, 4).map((c) => h("li", {},
           h("span", { class: "num", text: c.version }), ` · ${c.date} · `, c.changes[0] || ""))),

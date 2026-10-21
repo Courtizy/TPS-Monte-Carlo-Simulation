@@ -377,6 +377,8 @@ def run_compiled_week(plan: _Plan, rng: Random) -> tuple[list[dict[str, Any]], d
                     flown_count += 1
                     flown_by_go[go.index] += 1
                     flown.add(jet)
+                    if go.land > day.horizon and ready[jet] < go.land:   # still in the air at the next day's first launch
+                        ready[jet] = go.land
                     if jet not in lineup_set and jet not in primary_set and jet not in adds_set:
                         spares_used += 1
                     elif jet in adds_set and jet not in front_set:

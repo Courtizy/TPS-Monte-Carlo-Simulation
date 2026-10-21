@@ -5,6 +5,7 @@ All notable changes to Turn Pattern Sustainability. Versions follow semantic ver
 ## [0.12.0] - 2026-10-21
 - Fly windows: set each flying day's first launch and last land, for example 07:00 to 22:00, with a shorter Friday. A day that opens later gives overnight fixes more time before its first launch, and one that opens earlier gives them less.
 - A go that lands after its day's window closes gets a warning. The plan still runs as entered.
+- Windows can run past midnight, for example 14:00 to 02:00. Those sorties count to the day they launch on. Aircraft that land after midnight have less time for fixes before the next day's first launch, and an aircraft still flying can't make that launch.
 - With fly windows set, the play-by-play shows clock times.
 - Plans without fly windows give the same results as before.
 
