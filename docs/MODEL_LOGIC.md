@@ -153,12 +153,12 @@ $$\text{flies go } k \iff ready \le launch_k$$
 
 ### T-4: Fly windows
 **Source:** Unit convention: each flying day has a window from first launch to last land, and it can differ by day (a short Friday, a late Tuesday start).
-**Rule:** Fly windows are optional. If set, every flying day has one, given as military times (`"0700"` to `"2200"`; `"07:00"` is read too). A last land at or before the first launch is the next morning (T-5). Hour 0 of the week is the first flying day's opening time. Each flying day's first launch moves by how much earlier or later its window opens, and its goes move with it:
+**Rule:** Fly windows are optional. If any are set, every flying day has one: a day left blank takes the day before's window (days before the first one given take that one), so the plan always runs. Windows are given as military times (`"0700"` to `"2200"`; `"07:00"` is read too). A last land at or before the first launch is the next morning (T-5). Hour 0 of the week is the first flying day's opening time. Each flying day's first launch moves by how much earlier or later its window opens, and its goes move with it:
 
 $$start_i = 24i + (open_i - open_{\text{first day}})$$
 
 Fixes still run around the clock on weekdays (F-4), so a window that opens later gives overnight fixes more time before the first launch, and one that opens earlier gives them less. The first-day rule (F-3) waits for the next allowed day's first launch. Each day's front line is counted at its first launch, and aircraft ready at the end of a day are counted at the next day's first launch. Weekend days and next Monday keep the first day's clock. A go that lands after its day's window closes is a warning, not an error: the plan still runs as entered. Fly windows also set the clock times in the play-by-play (X-5).
-**Code:** `L0_inputs/schemas.py` → `day_starts`, `launch_clock`, `_validate_fly_windows`, `plan_warnings`; `L1_engine/reference.py` → `run_week` (`starts`).
+**Code:** `L0_inputs/schemas.py` → `fill_fly_windows`, `day_starts`, `launch_clock`, `_validate_fly_windows`, `plan_warnings`; `L1_engine/reference.py` → `run_week` (`starts`).
 **Test:** `test_fly_windows_move_each_days_first_launch`, `test_a_later_window_gives_an_overnight_fix_time_to_finish`, `test_fly_window_checks`, `test_a_go_landing_after_the_window_closes_is_a_warning`.
 
 ### T-5: Sorties past midnight
@@ -588,7 +588,7 @@ Other settings (commit, spare rate, goes, weekend hours, first-day rule) come fr
 
 ### B-5: Each week's own launch and land times
 **Source:** Unit convention: flying schedules record each day's planned and actual first launch and last land.
-**Rule:** A history file may add four columns to each day's row: `planned_first_launch`, `planned_last_land`, `flown_first_launch`, `flown_last_land` (clock times; a last land before the first launch is the next morning, T-5). The backtest times each week by one set, chosen when it runs: **planned** (the default) keeps to B-1, since only what was known beforehand goes into the prediction, and tests the plan; **flown** tests the model on how the week actually ran. A week with times becomes that week's fly windows (T-4); a flying day without times takes the plan setup's window, or else the first time given that week. A week with no times uses the plan setup's, so files without these columns work as before. Synthetic history fills these columns when the plan has fly windows: launches run 0 to 60 minutes late on some days, and the week is played out on the flown times.
+**Rule:** A history file may add four columns to each day's row: `planned_first_launch`, `planned_last_land`, `flown_first_launch`, `flown_last_land` (clock times; a last land before the first launch is the next morning, T-5). The backtest times each week by one set, chosen when it runs: **planned** (the default) keeps to B-1, since only what was known beforehand goes into the prediction, and tests the plan; **flown** tests the model on how the week actually ran. A week with times becomes that week's fly windows (T-4); a flying day without times takes the plan setup's window, or else the day before's (T-4). A week with no times uses the plan setup's, so files without these columns work as before. Synthetic history fills these columns when the plan has fly windows: launches run 0 to 60 minutes late on some days, and the week is played out on the flown times.
 **Code:** `L4_evidence/backtest.py` → `parse_history`, `week_windows`, `week_config`, `prepare`, `synthetic_history`.
 **Test:** `test_weeks_use_their_own_planned_or_flown_times`, `test_synthetic_history_carries_planned_and_flown_times`.
 

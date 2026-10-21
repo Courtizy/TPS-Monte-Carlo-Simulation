@@ -60,8 +60,11 @@ def test_a_later_window_gives_an_overnight_fix_time_to_finish():
 def test_fly_window_checks():
     good = example(options={"fly_windows": _windows(Fri=["0700", "2400"], Thu=["07:00", "22:00"])})
     assert not validate_config(good)                  # military time; a colon is read too
-    partial = example(options={"fly_windows": {"Mon": ["0700", "2200"]}})
-    assert any("missing Tue" in e for e in validate_config(partial))
+    partial = example(options={"fly_windows": {"Tue": ["0800", "2200"], "Thu": ["1000", "0100"]}})
+    assert not validate_config(partial)                 # blank days take the day before's window
+    filled = dict((d, (a, b)) for d, a, b in load_scenario(partial).options.fly_windows)
+    assert filled["Mon"] == filled["Tue"] == filled["Wed"] == (8.0, 22.0)   # Monday takes the first one given
+    assert filled["Thu"] == filled["Fri"] == (10.0, 25.0)
     same = example(options={"fly_windows": _windows(Tue=["0700", "0700"])})
     assert any("fly_windows.Tue: the first launch and last land can't be the same time" in e for e in validate_config(same))
     bad_time = example(options={"fly_windows": _windows(Wed=["7:00", "2200"])})

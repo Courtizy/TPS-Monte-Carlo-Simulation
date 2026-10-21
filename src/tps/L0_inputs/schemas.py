@@ -258,9 +258,6 @@ def validate_config(config: Any) -> list[str]:
     options = config.get("options", {}) if isinstance(config.get("options"), dict) else {}
     if isinstance(options.get("fly_windows"), dict) and options["fly_windows"]:
         errors += [f"options.fly_windows.{day} is not a flying day" for day in options["fly_windows"] if day not in flying]
-        missing = [day for day in flying if day not in options["fly_windows"]]
-        if missing:
-            errors.append(f"options.fly_windows is missing {', '.join(missing)}: set a window for every flying day, or none")
     profile = options.get("go_profile") if isinstance(options.get("go_profile"), dict) else None
     goes_allowed = (profile.get("goes_per_day") if profile else
                     len(options["go_times"]) if isinstance(options.get("go_times"), list) else MAX_GOES)
@@ -338,6 +335,20 @@ def military(hours: float) -> str:
     """7.5 as '0730'."""
     h, m = divmod(round(hours * 60), 60)
     return f"{h:02d}{m:02d}"
+
+
+# [T-4]
+def fill_fly_windows(windows: dict[str, list[str]], flying_days: tuple[str, ...]) -> dict[str, list[str]]:
+    """Every flying day's window: a day without one takes the day before's, so a plan always runs.
+
+    Days before the first one given take the first one given.
+    """
+    first = next(windows[day] for day in flying_days if day in windows)
+    filled, previous = {}, first
+    for day in flying_days:
+        previous = windows.get(day, previous)
+        filled[day] = list(previous)
+    return filled
 
 
 def _window_hours(first_launch: str, last_land: str) -> tuple[float, float]:
@@ -504,8 +515,8 @@ def load_scenario(config: dict[str, Any]) -> Scenario:
     elif "go_times" in raw_options:
         raw_options["go_times"] = tuple((float(a), float(b)) for a, b in raw_options["go_times"])
     if raw_options.get("fly_windows") is not None:
-        raw_options["fly_windows"] = tuple((day, *_window_hours(*raw_options["fly_windows"][day]))
-                                           for day in rules.flying_days)
+        filled = fill_fly_windows(raw_options["fly_windows"], rules.flying_days)
+        raw_options["fly_windows"] = tuple((day, *_window_hours(*filled[day])) for day in rules.flying_days)
     if raw_options.get("spares_cover_goes") is not None:
         raw_options["spares_cover_goes"] = tuple(raw_options["spares_cover_goes"])
     weekend = dict(Options().weekend_coverage_hours)

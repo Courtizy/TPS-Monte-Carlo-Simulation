@@ -185,11 +185,23 @@ function buildFlyWindows(cfg) {
   const windows = (cfg.options && cfg.options.fly_windows) || {};
   $("fly-window-body").replaceChildren(...flyingDays(cfg).map((day) => {
     const [open, close] = (windows[day] || ["", ""]).map(militaryTime);
-    const input = (field, value, label) => el("input", { type: "text", inputmode: "numeric", maxlength: 5, placeholder: field === "open" ? "0700" : "2200",
+    const input = (field, value, label) => el("input", { type: "text", inputmode: "numeric", maxlength: 5, list: "military-times",
       "data-fly-day": day, "data-fly": field, value, "aria-label": `${day} ${label}, military time` });
     return el("tr", {}, el("th", { scope: "row", text: day }),
       el("td", {}, input("open", open, "first launch")), el("td", {}, input("close", close, "last land")));
   }));
+}
+
+// A blank day runs on the day before's window; its boxes show that window greyed out.
+function flyPlaceholders() {
+  const rows = [...$("fly-window-body").querySelectorAll("tr")].map((row) => [...row.querySelectorAll("input")]);
+  const typed = rows.find(([a, b]) => a.value.trim() && b.value.trim());
+  let previous = typed ? [typed[0].value, typed[1].value].map(militaryTime) : ["0700", "2200"];
+  for (const [open, close] of rows) {
+    if (open.value.trim() && close.value.trim()) previous = [militaryTime(open.value), militaryTime(close.value)];
+    open.placeholder = previous[0];
+    close.placeholder = previous[1];
+  }
 }
 
 function flyWindowsFromForm() {
@@ -238,6 +250,7 @@ function configToForm(cfg) {
   $("allow_2407_adds").checked = Boolean(options.allow_2407_adds);
   buildGrid(cfg, profile.goes_per_day);
   buildFlyWindows(cfg);
+  flyPlaceholders();
   updateTotals();
   $("config-json").value = JSON.stringify(cfg, null, 2);
 }
@@ -1920,6 +1933,8 @@ async function loadExamples() {
 }
 
 function wireForm() {
+  $("military-times").replaceChildren(...Array.from({ length: 49 }, (_, i) =>
+    el("option", { value: `${String(Math.floor(i / 2)).padStart(2, "0")}${i % 2 ? "30" : "00"}` })));
   for (const id of ["sat_hours", "sun_hours"]) {
     $(id).replaceChildren(...COVERAGE.map(([hours, label]) => el("option", { value: hours, text: label })));
   }
@@ -1935,8 +1950,10 @@ function wireForm() {
   });
   $("required_from_sute").addEventListener("change", () => { updateTotals(); scheduleCheck(); });
   $("edit-plan").addEventListener("click", () => setPlanCollapsed(false));
+  $("fly-window-body").addEventListener("input", flyPlaceholders);
   $("fly-window-body").addEventListener("change", (event) => {
     if (event.target.dataset.fly) event.target.value = militaryTime(event.target.value);   // 700 shows as 0700
+    flyPlaceholders();
   });
   $("copy-fly-window").addEventListener("click", () => {
     const rows = [...$("fly-window-body").querySelectorAll("tr")];

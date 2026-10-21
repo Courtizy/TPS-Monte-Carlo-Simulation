@@ -24,7 +24,7 @@ from typing import Any
 
 from tps.L2_metrics.metrics import wilson_interval
 from tps.L0_inputs.rules import aircraft_required, day_spares
-from tps.L0_inputs.schemas import CLOCK_TIME, DayPlan, clock_hours, load_scenario, military
+from tps.L0_inputs.schemas import CLOCK_TIME, DayPlan, clock_hours, fill_fly_windows, load_scenario, military
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 WEEK_COLUMNS = ("week_start", "pai", "mc_at_start", "next_monday_mc", "required_sorties")
@@ -127,15 +127,15 @@ def week_windows(base: dict[str, Any], week: dict[str, Any], source: str) -> dic
     """The week's fly windows from its own planned or flown times, or None to use the plan setup's.
 
     A flying day with no times of its own takes the plan setup's window for that day if there is one,
-    else the first time given that week, so a day off or a blank row doesn't stop the week.
+    else the day before's, so a day off or a blank row doesn't stop the week.
     """
-    given = {day: d["times"][source] for day, d in week["days"].items() if source in d.get("times", {})}
+    flying = tuple((base.get("rules") or {}).get("flying_days", DAYS[:5]))
+    given = {day: d["times"][source] for day, d in week["days"].items() if source in d.get("times", {}) and day in flying}
     if not given:
         return None
     setup = (base.get("options") or {}).get("fly_windows") or {}
-    fallback = next(iter(given.values()))
-    flying = (base.get("rules") or {}).get("flying_days", DAYS[:5])
-    return {day: list(given.get(day) or setup.get(day) or fallback) for day in flying}
+    setup = fill_fly_windows(setup, flying) if any(day in setup for day in flying) else {}
+    return fill_fly_windows({**setup, **{d: t for d, t in given.items() if d in flying}}, flying)
 
 
 def week_config(base: dict[str, Any], week: dict[str, Any], rates: dict[str, Any],
