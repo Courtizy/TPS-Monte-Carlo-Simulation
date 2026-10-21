@@ -2,6 +2,10 @@
 
 All notable changes to Turn Pattern Sustainability. Versions follow semantic versioning; dates are when each version was built.
 
+## [0.12.2] - 2026-10-21
+- Fly-window boxes take a typed time or one picked from a list. A day left blank runs on the day before's window, shown in grey, so a plan with some days set always runs.
+- Simulation results are unchanged.
+
 ## [0.12.1] - 2026-10-21
 - Clock times use military time everywhere: fly windows are typed as 0700 and 2200, and warnings, the play-by-play, and history files show times the same way. Times with a colon, like 07:00, are still read.
 - Simulation results are unchanged.

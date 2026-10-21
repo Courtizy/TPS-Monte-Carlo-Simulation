@@ -127,11 +127,12 @@
         </div>
         <p id="go-times-note" class="note"></p>
         <h3 class="sub-legend">Fly windows (optional)</h3>
-        <p class="note">Each day's first launch to last land, in military time (0700, 2200). Days that open earlier or later move their goes with them, so overnight fixes get more or less time. A last land earlier than the first launch means the next morning; those sorties still count to the day they launch. Leave every day blank to time each day from its own first launch.</p>
+        <p class="note">Each day's first launch to last land, in military time (0700, 2200). Days that open earlier or later move their goes with them, so overnight fixes get more or less time. Type a time or pick one from the list. A last land earlier than the first launch means the next morning; those sorties still count to the day they launch. A blank day uses the day before's window, shown in grey. Leave every day blank to time each day from its own first launch.</p>
         <table class="window-table">
           <thead><tr><th scope="col">Day</th><th scope="col">First launch</th><th scope="col">Last land</th></tr></thead>
           <tbody id="fly-window-body"></tbody>
         </table>
+        <datalist id="military-times"></datalist>
         <button type="button" id="copy-fly-window" class="secondary small">Use the first day's window every day</button>
         </div>
       </details>
