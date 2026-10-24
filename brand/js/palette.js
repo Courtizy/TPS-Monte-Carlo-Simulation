@@ -11,7 +11,7 @@ export const tokens = {
       "short": "TPS",
       "question": "Can the fleet meet the flying schedule?",
       "step": "01 · Operations",
-      "brandFill": "#0F766E",
+      "brandFill": "#2160B0",
       "seriesOrder": [
         "tps",
         "roi",
@@ -20,13 +20,13 @@ export const tokens = {
         "sky"
       ],
       "sequential": [
-        "#D2F3EF",
-        "#A4DED7",
-        "#70C6BD",
-        "#3EACA2",
-        "#089087",
-        "#00736B",
-        "#005750"
+        "#E0ECFE",
+        "#B7D3FC",
+        "#8CB6F4",
+        "#6499E8",
+        "#427CD2",
+        "#2A61B1",
+        "#18488C"
       ]
     },
     "roi": {
@@ -102,14 +102,14 @@ export const tokens = {
   },
   "series": {
     "light": {
-      "tps": "#0A8D83",
+      "tps": "#0B3D91",
       "roi": "#B4410C",
       "valuation": "#4F46E5",
       "plum": "#944561",
       "sky": "#1F93B8"
     },
     "dark": {
-      "tps": "#1EA89D",
+      "tps": "#9DBDF2",
       "roi": "#D26B45",
       "valuation": "#7882E0",
       "plum": "#A4587D",
@@ -118,12 +118,12 @@ export const tokens = {
   },
   "accentText": {
     "light": {
-      "tps": "#0F766E",
+      "tps": "#2160B0",
       "roi": "#B4410C",
       "valuation": "#4F46E5"
     },
     "dark": {
-      "tps": "#1EA89D",
+      "tps": "#9DBDF2",
       "roi": "#D26B45",
       "valuation": "#7882E0"
     }

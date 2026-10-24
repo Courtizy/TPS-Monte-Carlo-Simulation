@@ -7,12 +7,15 @@ GitHub Pages sites, Python charts and Excel exports all use the same values.
 Edit colors HERE, then run ``python brand/build.py``.
 
 Validated with the dataviz palette checks (OKLab ΔE ×100, Machado 2009 CVD
-simulation) on 2026-10-03:
+simulation) on 2026-10-24, after TPS moved from teal to Air Force blue
+(teal sat too close to Delta Readiness green):
 
     App order                     Light (CVD / normal)   Dark (CVD / normal)
-    TPS  -> ROI VAL PLUM SKY      13.4 / 23.6            12.0 / 17.1
-    ROI  -> TPS VAL PLUM SKY      13.4 / 23.6            12.0 / 17.1
-    VAL  -> TPS ROI SKY  PLUM     13.4 / 23.6            12.0 / 18.1
+    TPS  -> ROI VAL PLUM SKY      14.2 / 23.6            12.4 / 17.1
+    ROI  -> TPS VAL PLUM SKY      11.2 / 15.8            12.4 / 16.6
+    VAL  -> TPS ROI SKY  PLUM     11.2 / 15.8            12.4 / 16.6
+
+TPS blue and Sky are never adjacent in any order (slots 1 and 5, or 2 and 4).
 
 All series clear 3:1 against both chart surfaces in their mode. The first
 three slots also pass the all-pairs check (scatter, small multiples).
@@ -87,9 +90,9 @@ ICON_PATHS: dict[str, str] = {
 }
 
 #: Solid brand fills: icon tiles, header bars, primary buttons, sliders.
-#: White text on each clears WCAG AA (5.47 / 5.67 / 6.29 : 1).
+#: White text on each clears WCAG AA (6.24 / 5.67 / 6.29 : 1).
 BRAND_FILL: dict[App, str] = {
-    "tps": "#0F766E",
+    "tps": "#2160B0",  # Air Force blue
     "roi": "#B4410C",
     "valuation": "#4F46E5",
 }
@@ -126,18 +129,18 @@ SURFACE: dict[Mode, dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 #: Chart-mark steps of each hue, tuned per mode. The brand fills are not
-#: used as chart marks: teal #0F766E reads gray at chart size and all three
-#: fills fall below 3:1 on the dark surface.
+#: used as chart marks: they are tuned for white text, not for separation,
+#: and all three fills fall below 3:1 on the dark surface.
 SERIES: dict[Mode, dict[str, str]] = {
     "light": {
-        "tps": "#0A8D83",
+        "tps": "#0B3D91",
         "roi": "#B4410C",
         "valuation": "#4F46E5",
         "plum": "#944561",
         "sky": "#1F93B8",
     },
     "dark": {
-        "tps": "#1EA89D",
+        "tps": "#9DBDF2",
         "roi": "#D26B45",
         "valuation": "#7882E0",
         "plum": "#A4587D",
@@ -166,7 +169,7 @@ ACCENT_TEXT: dict[Mode, dict[App, str]] = {
 
 #: Seven steps, light -> dark, in each app's own hue (OKLCH L 0.94 -> 0.41).
 SEQUENTIAL: dict[App, tuple[str, ...]] = {
-    "tps": ("#D2F3EF", "#A4DED7", "#70C6BD", "#3EACA2", "#089087", "#00736B", "#005750"),
+    "tps": ("#E0ECFE", "#B7D3FC", "#8CB6F4", "#6499E8", "#427CD2", "#2A61B1", "#18488C"),
     "roi": ("#FEE5DD", "#FFC0AB", "#F39A7B", "#DD7955", "#C15B35", "#A0421D", "#7E2C08"),
     "valuation": ("#E6EAFD", "#C5CEFF", "#A1ADFF", "#818CF9", "#676EDF", "#4F54BC", "#3A3C96"),
 }
@@ -275,7 +278,7 @@ def plotly_template(app: App, mode: Mode = "dark"):
 
 
 def excel_hex(color: str) -> str:
-    """'#0F766E' -> '0F766E' for openpyxl fills and fonts."""
+    """'#2160B0' -> '2160B0' for openpyxl fills and fonts."""
     return color.lstrip("#").upper()
 
 

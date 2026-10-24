@@ -54,7 +54,7 @@ Every sortie launches and lands at home. With fly windows, a late go can land af
 
 ## Branding
 
-The page uses the Decision Models brand kit in `brand/` (TPS is app 01: teal, "Can the fleet meet the flying schedule?"). `<html data-app="tps">` picks the app; the build copies `brand/css`, `icons` and `js` into the site. Dark is the default and light follows the device, with the Auto/Light/Dark switch forcing either. Page colors are aliases for the brand tokens (`site/styles.css`, top). Chart marks use the series colors, good and bad meanings use the status colors with a label, and the disclaimer footer appears on every page and printout. To change colors, edit `brand/palette.py` and follow `brand/README.md`.
+The page uses the Decision Models brand kit in `brand/` (TPS is app 01: Air Force blue, "Can the fleet meet the flying schedule?"). `<html data-app="tps">` picks the app; the build copies `brand/css`, `icons` and `js` into the site. Dark is the default and light follows the device, with the Auto/Light/Dark switch forcing either. Page colors are aliases for the brand tokens (`site/styles.css`, top). Chart marks use the series colors, good and bad meanings use the status colors with a label, and the disclaimer footer appears on every page and printout. To change colors, edit `brand/palette.py` and follow `brand/README.md`.
 
 ## Page layout
 
