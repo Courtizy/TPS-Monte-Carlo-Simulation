@@ -527,7 +527,7 @@ a.button.primary { background: var(--brand-fill); border-color: var(--brand-fill
   @page { size: letter; margin: 0.45in; }
   :root, :root[data-theme="dark"] {
     --page: #ffffff; --panel: #ffffff; --line: #D5DAE0; --ink: #111A24; --ink-secondary: #4A5866; --ink-muted: #6B7785;
-    --c-tps: #0A8D83; --c-roi: #B4410C; --c-valuation: #4F46E5; --c-plum: #944561; --c-sky: #1F93B8; --accent-tps: #0F766E;
+    --c-tps: #0B3D91; --c-roi: #B4410C; --c-valuation: #4F46E5; --c-plum: #944561; --c-sky: #1F93B8; --accent-tps: #2160B0;
     --status-good: #1E8A1E; --status-warning: #9A6A00; --status-critical: #C02F2F;
     --status-good-text: #1A7A1A; --status-warning-text: #875D00; --status-critical-text: #B42A2A;
     color-scheme: light;
