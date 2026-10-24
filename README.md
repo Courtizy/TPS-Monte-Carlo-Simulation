@@ -4,7 +4,7 @@
 
 Personal project · public or synthetic data only · not endorsed by DoD or the U.S. Air Force.
 
-Status: **In development.** Public pages show synthetic inputs only.
+Status: **Live.** Public pages show synthetic inputs only.
 
 ## How the repo is built (two front doors)
 
