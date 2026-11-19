@@ -226,3 +226,29 @@ code, pre, .num { font-family: var(--font-mono); }
 .status--warning::before { content: "!"; font-weight: 700; }
 .status--critical { color: var(--status-critical-text); }
 .status--critical::before { content: "\2715"; }
+
+/* ---- Shape (2026-11-19): rounded and soft, after the Delta Readiness frame. Colors and type stay as above. ----
+   Cards 22px with a soft shadow in light (none in dark), icon tiles 12px, buttons, tabs and pills fully round,
+   inputs 12px. Apps use these tokens in their own stylesheets so every page shares one shape. */
+:root {
+  --radius-card: 22px;
+  --radius-inner: 14px;
+  --radius-tile: 12px;
+  --radius-field: 12px;
+  --radius-control: 999px;
+  --shadow-card: 0 0 0 transparent;   /* not "none": apps combine it with inset caps */
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) { --shadow-card: 0 1px 2px rgba(17, 26, 36, 0.05), 0 6px 20px rgba(17, 26, 36, 0.06); }
+}
+:root[data-theme="light"] { --shadow-card: 0 1px 2px rgba(17, 26, 36, 0.05), 0 6px 20px rgba(17, 26, 36, 0.06); }
+
+.brand-tile { border-radius: var(--radius-tile); }
+.brand-header { box-shadow: var(--shadow-card); position: relative; }
+.brand-card { border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
+.app-status {
+  padding: 4px 10px; border-radius: var(--radius-control); font-weight: 600;
+  background: color-mix(in srgb, var(--ink-secondary) 12%, transparent);
+}
+.app-status--live { color: var(--accent, var(--ink)); background: color-mix(in srgb, var(--accent, var(--ink)) 14%, transparent); }
+.status { border-radius: var(--radius-control); }
