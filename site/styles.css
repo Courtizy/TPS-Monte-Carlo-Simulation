@@ -576,3 +576,34 @@ a.button.primary { background: var(--brand-fill); border-color: var(--brand-fill
   body[data-view="lead"] section:has(#where-h) .chart-note { display: none; }
   body[data-view="lead"] .risk-strip .risk { padding: 0.1rem; }
 }
+
+/* ---- Rounded shape (2026-11-19): the suite's soft, phone-native shape, using the brand kit's shape tokens.
+   Colors, type and layout are unchanged. ---- */
+.plan, .card, .res-left, .res-bar-top { border-radius: var(--radius-card, 22px); box-shadow: var(--shadow-card, 0 0 0 transparent); }
+.tour-box { border-radius: var(--radius-card, 22px); }
+.steps li, .kpi { border-radius: var(--radius-inner, 14px); box-shadow: var(--shadow-card, 0 0 0 transparent); }
+.card, .plan, .tour-box, .summary-card, .brief-card, .ov-answer, .kpi--main { overflow: hidden; }
+button, .file-button, a.button { border-radius: var(--radius-control, 999px); }
+input[type="text"], input[type="number"], select, textarea { border-radius: var(--radius-field, 12px); }
+.message, .board-scroll { border-radius: var(--radius-field, 12px); }
+.risk, .season-cell { border-radius: 10px; }
+.band, .tag, .tag-focus, .tag-watch, .tag-low { border-radius: var(--radius-control, 999px); }
+.tile { border-radius: 5px; }
+.history button, .link-button { border-radius: var(--radius-field, 12px); }
+.brand-header__inner .app-status { border: 0; }
+.app-status--live .app-status__dot { background: var(--accent); border-color: var(--accent); }
+/* Segmented controls: one rounded track, the chosen option a filled pill */
+.theme-switch, .view-toggle { border-radius: var(--radius-control, 999px); padding: 3px; gap: 2px; }
+.theme-switch button, .view-toggle button { border-radius: var(--radius-control, 999px); }
+.theme-switch button + button, .view-toggle button + button { border-left: 0; }
+/* Overview · Results · Method as pill tabs: the current page is a tinted pill in the app's color */
+.app-tabs__inner { padding-block: 6px; gap: 4px; }
+.app-tabs a { border-bottom: 0; border-radius: var(--radius-control, 999px); padding: 0 1rem; }
+.app-tabs a[aria-current="page"] { background: color-mix(in srgb, var(--brand-fill) 16%, var(--panel)); box-shadow: var(--shadow-card, 0 0 0 transparent); }
+.tour-strip button { border-radius: var(--radius-control, 999px); }
+/* Colored caps on rounded cards: an inset bar that follows the corners, instead of a thick top border */
+.ov-answer { border-top: 1px solid var(--line); box-shadow: inset 0 4px 0 var(--series-1), var(--shadow-card, 0 0 0 transparent); }
+.summary-card { border-top: 1px solid var(--line); box-shadow: inset 0 6px 0 var(--brand-fill), var(--shadow-card, 0 0 0 transparent); }
+.brief-card { border-top: 1px solid var(--line); box-shadow: inset 0 6px 0 var(--safety), var(--shadow-card, 0 0 0 transparent); }
+.kpi--main { border-top: 1px solid var(--line); box-shadow: inset 0 3px 0 var(--series-1), var(--shadow-card, 0 0 0 transparent); }
+.tour-box { border-top: 1px solid var(--line); box-shadow: inset 0 4px 0 var(--brand-fill), 0 10px 30px rgba(0, 0, 0, 0.35); }
