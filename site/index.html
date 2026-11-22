@@ -17,7 +17,8 @@
   </script>
 </head>
 <body>
-  <div class="hub-bar"><div class="hub-bar__inner"><a href="https://courtizy.github.io/">← Decision Models</a><span>Jason C. Courtoy</span></div></div>
+  <div class="hub-bar"><div class="hub-bar__inner"><a href="https://courtizy.github.io/">← Decision Models</a><span class="hub-bar__end"><span class="hub-bar__name">Jason C. Courtoy</span>
+    <span class="theme-switch no-print" role="group" aria-label="Color theme"><button type="button" data-theme-choice="auto">Auto</button><button type="button" data-theme-choice="light">Light</button><button type="button" data-theme-choice="dark">Dark</button></span></span></div></div>
   <header class="brand-header">
     <div class="brand-header__inner">
       <div class="brand-tile" aria-hidden="true">
@@ -37,21 +38,9 @@
       <a href="#results" data-page="results">Results</a>
       <a href="#method" data-page="method">Method</a>
       <span class="app-tabs__spacer"></span>
-      <div class="theme-switch" role="group" aria-label="Color theme">
-        <button type="button" data-theme-choice="auto">Auto</button>
-        <button type="button" data-theme-choice="light">Light</button>
-        <button type="button" data-theme-choice="dark">Dark</button>
-      </div>
       <a href="#run" data-page="run" class="run-link">Run ▸</a>
     </div>
   </nav>
-  <div class="tour-strip no-print">
-    <div class="tour-strip__inner">
-      <span>New here? A guided tour shows what drives each result.</span>
-      <button type="button" class="secondary small" data-tour="results">Tour the results</button>
-      <button type="button" class="secondary small" data-tour="planner">Tour the planner</button>
-    </div>
-  </div>
   <main id="page-overview" class="page" aria-label="Overview"></main>
   <main id="page-results" class="page" aria-label="Results" hidden></main>
   <main id="page-method" class="page" aria-label="Method" hidden></main>
@@ -64,6 +53,7 @@
     <div class="engine-status">
       <p id="status" class="engine-state engine-loading" role="status">Loading the model. The first load takes a few seconds.</p>
       <p id="build" class="build"></p>
+      <button type="button" class="secondary small no-print" data-tour="planner">Tour the planner</button>
     </div>
   </div>
 

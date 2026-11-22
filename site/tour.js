@@ -57,7 +57,7 @@
     { page: "method", target: "#m-validation", title: "How far to trust it",
       action: () => { const d = q("#m-validation"); if (d) d.open = true; },
       text: "Done means covered by tests that run on every deploy. Backtesting against real weeks is still planned, so these results show the method, not any unit's readiness." },
-    { page: "method", target: ".tour-strip", title: "Try it yourself",
+    { page: "run", target: ".run-intro [data-tour=planner]", title: "Try it yourself",
       action: async () => { await site().pick(site().defaultPick()); },
       text: "The planner tour runs the engine on a plan you can edit, with the same views. Use public or synthetic values only.", next: "planner" },
   ];
