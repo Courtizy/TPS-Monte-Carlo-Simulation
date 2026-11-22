@@ -64,6 +64,11 @@ CORE_NAME = "Shared Core"
 CORE_QUESTION = "How likely is each outcome?"
 
 ENDORSEMENT = "by Jason C. Courtoy"
+
+#: The hub: the portfolio home page. Every page EXCEPT the hub links back to it
+#: (the .hub-bar at the very top of the page).
+HUB_URL = "https://courtizy.github.io/"
+HUB_LABEL = "Decision Models"
 DISCLAIMER = (
     "Personal project · public or synthetic data only · "
     "not endorsed by DoD or the U.S. Air Force"
@@ -250,6 +255,7 @@ def all_tokens() -> dict:
         "statusText": STATUS_TEXT,
         "maxSeries": MAX_SERIES,
         "endorsement": ENDORSEMENT,
+        "hub": {"url": HUB_URL, "label": HUB_LABEL},
         "disclaimer": DISCLAIMER,
         "fonts": FONTS,
     }

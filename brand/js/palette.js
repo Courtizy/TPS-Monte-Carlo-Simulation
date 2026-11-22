@@ -174,6 +174,10 @@ export const tokens = {
   },
   "maxSeries": 5,
   "endorsement": "by Jason C. Courtoy",
+  "hub": {
+    "url": "https://courtizy.github.io/",
+    "label": "Decision Models"
+  },
   "disclaimer": "Personal project · public or synthetic data only · not endorsed by DoD or the U.S. Air Force",
   "fonts": {
     "sans": "'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif",

@@ -87,6 +87,22 @@ code, pre, .num {{ font-family: var(--font-mono); }}
 .num {{ font-variant-numeric: tabular-nums; }}
 .muted {{ color: var(--ink-secondary); }}
 
+/* ---- Hub bar: first thing on every page except the hub itself ---- */
+.hub-bar {{ border-bottom: 1px solid var(--line); background: var(--page); font-size: 0.875rem; }}
+.hub-bar__inner {{
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+}}
+.hub-bar a {{ display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--ink); font-weight: 500; text-decoration: none; }}
+.hub-bar a:hover {{ color: var(--accent, var(--ink)); }}
+.hub-bar span {{ color: var(--ink-secondary); }}
+
 /* ---- Header: icon tile, name, question, endorsement ---- */
 .brand-header {{
   border-top: 6px solid var(--brand-fill);
@@ -117,6 +133,11 @@ code, pre, .num {{ font-family: var(--font-mono); }}
 .brand-header__question {{ margin: 0; font-size: 1rem; font-weight: 500; }}
 .brand-header__by {{ font-size: 0.875rem; color: var(--ink-secondary); }}
 
+/* ---- App status pill: "Live" (filled dot, app accent) or "In development" (hollow dot) ---- */
+.app-status {{ display: inline-flex; align-items: center; gap: 8px; font-size: 0.8125rem; color: var(--ink-secondary); white-space: nowrap; }}
+.app-status__dot {{ width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink-secondary); box-sizing: border-box; flex-shrink: 0; }}
+.app-status--live .app-status__dot {{ background: var(--accent, var(--ink)); border-color: var(--accent, var(--ink)); }}
+
 /* ---- Cards and footer ---- */
 .brand-card {{ background: var(--panel); border: 1px solid var(--line); padding: 20px; }}
 .brand-footer {{
@@ -144,6 +165,32 @@ code, pre, .num {{ font-family: var(--font-mono); }}
 .status--warning::before {{ content: "!"; font-weight: 700; }}
 .status--critical {{ color: var(--status-critical-text); }}
 .status--critical::before {{ content: "\\2715"; }}
+
+/* ---- Shape (2026-11-19): rounded and soft, after the Delta Readiness frame. Colors and type stay as above. ----
+   Cards 22px with a soft shadow in light (none in dark), icon tiles 12px, buttons, tabs and pills fully round,
+   inputs 12px. Apps use these tokens in their own stylesheets so every page shares one shape. */
+:root {{
+  --radius-card: 22px;
+  --radius-inner: 14px;
+  --radius-tile: 12px;
+  --radius-field: 12px;
+  --radius-control: 999px;
+  --shadow-card: 0 0 0 transparent;   /* not "none": apps combine it with inset caps */
+}}
+@media (prefers-color-scheme: light) {{
+  :root:not([data-theme="dark"]) {{ --shadow-card: 0 1px 2px rgba(17, 26, 36, 0.05), 0 6px 20px rgba(17, 26, 36, 0.06); }}
+}}
+:root[data-theme="light"] {{ --shadow-card: 0 1px 2px rgba(17, 26, 36, 0.05), 0 6px 20px rgba(17, 26, 36, 0.06); }}
+
+.brand-tile {{ border-radius: var(--radius-tile); }}
+.brand-header {{ box-shadow: var(--shadow-card); position: relative; }}
+.brand-card {{ border-radius: var(--radius-card); box-shadow: var(--shadow-card); }}
+.app-status {{
+  padding: 4px 10px; border-radius: var(--radius-control); font-weight: 600;
+  background: color-mix(in srgb, var(--ink-secondary) 12%, transparent);
+}}
+.app-status--live {{ color: var(--accent, var(--ink)); background: color-mix(in srgb, var(--accent, var(--ink)) 14%, transparent); }}
+.status {{ border-radius: var(--radius-control); }}
 """
 
 
@@ -238,6 +285,117 @@ def build_icons() -> dict[str, str]:
     return out
 
 
+
+# ------------------------------------------------------------------ visual guide
+def build_guide() -> str:
+    """docs/brand-guide.html: the visual brand guide, generated so it never drifts from palette.py."""
+    def tile(key: str, size: int = 56) -> str:
+        fill = p.BRAND_FILL.get(key)
+        bg = f"background:{fill};" if fill else f"background:{p.SURFACE['dark']['panel']};border:2px solid {p.CORE_OUTLINE};box-sizing:border-box;"
+        return (f'<div style="width:{size}px;height:{size}px;{bg}display:grid;place-items:center;color:#fff;flex-shrink:0">'
+                f'<svg width="{int(size*.6)}" height="{int(size*.6)}" viewBox="0 0 64 64" fill="none" stroke="currentColor" '
+                f'stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{p.ICON_PATHS[key]}</svg></div>')
+
+    def sw(hex_: str, label: str) -> str:
+        return (f'<div class="sw"><div class="chip" style="background:{hex_}"></div>'
+                f'<span>{label}</span><code>{hex_}</code></div>')
+
+    family = "".join(
+        f'<div class="card fam">{tile(k)}<div><span class="eyebrow">{p.APP_STEP[k]}</span>'
+        f'<h3>{p.APP_NAMES[k]}</h3><p>{p.APP_QUESTIONS[k]}</p><code>data-app="{k}" · fill {p.BRAND_FILL[k]}</code></div></div>'
+        for k in p.APPS
+    ) + (f'<div class="card fam">{tile("core")}<div><span class="eyebrow">Foundation · Monte Carlo</span>'
+         f'<h3>{p.CORE_NAME}</h3><p>{p.CORE_QUESTION}</p><code>outline {p.CORE_OUTLINE}</code></div></div>')
+
+    names = {"tps": "TPS teal", "roi": "ROI orange", "valuation": "Valuation indigo", "plum": "Plum", "sky": "Sky"}
+    series_rows = ""
+    for app in p.APPS:
+        for mode in p.MODES:
+            cells = "".join(sw(p.SERIES[mode][k], f"{i + 1} · {names[k]}") for i, k in enumerate(p.SERIES_ORDER[app]))
+            bg = p.SURFACE[mode]["page"]; ink = p.SURFACE[mode]["ink"]
+            series_rows += (f'<div class="srow" style="background:{bg};color:{ink}"><b>{p.APP_NAMES[app]} · {mode}</b>'
+                            f'<div class="sws">{cells}</div></div>')
+
+    ramps = "".join(
+        f'<div class="ramp"><b>{p.APP_NAMES[a]}</b><div>' + "".join(f'<span style="background:{c}" title="{c}"></span>' for c in p.SEQUENTIAL[a]) + "</div></div>"
+        for a in p.APPS)
+    surfaces = "".join(
+        f'<div class="card"><h3>{m.title()} mode</h3><div class="sws">' + "".join(sw(v, k.replace("_", " ")) for k, v in p.SURFACE[m].items()) + "</div></div>"
+        for m in p.MODES)
+
+    return f"""<!doctype html>
+<!-- {HEADER} -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brand Guide · Decision Models</title>
+<link rel="icon" type="image/svg+xml" href="../icons/core.svg">
+<link rel="stylesheet" href="../css/brand.css">
+<style>
+  main {{ max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 48px; }}
+  h1 {{ margin: 0; font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -0.02em; }}
+  h2 {{ margin: 0 0 16px; font-size: 1.5rem; }} h3 {{ margin: 4px 0; font-size: 1.125rem; }}
+  .eyebrow {{ font-size: .75rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-secondary); }}
+  .card {{ background: var(--panel); border: 1px solid var(--line); padding: 20px; }}
+  .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }}
+  .fam {{ display: flex; gap: 16px; align-items: flex-start; }} .fam p {{ margin: 4px 0 8px; }}
+  code {{ font-size: .8125rem; color: var(--ink-secondary); }}
+  .sws {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }}
+  .sw {{ display: flex; flex-direction: column; gap: 4px; font-size: .8125rem; }}
+  .chip {{ height: 40px; border-radius: 4px; border: 1px solid rgba(127,127,127,.25); }}
+  .srow {{ padding: 16px; display: grid; gap: 10px; border: 1px solid var(--line); }} .srow code {{ color: inherit; opacity: .8; }}
+  .ramp {{ display: grid; gap: 6px; }} .ramp div {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }} .ramp span {{ height: 28px; }}
+  .rules li {{ margin: 6px 0; }}
+</style>
+</head>
+<body>
+<div class="hub-bar"><div class="hub-bar__inner"><a href="{p.HUB_URL}">&larr; {p.HUB_LABEL}</a><span>Jason C. Courtoy</span></div></div>
+<main>
+  <section><span class="eyebrow">Brand guide</span><h1>Decision Models</h1>
+    <p class="muted">Operations → capital allocation → deals, on one shared foundation. {p.ENDORSEMENT}.</p>
+    <p>Rules and words: <code>brand/GUIDE.md</code> · Page layouts: <a href="layouts/index.html">docs/layouts</a></p></section>
+
+  <section><h2>The family</h2><div class="grid">{family}</div></section>
+
+  <section><h2>Header on every app page</h2>
+    <p class="muted">Hub bar, then the app header (6px brand stripe, icon tile, full name, question), then tabs.</p>
+    <div data-app="tps" style="border:1px solid var(--line)">
+      <div class="hub-bar"><div class="hub-bar__inner"><a href="{p.HUB_URL}">&larr; {p.HUB_LABEL}</a><span>Jason C. Courtoy</span></div></div>
+      <header class="brand-header"><div class="brand-header__inner">{tile("tps", 48)}
+        <div class="brand-header__text"><p class="brand-header__name">{p.APP_NAMES["tps"]}</p><p class="brand-header__question">{p.APP_QUESTIONS["tps"]}</p></div>
+        <span class="brand-header__by">{p.ENDORSEMENT}</span></div></header>
+    </div></section>
+
+  <section><h2>Chart colors by app</h2>
+    <p class="muted">Slot 1 is always the app's own color. Brand fills are not chart colors. Max {p.MAX_SERIES} series.</p>
+    <div style="display:grid;gap:10px">{series_rows}</div></section>
+
+  <section><h2>Magnitude ramps</h2><div class="grid">{ramps}</div></section>
+
+  <section><h2>Surfaces and ink</h2><div class="grid">{surfaces}</div></section>
+
+  <section><h2>Status: reserved meaning, icon + label</h2>
+    <p><span class="status status--good">On track</span> <span class="status status--warning">At risk</span> <span class="status status--critical">Shortfall</span></p></section>
+
+  <section><h2>Type</h2><div class="card">
+    <p style="font-size:2.25rem;font-weight:700;margin:0">Space Grotesk</p>
+    <p style="margin:4px 0 0" class="muted">Text and headings, 400 / 500 / 700</p>
+    <p class="num" style="font-size:1.5rem;margin:16px 0 0">JetBrains Mono · NPV = Σ CFₜ / (1 + r)ᵗ</p>
+    <p class="muted" style="margin:4px 0 0">Numbers, tables, code</p></div></section>
+
+  <section><h2>Words</h2><ul class="rules">
+    <li>Start with the decision. Show the assumptions. Check the math. Say where it breaks.</li>
+    <li>Full names first ("Turn Pattern Sustainability"); short labels only in tight spaces.</li>
+    <li>Endorsement is always "Jason C. Courtoy". No company-style umbrella name.</li>
+    <li>No result or "tested" claim that doesn't exist yet; placeholders look like <code>[P%]</code>.</li></ul></section>
+</main>
+<footer class="brand-footer">{p.DISCLAIMER}</footer>
+</body>
+</html>
+"""
+
+
 def main() -> None:
     (HERE / "css").mkdir(exist_ok=True)
     (HERE / "js").mkdir(exist_ok=True)
@@ -245,9 +403,12 @@ def main() -> None:
     (HERE / "tokens.json").write_text(json.dumps(p.all_tokens(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (HERE / "css" / "brand.css").write_text(build_css(), encoding="utf-8")
     (HERE / "js" / "palette.js").write_text(build_js(), encoding="utf-8")
+    if (HERE / "GUIDE.md").exists():  # reference copy only; repo copies stay lean
+        (HERE / "docs").mkdir(exist_ok=True)
+        (HERE / "docs" / "brand-guide.html").write_text(build_guide(), encoding="utf-8")
     for name, svg in build_icons().items():
         (HERE / "icons" / name).write_text(svg, encoding="utf-8")
-    print("Wrote tokens.json, css/brand.css, js/palette.js and", len(build_icons()), "icons.")
+    print("Wrote tokens.json, css/brand.css, js/palette.js and", len(build_icons()), "icons" + (" + docs/brand-guide.html." if (HERE / "GUIDE.md").exists() else "."))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,8 @@
 
 Drop-in brand kit for the Decision Models portfolio (Turn Pattern Sustainability, Project ROI, Valuation Model, Shared Core). Copy this whole folder into each repo. It's the same folder everywhere; one attribute on each page picks the app.
 
+Every page except the hub (courtizy.github.io) begins with the `.hub-bar` linking back to it; see `example.html`.
+
 ## Use it on a GitHub Pages site
 
 1. Copy `brand/` into the folder Pages publishes (the repo root, or `docs/` if Pages serves from there).
