@@ -9,7 +9,7 @@ export const tokens = {
     "tps": {
       "name": "Turn Pattern Sustainability",
       "short": "TPS",
-      "question": "Can the fleet meet the flying schedule?",
+      "question": "How often can the fleet fly the weekly schedule?",
       "step": "01 · Operations",
       "brandFill": "#2160B0",
       "seriesOrder": [
@@ -55,7 +55,7 @@ export const tokens = {
     "valuation": {
       "name": "Valuation Model",
       "short": "Valuation",
-      "question": "What is the business worth, and how sure are we?",
+      "question": "What is a public company worth across plausible assumptions?",
       "step": "03 · Deals",
       "brandFill": "#4F46E5",
       "seriesOrder": [

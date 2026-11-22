@@ -53,9 +53,9 @@ APP_NAMES: dict[App, str] = {
 APP_SHORT: dict[App, str] = {"tps": "TPS", "roi": "Project ROI", "valuation": "Valuation"}
 
 APP_QUESTIONS: dict[App, str] = {
-    "tps": "Can the fleet meet the flying schedule?",
+    "tps": "How often can the fleet fly the weekly schedule?",
     "roi": "Which projects earn funding under real limits?",
-    "valuation": "What is the business worth, and how sure are we?",
+    "valuation": "What is a public company worth across plausible assumptions?",
 }
 #: Position in the operations -> capital -> deals sequence.
 APP_STEP: dict[App, str] = {"tps": "01 · Operations", "roi": "02 · Capital", "valuation": "03 · Deals"}
