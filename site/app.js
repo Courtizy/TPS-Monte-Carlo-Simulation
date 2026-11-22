@@ -1371,8 +1371,24 @@ function renderReplicates(record) {
   );
 }
 
+/* The headline's range is the estimate's precision from a finite number of simulated weeks,
+   not how much one week varies from the next. In the evenly spread, rates-matched mode every
+   week is the same week, so there is no range to give. */
+function ciText(m) {
+  if (m.deterministic) return "Every simulated week is the same week in this mode (events evenly spread, fix times matched exactly), so there's no simulation range.";
+  return `Simulation precision: the true rate for these inputs is between ${pctText(m.ci95_low, 1)} and ${pctText(m.ci95_high, 1)} (95%, from ${whole(m.iterations)} weeks).`;
+}
+
 function analystEvidence(record) {
   const m = record.metrics;
+  if (m.deterministic) return [
+    el("h3", { id: "evidence-h", text: "What moves the answer" }),
+    el("p", { class: "note", text: "How far each rate can slip before the plan drops below the success bar." }),
+    el("div", { id: "margins-out" }, ...marginRows(false)),
+    el("div", { class: "button-row" }, el("button", { type: "button", class: "secondary", "data-needs-idle": true, text: insight.margins ? "Check margins again" : "Check margins", onclick: () => runMargins(record) })),
+    el("h3", { text: "Has the answer settled?" }),
+    el("p", { class: "note", text: ciText(m) + " Switch breaks or fixes to random to see how much weeks vary." }),
+  ];
   return [
     el("h3", { id: "evidence-h", text: "What moves the answer" }),
     el("p", { class: "note", text: "How far each rate can slip before the plan drops below the success bar." }),
@@ -1584,7 +1600,7 @@ function renderSummary(record) {
       el("span", { class: `band band-${m.risk_band}`, text: m.risk_band }),
       el("span", { class: "headline-label", text: "of weeks fly every planned sortie and recover by next Monday" }),
     ),
-    el("p", { class: "ci", text: `95% range ${pctText(m.ci95_low, 1)} to ${pctText(m.ci95_high, 1)}.` }),
+    el("p", { class: "ci", text: ciText(m) }),
     el("dl", { class: "key-facts" },
       el("div", {}, el("dt", { text: "Weekly requirement met" }), el("dd", { text: pctText(m.components.meets_required_sorties) }), el("dd", { class: "fact-note", text: `${m.plan.required_sorties} required${record.required_from_sute ? " (from SUTE)" : ""}, ${m.plan.planned_sorties} planned` })),
       el("div", {}, el("dt", { text: "Weakest day" }), el("dd", { text: weakest || "None" }), el("dd", { class: "fact-note", text: weakest ? `misses its plan in ${pctText(m.daily[weakest].share_missing_schedule, 1)} of weeks` : "no day missed its plan" })),

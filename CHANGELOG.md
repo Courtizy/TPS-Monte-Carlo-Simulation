@@ -2,6 +2,12 @@
 
 All notable changes to Turn Pattern Sustainability. Versions follow semantic versioning; dates are when each version was built.
 
+## [0.13.1] - 2026-11-22
+- **No false precision in the evenly spread mode.** With breaks evenly spread and fixes matched exactly, no random draw is made, so every simulated week is the same week. The Results page still showed a Wilson "95% range" such as 99.96% to 100% from 10,000 weeks, claiming precision from weeks that don't exist. Those runs are now marked `deterministic`, report no range, and say why; the convergence chart and seed check give way to a note.
+- **The headline range says what it is.** "95% range" now reads as simulation precision ("the true rate for these inputs is between ... (95%, from N weeks)"), so it isn't mistaken for how much one week varies from the next.
+- New closed-form tests check the engine against answers worked by hand, such as (1 − 0.1)^8 when all eight sorties must hold, and 1 − 0.3² when one spare covers one abort.
+- Simulation results for random runs are unchanged; their metrics and fingerprints are identical.
+
 ## [0.13.0] - 2026-10-21
 - Private backtest: save your unit's history as `private/history.csv` and run `app/run_private.py`. It backtests every week on your own machine, prints the summary, saves the results week by week, and marks the backtest "Done locally" on the private Method page. Use `--times flown` to time weeks by when they actually flew.
 - Synthetic history now works when only some days have fly windows set, and the backtest summary says "All 28 weeks were timed..." instead of "28 of 28 ...; the rest used...".
