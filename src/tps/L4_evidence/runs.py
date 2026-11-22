@@ -31,6 +31,12 @@ def new_seed() -> int:
     return SystemRandom().randrange(2**31)
 
 
+def is_deterministic(scenario) -> bool:
+    """Evenly spread events with fixes matched exactly: no random draw is made, so every
+    simulated week is the same week."""
+    return scenario.options.event_mode == "Spreadsheet" and scenario.options.fix_mode == "Expected"
+
+
 def simulate(config: dict[str, Any], iterations: int, seed: int) -> tuple[list, Any]:
     scenario = load_scenario(config)
     plan = compile_plan(scenario)
@@ -48,7 +54,7 @@ def run_plan(config: dict[str, Any], iterations: int = 10_000, seed: int | None 
     weeks, scenario = simulate(config, int(iterations), seed)
     metrics = summarize(weeks, scenario.rules.flying_days, scenario.rules.all_days,
                         sute_target=scenario.sute_target, sute_ceiling=scenario.sute_ceiling,
-                        sute_basis=scenario.sute_basis)
+                        sute_basis=scenario.sute_basis, deterministic=is_deterministic(scenario))
     return {
         "record_version": RECORD_VERSION,
         "model_version": __version__,

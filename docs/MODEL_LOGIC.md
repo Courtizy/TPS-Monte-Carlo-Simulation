@@ -315,8 +315,10 @@ $$T = \max_d \, need_d, \qquad \text{recovered if } ready_{\text{Next Mon, hour 
 
 $$\frac{\hat p + \frac{z^2}{2n} \pm z\sqrt{\frac{\hat p(1-\hat p)}{n} + \frac{z^2}{4n^2}}}{1 + \frac{z^2}{n}}$$
 
-**Code:** `L2_metrics/metrics.py` → `wilson_interval`.
-**Test:** `test_wilson_interval`.
+This range is the simulation's precision: how far the estimate from *n* weeks could be from the rate the inputs imply. It is not how much one week varies from the next. When breaks and aborts are evenly spread and fix times are matched exactly, no random draw is made and every simulated week is the same week; the run is then marked `deterministic`, reports no range (low = high = the rate), and says so.
+
+**Code:** `L2_metrics/metrics.py` → `wilson_interval`, `summarize`; `L4_evidence/runs.py` → `is_deterministic`.
+**Test:** `test_wilson_interval`, `test_deterministic_mode_reports_no_range`.
 
 ### M-5: Why sorties are lost
 **Source:** Model choice.

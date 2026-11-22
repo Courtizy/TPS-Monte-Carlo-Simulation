@@ -150,13 +150,17 @@ def _counts(values) -> dict[str, int]:
 
 def summarize(weeks: list[tuple[list[dict], dict]], flying_days: tuple[str, ...], all_days: tuple[str, ...],
               sute_target: float | None = None, sute_ceiling: float | None = None,
-              sute_basis: str = "sute") -> dict[str, Any]:
-    """Metrics for a run. Contains no timestamps, so it can be fingerprinted."""
+              sute_basis: str = "sute", deterministic: bool = False) -> dict[str, Any]:
+    """Metrics for a run. Contains no timestamps, so it can be fingerprinted.
+
+    deterministic: every simulated week is the same week (events evenly spread and fix
+    times matched exactly), so there is no sampling error and no 95% range to report:
+    a Wilson interval would claim the precision of n independent weeks that don't exist [M-4]."""
     scores = [score_week(days, week, flying_days) for days, week in weeks]
     n = len(scores)
     wins = sum(s["succeeds"] for s in scores)
     p = wins / n
-    low, high = wilson_interval(wins, n)
+    low, high = (p, p) if deterministic else wilson_interval(wins, n)
     failed = [s for s in scores if not s["succeeds"]]
 
     daily = {}
@@ -194,7 +198,9 @@ def summarize(weeks: list[tuple[list[dict], dict]], flying_days: tuple[str, ...]
         "probability_success": p,
         "ci95_low": low,
         "ci95_high": high,
-        "ci_method": "Wilson score, 95%",
+        "ci_method": "none: every simulated week is identical" if deterministic else "Wilson score, 95%",
+        # only set when true, so a random run's metrics (and its fingerprint) are unchanged
+        **({"deterministic": True} if deterministic else {}),
         "risk_band": risk_band(p),
         "components": {
             "full_schedule": _share(s["full_schedule"] for s in scores),
@@ -236,7 +242,7 @@ def summarize(weeks: list[tuple[list[dict], dict]], flying_days: tuple[str, ...]
         "causes": _causes(scores, failed),
         "weakest_day": _weakest_day(daily, flying_days),
         "goes": _by_go(weeks, flying_days, scores),
-        "convergence": _convergence(scores),
+        "convergence": _convergence(scores, deterministic=deterministic),
         "observable": {
             "flown": _share(s["observable_flown"] for s in scores),
             "flown_and_recovered": _share(s["observable_flown_recovered"] for s in scores),
@@ -253,7 +259,7 @@ DAY_NAMES = {"Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thur
 
 # [M-6]
 # [M-11]
-def _convergence(scores: list[dict], points: int = 25) -> list[list[float]]:
+def _convergence(scores: list[dict], points: int = 25, deterministic: bool = False) -> list[list[float]]:
     """Running success estimate as weeks accumulate: [weeks so far, share succeeded, 95% low, 95% high]."""
     n = len(scores)
     marks = sorted({max(1, round(n * (k + 1) / points)) for k in range(points)})
@@ -261,7 +267,7 @@ def _convergence(scores: list[dict], points: int = 25) -> list[list[float]]:
     for mark in marks:
         wins += sum(s["succeeds"] for s in scores[last:mark])
         last = mark
-        low, high = wilson_interval(wins, mark)
+        low, high = (wins / mark, wins / mark) if deterministic else wilson_interval(wins, mark)
         out.append([mark, wins / mark, low, high])
     return out
 

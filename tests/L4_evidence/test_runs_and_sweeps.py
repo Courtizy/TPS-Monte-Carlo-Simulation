@@ -46,6 +46,18 @@ def test_wilson_interval():
     assert low < 0.92 < high
 
 
+# [M-4]
+def test_deterministic_mode_reports_no_range():
+    """Evenly spread events with fixes matched exactly make no random draw: 2,000 weeks are
+    one week repeated, so a Wilson range would claim precision that isn't there."""
+    m = run_plan(example(options={"event_mode": "Spreadsheet", "fix_mode": "Expected"}), 2000, 1)["metrics"]
+    assert m["deterministic"] is True and m["ci95_low"] == m["ci95_high"] == m["probability_success"]
+    assert m["distributions"]["sorties_flown"]["min"] == m["distributions"]["sorties_flown"]["max"]
+    assert all(lo == hi for _, _, lo, hi in m["convergence"])
+    random = run_plan(example(), 500, 1)["metrics"]
+    assert "deterministic" not in random and random["ci95_low"] < random["ci95_high"]
+
+
 def test_summary_text_is_plain():
     text = run_plan(example(), 1000, 3)["metrics"]["summary_text"]
     assert text.startswith("Holds") or text.startswith("Fails")
