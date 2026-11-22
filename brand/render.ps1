@@ -34,42 +34,62 @@ $VenvPy   = Join-Path $VenvDir "Scripts\python.exe"
 
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 
-# 1. Find Python 3.9+
+# 1. Find the newest Python 3.9+ (3.10+ strongly preferred: Playwright's
+#    greenlet dependency no longer ships ready-made Windows builds for 3.9).
 Step "Finding Python"
-$python = $null
-foreach ($candidate in @("py", "python", "python3")) {
-    if (Get-Command $candidate -ErrorAction SilentlyContinue) {
-        $probe = Test-Native { & $candidate -c "import sys; print('%d.%d' % sys.version_info[:2])" }
-        $version = "$($probe.Out)".Trim()
-        if ($probe.Ok -and $version -match '^\d+\.\d+$' -and [version]$version -ge [version]"3.9") {
-            $python = $candidate
-            break
-        }
+$python = $null; $pyArgs = @(); $version = $null
+$candidates = @(
+    @("py", "-3.13"), @("py", "-3.12"), @("py", "-3.11"), @("py", "-3.10"),
+    @("python"), @("py"), @("python3")
+)
+foreach ($c in $candidates) {
+    $exe = $c[0]; $extra = @($c | Select-Object -Skip 1)
+    if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) { continue }
+    $probe = Test-Native { & $exe @extra -c "import sys; print('%d.%d' % sys.version_info[:2])" }
+    $v = "$($probe.Out)".Trim()
+    if ($probe.Ok -and $v -match '^\d+\.\d+$' -and [version]$v -ge [version]"3.9") {
+        if (-not $version -or [version]$v -gt [version]$version) { $python = $exe; $pyArgs = $extra; $version = $v }
     }
 }
 if (-not $python) {
-    Write-Host "Python 3.9 or newer wasn't found. Install it from https://www.python.org/downloads/ (tick 'Add python.exe to PATH'), then run this again." -ForegroundColor Red
+    Write-Host "Python 3.10 or newer wasn't found. Install Python 3.12 from https://www.python.org/downloads/ (tick 'Add python.exe to PATH'), then run this again." -ForegroundColor Red
     exit 1
 }
-Write-Host "Using $python ($version)"
+Write-Host "Using $python $($pyArgs -join ' ') (Python $version)"
+$oldPython = [version]$version -lt [version]"3.10"
+if ($oldPython) {
+    Write-Host "Python $version is past end-of-life. This will try a workaround, but installing Python 3.12 is the reliable fix." -ForegroundColor Yellow
+}
 
-# 2. Virtual environment
+# 2. Virtual environment (rebuilt automatically if it was made with a different Python)
+if ((Test-Path $VenvPy) -and -not $Clean) {
+    $venvVer = "$((Test-Native { & $VenvPy -c "import sys; print('%d.%d' % sys.version_info[:2])" }).Out)".Trim()
+    if ($venvVer -ne $version) {
+        Write-Host "brand\.venv uses Python $venvVer; rebuilding it with $version." -ForegroundColor Yellow
+        $Clean = $true
+    }
+}
 if ($Clean -and (Test-Path $VenvDir)) {
     Step "Removing old virtual environment"
     Remove-Item -Recurse -Force $VenvDir
 }
 if (-not (Test-Path $VenvPy)) {
     Step "Creating virtual environment in brand\.venv"
-    & $python -m venv $VenvDir
+    & $python @pyArgs -m venv $VenvDir
     if ($LASTEXITCODE -ne 0) { throw "Couldn't create the virtual environment." }
 }
 
-# 3. Playwright + Chromium (skipped once installed)
+# 3. Playwright + pytest (skipped once installed). Ready-made packages only,
+#    so nothing needs a C++ compiler.
 if (-not (Test-Native { & $VenvPy -c "import playwright, pytest" }).Ok) {
     Step "Installing Playwright (first run only)"
     & $VenvPy -m pip install --quiet --upgrade pip
-    & $VenvPy -m pip install --quiet playwright pytest
-    if ($LASTEXITCODE -ne 0) { throw "pip install failed." }
+    $pkgs = @("playwright", "pytest")
+    if ($oldPython) { $pkgs = @("greenlet==3.1.1") + $pkgs }   # last greenlet with Windows builds for 3.9
+    & $VenvPy -m pip install --quiet --only-binary=greenlet @pkgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "pip install failed. Install Python 3.12 from https://www.python.org/downloads/, then run: powershell -ExecutionPolicy Bypass -File .\brand\render.ps1 -Clean"
+    }
 }
 Step "Making sure Chromium is installed"
 & $VenvPy -m playwright install chromium

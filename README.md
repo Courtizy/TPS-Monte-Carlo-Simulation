@@ -1,10 +1,45 @@
 # Turn Pattern Sustainability
 
-**Can the fleet meet the flying schedule?** TPS plays a weekly flying schedule out thousands of times, with breaks, aborts, and fixes drawn from a unit's own rates, and reports how often the plan holds, where it breaks, why, and what would fix it. It runs entirely in the browser: no plan, history file, or result is sent to a server.
+*How often can the fleet fly the weekly schedule?* Part of **[Decision Models](https://courtizy.github.io/)** by Jason C. Courtoy.
+
+[![Test and publish](https://github.com/Courtizy/TPS-Monte-Carlo-Simulation/actions/workflows/pages.yml/badge.svg)](https://github.com/Courtizy/TPS-Monte-Carlo-Simulation/actions/workflows/pages.yml)
+![Status: Live](https://img.shields.io/badge/status-live-2160B0)
+
+**[Open the model](https://courtizy.github.io/TPS-Monte-Carlo-Simulation/)** · [How the model works](docs/MODEL_LOGIC.md) · [Changelog](CHANGELOG.md)
+
+A flying schedule that works on average can still fail most weeks. Turn Pattern Sustainability plays one unit's weekly flying schedule out thousands of times, with aircraft breaking, aborting and getting fixed at the unit's own rates. It reports how often the plan holds, which day runs tight, why sorties are lost, and which change would fix it. Everything runs in the browser, so no plan or result is sent to a server.
+
+![Overview: the headline insight, the share of simulated weeks that meet every requirement, and how the model works in three steps](docs/images/overview.png)
+
+## At a glance
+
+| | |
+|---|---|
+| **Answer it gives** | The share of simulated weeks that meet every requirement, the day most likely to fall short, the cause of each lost sortie, and fixes ranked by effect with their trade-offs |
+| **Method** | Monte Carlo at the level of each launch: breaks, ground aborts and fix times are drawn for every sortie, 2,000 seeded weeks per scenario |
+| **Data** | Synthetic units only on the public site (2-go, 3-go and 4-go examples). Real inputs stay on the user's own machine |
+| **Engine** | Python, standard library only, seeded and reproducible. The same engine runs in the browser through Pyodide |
+| **Tests** | 140 tests, including golden outputs with fixed seeds, a check that every rule in the model logic document is tagged in the code and covered by a test, and a proof that the fast engine matches a readable reference exactly |
+| **Site** | Overview, Results and Method pages on GitHub Pages, plus a planner (**Run ▸**) that runs the engine live, with guided tours |
+
+<table>
+<tr>
+<td><img src="docs/images/leadership-summary.png" alt="Leadership summary for a synthetic 2-go unit: 94% of simulated weeks hold, the riskiest day, what the plan costs, and ranked decisions"></td>
+</tr>
+<tr>
+<td><sub>Leadership view: can we do it, what the plan costs, and which maintenance or scheduling lever buys the most.</sub></td>
+</tr>
+</table>
+
+### Terms used below
+
+- **Sortie:** one aircraft flight. A **go** is one wave of launches in a day; a 2-go unit launches twice a day.
+- **Turn pattern:** how many sorties each go flies, day by day, Monday to Friday.
+- **Spare:** an extra aircraft prepared to replace one that aborts on the ground.
+- **2407 add:** an unplanned aircraft added to the schedule with approval (named after the form).
+- **SUTE:** sorties per aircraft per day, the usual measure of flying tempo.
 
 Personal project · public or synthetic data only · not endorsed by DoD or the U.S. Air Force.
-
-Status: **Live.** Public pages show synthetic inputs only.
 
 ## How the repo is built (two front doors)
 
@@ -54,7 +89,7 @@ Every sortie launches and lands at home. With fly windows, a late go can land af
 
 ## Branding
 
-The page uses the Decision Models brand kit in `brand/` (TPS is app 01: Air Force blue, "Can the fleet meet the flying schedule?"). `<html data-app="tps">` picks the app; the build copies `brand/css`, `icons` and `js` into the site. Dark is the default and light follows the device, with the Auto/Light/Dark switch forcing either. Page colors are aliases for the brand tokens (`site/styles.css`, top). Chart marks use the series colors, good and bad meanings use the status colors with a label, and the disclaimer footer appears on every page and printout. To change colors, edit `brand/palette.py` and follow `brand/README.md`.
+The page uses the Decision Models brand kit in `brand/` (TPS is app 01: Air Force blue, "How often can the fleet fly the weekly schedule?"). `<html data-app="tps">` picks the app; the build copies `brand/css`, `icons` and `js` into the site. Dark is the default and light follows the device, with the Auto/Light/Dark switch forcing either. Page colors are aliases for the brand tokens (`site/styles.css`, top). Chart marks use the series colors, good and bad meanings use the status colors with a label, and the disclaimer footer appears on every page and printout. To change colors, edit `brand/palette.py` and follow `brand/README.md`.
 
 ## Page layout
 

@@ -46,7 +46,8 @@ p { margin: 0 0 0.75rem; }
 .engine-ready::before { content: "\2713  "; }
 .engine-error { color: var(--status-critical-text); }
 .build { font-size: 0.75rem; color: var(--ink-2); font-family: var(--font-mono); }
-.brand-header__inner, .brand-footer { max-width: 1240px; }
+.brand-header__inner, .brand-footer, .hub-bar__inner { max-width: 1240px; }
+.hub-bar__inner { padding: 0 1.25rem; }
 .brand-footer p { margin: 0.2rem 0; }
 .theme-switch { display: inline-flex; border: 1px solid var(--rule); border-radius: 0; overflow: hidden; margin-top: 0.4rem; }
 .theme-switch button { border: 0; border-radius: 0; padding: 0.25rem 0.7rem; font-size: 0.8rem; font-weight: 500; background: var(--panel); }
